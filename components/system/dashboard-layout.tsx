@@ -68,8 +68,6 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
     fetchProfile()
   }, [router])
 
-  console.log(profile)
-
   const handleLogout = async () => {
     setIsLoggingOut(true)
     try {
