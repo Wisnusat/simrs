@@ -3,38 +3,30 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { useRouter } from 'next/navigation'
 
-const roleConfig = {
-  admin: {
-    credentials: { username: "admin123", password: "admin123" },
-    route: "/admin",
-  },
-  doctor: {
-    credentials: { username: "dokter123", password: "dokter123" },
-    route: "/doctor",
-  },
-  nurse: {
-    credentials: { username: "perawat123", password: "perawat123" },
-    route: "/nurse",
-  },
-  pharmacist: {
-    credentials: { username: "apoteker123", password: "apoteker123" },
-    route: "/pharmacist",
-  },
-  cashier: {
-    credentials: { username: "kasir123", password: "kasir123" },
-    route: "/cashier",
-  },
+// Route map per role — matches middleware
+const ROLE_ROUTES: Record<string, string> = {
+  admin:        '/admin',
+  doctor:       '/doctor',
+  nurse:        '/nurse',
+  pharmacist:   '/pharmacist',
+  cashier:      '/cashier',
+  lab_nurse:    '/lab-nurse',
+  nutritionist: '/nutritionist',
 }
 
+// Demo credentials shown at bottom of form
+const DEMO_CREDENTIALS = [
+  { role: 'Admin',       email: 'admin@carewell.id',       password: 'admin123' },
+  { role: 'Dokter',      email: 'dokter@carewell.id',       password: 'dokter123' },
+  { role: 'Perawat',     email: 'perawat@carewell.id',      password: 'perawat123' },
+  { role: 'Apoteker',    email: 'apoteker@carewell.id',     password: 'apoteker123' },
+  { role: 'Kasir',       email: 'kasir@carewell.id',        password: 'kasir123' },
+]
+
 export default function LoginForm() {
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-    role: 'doctor'
-  })
+  const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
@@ -42,72 +34,74 @@ export default function LoginForm() {
 
   const router = useRouter()
 
-  const roles = [
-    { value: 'doctor', label: 'Dokter'},
-    { value: 'nurse', label: 'Perawat'},
-    { value: 'pharmacist', label: 'Apoteker'},
-    { value: 'cashier', label: 'Kasir'},
-    { value: 'admin', label: 'Admin'},
-    { value: 'owner', label: 'Owner'},
-  ]
-
-  const config = formData.role ? roleConfig[formData.role as keyof typeof roleConfig] : null
-
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
-    
-    if (!formData.username.trim()) newErrors.username = 'Username is required'
+    if (!formData.email.trim()) newErrors.email = 'Email is required'
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Enter a valid email'
     if (!formData.password.trim()) newErrors.password = 'Password is required'
-    if (!formData.role.trim()) newErrors.role = 'Role is required'
-
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (validateForm()) {
-      // Mock login with loading animation
-      setIsLoading(true)
-      // Simulate loading
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      
-      if (formData.username === config?.credentials.username && formData.password === config?.credentials.password) {
-        // Store user session
-        localStorage.setItem(
-          "userSession",
-          JSON.stringify({
-            role: formData.role,
-            username: formData.username,
-            loginTime: new Date().toISOString(),
-          }),
-        )
-      
-        router.push(config.route)
-      } else {
-        setLoginError('Invalid credentials. Please try again.')
+    if (!validateForm()) return
+
+    setIsLoading(true)
+    setLoginError('')
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        setLoginError(data.error ?? 'Login failed. Please try again.')
+        return
       }
+
+      // Redirect based on role from API response
+      const role = data.data.profile.role as string
+      const route = ROLE_ROUTES[role] ?? '/admin'
+      router.push(route)
+      router.refresh() // Ensures middleware re-runs with new session cookie
+
+    } catch {
+      setLoginError('Network error. Please check your connection.')
+    } finally {
       setIsLoading(false)
     }
   }
 
+  // Fill form with demo credentials on click
+  const fillDemo = (email: string, password: string) => {
+    setFormData({ email, password })
+    setLoginError('')
+    setErrors({})
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5 bg-card p-8 rounded-xl border border-border/40 shadow-sm">
+
       {/* Email Field */}
       <div className="space-y-2">
-        <label htmlFor="username" className="block text-sm font-medium text-foreground">
-          Username
+        <label htmlFor="email" className="block text-sm font-medium text-foreground">
+          Email
         </label>
         <input
-          id="username"
-          type="text"
-          value={formData.username}
-          onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-          placeholder="Username"
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="staff@carewell.id"
           className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
           disabled={isLoading}
         />
-        {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
+        {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
       </div>
 
       {/* Password Field */}
@@ -135,25 +129,6 @@ export default function LoginForm() {
           </button>
         </div>
         {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground">Role</label>
-        <Select value={formData.role} onValueChange={(value) => {
-          setFormData({ ...formData, role: value })
-        }}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select role" />
-          </SelectTrigger>
-          <SelectContent>
-            {roles.map((role) => (
-              <SelectItem key={role.value} value={role.value}>
-                {role.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.role && <p className="text-sm text-destructive">{errors.role}</p>}
       </div>
 
       {/* Error Message */}
@@ -186,7 +161,7 @@ export default function LoginForm() {
       >
         {isLoading ? (
           <>
-            <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
             Signing in...
           </>
         ) : (
@@ -199,12 +174,22 @@ export default function LoginForm() {
 
       {/* Demo Credentials */}
       <div className="pt-4 border-t border-border/20">
-        <p className="text-xs text-foreground/50 mb-2">Demo Credentials:</p>
-        <div className="space-y-1 text-xs text-foreground/60">
-          <p>Username: <span className="font-mono text-foreground/70">{config?.credentials.username}</span></p>
-          <p>Password: <span className="font-mono text-foreground/70">{config?.credentials.password}</span></p>
+        <p className="text-xs text-foreground/50 mb-2">Quick fill demo credentials:</p>
+        <div className="flex flex-wrap gap-2">
+          {DEMO_CREDENTIALS.map((c) => (
+            <button
+              key={c.role}
+              type="button"
+              onClick={() => fillDemo(c.email, c.password)}
+              disabled={isLoading}
+              className="text-xs px-2.5 py-1 rounded-md border border-border/40 text-foreground/60 hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-50"
+            >
+              {c.role}
+            </button>
+          ))}
         </div>
       </div>
+
     </form>
   )
 }
