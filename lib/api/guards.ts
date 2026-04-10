@@ -19,15 +19,7 @@ export interface AdminGuardResult extends AuthGuardResult {
  */
 export async function requireAuth(
     supabase: SupabaseClient,
-    req?: Request
 ): Promise<AuthGuardResult | ReturnType<typeof apiResponse.unauthorized>> {
-    if (req) {
-        const apiKey = req.headers.get('x-api-key')
-        if (apiKey && process.env.SIMRS_API_KEY && apiKey === process.env.SIMRS_API_KEY) {
-            return { user: { id: 'service-account', email: 'service@simrs.local' } }
-        }
-    }
-
     const {
         data: { user },
         error,
@@ -46,9 +38,8 @@ export async function requireAuth(
  */
 export async function requireAdmin(
     supabase: SupabaseClient,
-    req?: Request
 ): Promise<AdminGuardResult | ReturnType<typeof apiResponse.forbidden>> {
-    const authResult = await requireAuth(supabase, req)
+    const authResult = await requireAuth(supabase)
 
     // If requireAuth returned a NextResponse (error), propagate it
     if (isGuardError(authResult)) {
