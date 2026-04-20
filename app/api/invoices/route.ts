@@ -110,8 +110,8 @@ export async function GET(req: NextRequest) {
 
   if (status) query = query.eq('status', status)
   if (today === '1') {
-    const d = new Date().toISOString().split('T')[0]
-    query = query.gte('invoice_date', `${new Date(d).toISOString()}`)
+    const d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+    query = query.gte('invoice_date', d)
   }
 
   const { data, error } = await query.limit(200)

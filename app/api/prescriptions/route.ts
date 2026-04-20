@@ -124,8 +124,8 @@ export async function GET(req: NextRequest) {
   if (encounterId) query = query.eq('encounter_id', encounterId)
   if (status) query = query.eq('status', status)
   if (today === '1') {
-    const d = new Date().toISOString().split('T')[0]
-    query = query.gte('prescription_date', `${new Date(d).toISOString()}`)
+    const d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+    query = query.gte('prescription_date', d)
   }
 
   const { data, error } = await query
