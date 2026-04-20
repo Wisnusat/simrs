@@ -73,30 +73,36 @@ export async function GET(req: NextRequest) {
 
   const today = new Date().toISOString().split("T")[0]
 
-  // Enrich: vital_signs_recorded flag
-  const patientIds = (data ?? []).map((q: any) => q.patient_id)
-  const { data: vitalSignsToday } = await supabase
-    .from('vital_signs')
-    .select('patient_id')
-    .in('patient_id', patientIds.length > 0 ? patientIds : ['__none__'])
-    .gte('created_at', `${new Date(today).toISOString()}`)
-
-  const vsSigned = new Set((vitalSignsToday ?? []).map((v: any) => v.patient_id))
-
   // Enrich: linked encounter
+  const queueIds = (data ?? []).map((q: any) => q.id)
+
   const { data: encounters } = await supabase
     .from('encounters')
-    .select('id, patient_id, status')
-    .in('patient_id', patientIds.length > 0 ? patientIds : ['__none__'])
-    .gte('created_at', `${new Date(today).toISOString()}`)
+    .select('id, patient_id, status, queue_id')
+    .in('queue_id', queueIds.length > 0 ? queueIds : ['__none__'])
 
-  const encounterMap = new Map((encounters ?? []).map((e: any) => [e.patient_id, e]))
+  const encounterMap = new Map((encounters ?? []).map((e: any) => [e.queue_id, e]))
 
-  const enriched = (data ?? []).map((q: any) => ({
-    ...q,
-    vital_signs_recorded: vsSigned.has(q.patient_id),
-    encounter: encounterMap.get(q.patient_id) ?? null,
-  }))
+  // Enrich: vital_signs_recorded flag
+  const encounterIds = (encounters ?? []).map((e: any) => e.id)
+  const { data: vitalSignsToday } = await supabase
+    .from('vital_signs')
+    .select('encounter_id')
+    .in('encounter_id', encounterIds.length > 0 ? encounterIds : ['__none__'])
+
+  const vsSigned = new Set((vitalSignsToday ?? []).map((v: any) => v.encounter_id))
+
+  const enriched = (data ?? []).map((q: any) => {
+    const encounter = encounterMap.get(q.id)
+
+    return {
+      ...q,
+      vital_signs_recorded: encounter
+        ? vsSigned.has(encounter.id)
+        : false,
+      encounter: encounter ?? null,
+    }
+  })
 
   return apiResponse.ok(enriched)
 }
