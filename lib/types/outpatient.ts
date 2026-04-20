@@ -259,7 +259,7 @@ export interface LabOrder {
   clinical_notes?: string
   lab_nurse_id?: string
   patients: Pick<Patient, "full_name" | "medical_record_no">
-  practitioners: Pick<Practitioner, "full_name">
+  doctor: Pick<Practitioner, "full_name">
   lab_order_items: LabOrderItem[]
 }
 
