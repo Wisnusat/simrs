@@ -34,7 +34,7 @@ export default function DoctorDashboard() {
   const [labEntry,  setLabEntry]  = useState<QueueEntry | null>(null)
 
   const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({  poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b" })
-  const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders()
+  const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ today: true })
   const { data: prescriptions, loading: rxLoading, refresh: refreshRx, stats: rxStats } = usePrescriptions({ today: true })
 
   // Patients with vital signs that are ready for doctor examination
@@ -89,9 +89,9 @@ export default function DoctorDashboard() {
         <div className="space-y-6">
           <PageHeader title="Dashboard Dokter" description="Kelola pemeriksaan pasien rawat jalan"
             onRefresh={() => { refreshQueue(); refreshRx() }} isRefreshing={qLoading} />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <StatCard label="Pasien Siap Diperiksa" value={readyPatients.length}    icon={Users}         colorClass="text-blue-600" />
-            <StatCard label="Sedang Diperiksa"      value={qStats.inService}        icon={ClipboardList} colorClass="text-orange-600" />
+            {/* <StatCard label="Sedang Diperiksa"      value={qStats.inService}        icon={ClipboardList} colorClass="text-orange-600" /> */}
             <StatCard label="Resep Menunggu"        value={rxStats.active}           icon={Pill}          colorClass="text-purple-600" />
           </div>
           <div className="grid md:grid-cols-2 gap-6">
@@ -179,7 +179,7 @@ export default function DoctorDashboard() {
         <div className="space-y-6">
           <PageHeader title="Riwayat Pemeriksaan" description="Selesai diperiksa hari ini" onRefresh={refreshQueue} isRefreshing={qLoading} />
           <div className="space-y-3">
-            {queue.filter((q) => q.status === "done" || q.encounter?.status === "finished").map((entry) => (
+            {queue.filter((q) => q.encounter?.status === "finished").map((entry) => (
               <div key={entry.id} className="flex justify-between items-center p-4 border rounded-lg">
                 <div>
                   <p className="font-semibold">{entry.patients.full_name}</p>
@@ -188,7 +188,7 @@ export default function DoctorDashboard() {
                 <StatusBadge status={entry.encounter?.status ?? entry.status} />
               </div>
             ))}
-            {queue.filter((q) => q.status === "done").length === 0 && !qLoading && (
+            {queue.filter((q) => q.encounter?.status === "finished").length === 0 && !qLoading && (
               <EmptyState message="Belum ada pasien yang selesai hari ini." />
             )}
           </div>

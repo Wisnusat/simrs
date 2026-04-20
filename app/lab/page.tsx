@@ -114,7 +114,7 @@ export default function LabDashboard() {
               </div>
             </div>
             <div className="text-right space-y-1">
-              <StatusBadge status={enc.status} />
+              {/* <StatusBadge status={enc.status} /> */}
               {isDone && <Badge variant="default" className="block text-xs bg-green-600">Hasil Siap</Badge>}
             </div>
           </div>
@@ -273,7 +273,7 @@ export default function LabDashboard() {
                 <div className="flex justify-between items-center mb-3">
                   <div>
                     <p className="font-semibold">{lo.patients.full_name}</p>
-                    <p className="text-sm text-foreground/60">MR: {lo.patients.medical_record_no ?? "—"} · Dr. {lo.practitioners.full_name}</p>
+                    <p className="text-sm text-foreground/60">MR: {lo.patients.medical_record_no ?? "—"} · Dr. {lo.doctor.full_name}</p>
                   </div>
                   <StatusBadge status={lo.status} />
                 </div>

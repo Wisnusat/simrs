@@ -64,7 +64,7 @@ export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: R
         </div>
         <div>
           <Label>Dokter Pengirim</Label>
-          <p className="font-semibold mt-0.5">{order.practitioners.full_name ?? "—"}</p>
+          <p className="font-semibold mt-0.5">{order.doctor.full_name ?? "—"}</p>
         </div>
         {order.clinical_notes && (
           <div className="col-span-2">
@@ -115,7 +115,7 @@ export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: R
                   value={results[item.id]?.result_status ?? "normal"}
                   onValueChange={(v) => set(item.id, "result_status", v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

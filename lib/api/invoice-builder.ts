@@ -65,7 +65,7 @@ export async function buildInvoiceFromEncounter(
       item_name: proc.procedure_display,
       item_code: proc.procedure_code,
       quantity: 1,
-      unit_price: 50_000,      // placeholder — replace with fee schedule lookup
+      unit_price: 50_000,
       reference_id: proc.id,
     })
   }

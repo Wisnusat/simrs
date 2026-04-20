@@ -4,6 +4,7 @@
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns } from "@/lib/api/client"
+import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,7 +15,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2 } from "lucide-react"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical } from "lucide-react"
 import type { Medication, VitalSigns } from "@/lib/types/outpatient"
 
 interface ExaminationFormProps {
@@ -76,6 +77,9 @@ export default function ExaminationForm({
   useEffect(() => {
     getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => {})
   }, [encounterId])
+
+  // ── Lab Orders ──
+  const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
 
   // ── Medicine search (debounced 300ms) ──
   useEffect(() => {
@@ -212,6 +216,48 @@ export default function ExaminationForm({
     )
   }
 
+  // ── Lab Strip ──
+  const LabStrip = () => {
+    if (labLoading) return <div className="text-sm text-foreground/50 mb-4 flex items-center"><Loader2 className="w-4 h-4 animate-spin mr-2" />Memuat hasil lab...</div>
+    const completedLabs = labOrders.filter(o => o.status === "result_uploaded" || o.status === "verified")
+    if (completedLabs.length === 0) return null
+
+    return (
+      <div className="mb-4 space-y-2">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <FlaskConical className="w-4 h-4 text-purple-500" /> Hasil Pemeriksaan Lab
+        </h4>
+        {completedLabs.map(order => (
+          <div key={order.id}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {order.lab_order_items.map(item => (
+                <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
+                  <span className="font-medium">{item.test_name}</span>
+                  <div className="flex items-center justify-between">
+                    <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
+                    <Badge variant={
+                      item.result_status === "critical" ? "destructive" :
+                      item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
+                    } className="text-[10px] px-1.5 py-0">
+                      {item.result_status === "normal" ? "Normal" :
+                       item.result_status === "abnormal_low" ? "Rendah" :
+                       item.result_status === "abnormal_high" ? "Tinggi" :
+                       item.result_status === "critical" ? "Kritis" : "—"}
+                    </Badge>
+                  </div>
+                  {item.reference_range && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
+                </div>
+              ))}
+            </div>
+            {order.clinical_notes && (
+              <p className="mt-2 text-xs text-foreground/60 italic">Catatan: {order.clinical_notes}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="w-full max-w-5xl mx-auto">
       <div>
@@ -235,6 +281,7 @@ export default function ExaminationForm({
           )}
 
           <VitalStrip />
+          <LabStrip />
 
           <Tabs defaultValue="soap" className="w-full">
             <TabsList className="grid w-full grid-cols-3">

@@ -86,7 +86,10 @@ export async function GET(req: NextRequest) {
     .select(`
       *,
       patients ( full_name, medical_record_no ),
-      practitioners ( full_name ),
+      doctor:practitioners!lab_orders_ordered_by_fkey (
+        id,
+        full_name
+      ),
       lab_order_items ( * )
     `)
     .order('order_date', { ascending: false })
@@ -94,8 +97,8 @@ export async function GET(req: NextRequest) {
   if (encounterId) query = query.eq('encounter_id', encounterId)
   if (status) query = query.eq('status', status)
   if (today === '1') {
-    const d = new Date().toISOString().split('T')[0]
-    query = query.gte('order_date', `${new Date(d).toISOString()}`)
+    const d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+    query = query.gte('order_date', d)
   }
 
   const { data, error } = await query
