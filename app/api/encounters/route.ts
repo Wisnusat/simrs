@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
       organization_id: organization_id ?? practitioner.organization_id,
       appointment_id: appointment_id ?? null,
       nurse_id: practitioner.id,
+      queue_id,
       status: 'in_progress',
       arrived_at: new Date().toISOString(),
       started_at: new Date().toISOString(),
