@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer } from "lucide-react"
+import { ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { usePrescriptions } from "@/hooks/outpatient/use-prescriptions"
@@ -18,7 +18,10 @@ import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { EmptyState } from "@/components/shared/empty-state"
-import type { QueueEntry } from "@/lib/types/outpatient"
+import { useAdmissions } from "@/hooks/inpatient/use-admissions"
+import { InpatientPatientList } from "@/components/inpatient/patient-list"
+import { InpatientVisitForm } from "@/components/doctor/inpatient-visit-form"
+import type { QueueEntry, InpatientAdmission } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard",              active: active === "dashboard",     onClick: () => set("dashboard") },
@@ -26,16 +29,19 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: History,         label: "Riwayat Pemeriksaan",    active: active === "history",       onClick: () => set("history") },
   // { icon: FlaskConical,    label: "Permintaan Lab",         active: active === "lab",           onClick: () => set("lab") },
   { icon: Pill,            label: "Resep Obat",             active: active === "prescriptions", onClick: () => set("prescriptions") },
+  { icon: BedDouble,       label: "Rawat Inap",             active: active === "inpatient",     onClick: () => set("inpatient") },
 ]
 
 export default function DoctorDashboard() {
   const [view, setView] = useState("dashboard")
   const [examEntry, setExamEntry] = useState<QueueEntry | null>(null)
   const [labEntry,  setLabEntry]  = useState<QueueEntry | null>(null)
+  const [inpatientVisit, setInpatientVisit] = useState<InpatientAdmission | null>(null)
 
   const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({  poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b" })
   const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ today: true })
   const { data: prescriptions, loading: rxLoading, refresh: refreshRx, stats: rxStats } = usePrescriptions({ today: true })
+  const { data: inpatientAdmissions, loading: ipLoading, refresh: refreshIp, stats: ipStats } = useAdmissions()
 
   // Patients with vital signs that are ready for doctor examination
   // Include in_progress and waiting_lab (returned from lab, need re-examination)
@@ -269,6 +275,27 @@ export default function DoctorDashboard() {
             onSave={handleExamSave}
             onCancel={() => setExamEntry(null)}
           />
+      )}
+
+      {/* INPATIENT */}
+      {view === "inpatient" && !inpatientVisit && (
+        <div className="space-y-6">
+          <PageHeader title="Pasien Rawat Inap" description="Pasien yang anda tangani sebagai DPJP" onRefresh={refreshIp} isRefreshing={ipLoading} />
+          <InpatientPatientList
+            admissions={inpatientAdmissions}
+            loading={ipLoading}
+            onSelect={(adm) => { setInpatientVisit(adm); setView("inpatient-visit") }}
+          />
+        </div>
+      )}
+
+      {/* INPATIENT VISIT */}
+      {(view === "inpatient-visit" || view === "inpatient") && inpatientVisit && (
+        <InpatientVisitForm
+          admission={inpatientVisit}
+          onBack={() => { setInpatientVisit(null); setView("inpatient") }}
+          onDischarge={() => { setInpatientVisit(null); refreshIp(); setView("inpatient") }}
+        />
       )}
 
       {/* Lab Order Dialog */}

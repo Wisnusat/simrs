@@ -34,6 +34,12 @@ import type {
   Medication,
   Prescription, PrescriptionInput,
   Invoice, InvoiceStatus, PaymentMethod,
+  Location, LocationType,
+  EpisodeOfCare, EpisodeOfCareInput,
+  InpatientAdmission, InpatientAdmissionInput, InpatientStatus,
+  InpatientDailyRecord, InpatientDailyRecordInput,
+  AllergyIntolerance, AllergyInput,
+  NutritionOrder, NutritionOrderInput,
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -153,6 +159,10 @@ export async function postClinicalNote(input: ClinicalNoteInput): Promise<Clinic
 
 export async function getClinicalNotes(encounterId: string): Promise<ClinicalNote[]> {
   return fetchJson(`/api/clinical-notes${qs({ encounter_id: encounterId })}`)
+}
+
+export async function getClinicalNotesByEpisode(episodeOfCareId: string): Promise<ClinicalNote[]> {
+  return fetchJson(`/api/clinical-notes${qs({ episode_of_care_id: episodeOfCareId })}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -328,5 +338,140 @@ export async function cancelInvoice(invoiceId: string): Promise<Invoice> {
   return fetchJson(`/api/invoices/${invoiceId}`, {
     method: 'PATCH',
     body: JSON.stringify({ action: 'cancel' }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Locations  /api/locations
+// ---------------------------------------------------------------------------
+
+export async function getLocations(opts?: {
+  type?: LocationType
+}): Promise<Location[]> {
+  return fetchJson(`/api/locations${qs(opts ?? {})}`)
+}
+
+// ---------------------------------------------------------------------------
+// Episodes of Care  /api/episodes-of-care
+// ---------------------------------------------------------------------------
+
+export async function getEpisodesOfCare(opts?: {
+  status?: InpatientStatus
+  patient_id?: string
+}): Promise<EpisodeOfCare[]> {
+  return fetchJson(`/api/episodes-of-care${qs(opts ?? {})}`)
+}
+
+export async function getEpisodeOfCare(episodeId: string): Promise<EpisodeOfCare> {
+  return fetchJson(`/api/episodes-of-care/${episodeId}`)
+}
+
+export async function postEpisodeOfCare(input: EpisodeOfCareInput): Promise<EpisodeOfCare> {
+  return fetchJson('/api/episodes-of-care', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchEpisodeOfCare(
+  episodeId: string,
+  update: Partial<{ status: InpatientStatus; end_date: string; room_location_id: string; bed_number: string }>,
+): Promise<EpisodeOfCare> {
+  return fetchJson(`/api/episodes-of-care/${episodeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Inpatient Admissions  /api/inpatient-admissions
+// ---------------------------------------------------------------------------
+
+export async function getInpatientAdmissions(opts?: {
+  status?: InpatientStatus
+  dpjp_id?: string
+}): Promise<InpatientAdmission[]> {
+  return fetchJson(`/api/inpatient-admissions${qs(opts ?? {})}`)
+}
+
+export async function getInpatientAdmission(admissionId: string): Promise<InpatientAdmission> {
+  return fetchJson(`/api/inpatient-admissions/${admissionId}`)
+}
+
+export async function postInpatientAdmission(input: InpatientAdmissionInput): Promise<InpatientAdmission> {
+  return fetchJson('/api/inpatient-admissions', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchInpatientAdmission(
+  admissionId: string,
+  update: Partial<{
+    status: InpatientStatus
+    discharge_summary: string
+    room_location_id: string
+    bed_number: string
+    room_class: string
+  }>,
+): Promise<InpatientAdmission> {
+  return fetchJson(`/api/inpatient-admissions/${admissionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Inpatient Daily Records  /api/inpatient-daily-records
+// ---------------------------------------------------------------------------
+
+export async function getInpatientDailyRecords(admissionId: string): Promise<InpatientDailyRecord[]> {
+  return fetchJson(`/api/inpatient-daily-records${qs({ admission_id: admissionId })}`)
+}
+
+export async function postInpatientDailyRecord(input: InpatientDailyRecordInput): Promise<InpatientDailyRecord> {
+  return fetchJson('/api/inpatient-daily-records', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Allergies  /api/allergies
+// ---------------------------------------------------------------------------
+
+export async function getAllergies(patientId: string): Promise<AllergyIntolerance[]> {
+  return fetchJson(`/api/allergies${qs({ patient_id: patientId })}`)
+}
+
+export async function postAllergy(input: AllergyInput): Promise<AllergyIntolerance> {
+  return fetchJson('/api/allergies', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition Orders  /api/nutrition-orders
+// ---------------------------------------------------------------------------
+
+export async function getNutritionOrders(episodeOfCareId: string): Promise<NutritionOrder[]> {
+  return fetchJson(`/api/nutrition-orders${qs({ episode_of_care_id: episodeOfCareId })}`)
+}
+
+export async function postNutritionOrder(input: NutritionOrderInput): Promise<NutritionOrder> {
+  return fetchJson('/api/nutrition-orders', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchNutritionOrder(
+  orderId: string,
+  update: Partial<NutritionOrderInput & { is_active: boolean }>,
+): Promise<NutritionOrder> {
+  return fetchJson(`/api/nutrition-orders/${orderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
   })
 }

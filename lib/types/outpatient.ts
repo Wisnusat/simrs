@@ -1,9 +1,9 @@
 /**
  * lib/types/outpatient.ts
  *
- * Domain types for the outpatient (rawat jalan) workflow.
+ * Domain types for the outpatient (rawat jalan) and inpatient (rawat inap) workflows.
  * All shapes are aligned to the Supabase schema and the API responses
- * returned by /api/outpatient/* routes.
+ * returned by /api/* routes.
  *
  * Convention: use snake_case to match DB columns verbatim.
  */
@@ -13,14 +13,24 @@
 // ---------------------------------------------------------------------------
 
 export type QueueStatus = "waiting" | "called" | "in_service" | "done" | "skipped"
-export type EncounterStatus = "planned" | "arrived" | "in_progress" | "waiting_lab" | "finished" | "cancelled"
+export type EncounterStatus = "planned" | "arrived" | "in_progress" | "waiting_lab" | "admitted" | "finished" | "cancelled"
+export type EncounterClass = "outpatient" | "inpatient" | "emergency" | "observation"
 export type LabOrderStatus = "lab_ordered" | "sample_taken" | "processing" | "result_uploaded" | "verified"
 export type PrescriptionStatus = "active" | "completed" | "cancelled"
 export type InvoiceStatus = "unpaid" | "paid" | "bpjs_claim_pending" | "cancelled"
 export type PaymentMethod = "cash" | "card" | "transfer" | "bpjs"
 export type DiagnosisType = "primary" | "secondary"
 export type ResultStatus = "normal" | "abnormal_low" | "abnormal_high" | "critical"
-export type ItemType = "consultation" | "medication" | "action" | "lab"
+export type ItemType = "consultation" | "medication" | "action" | "lab" | "room"
+
+// Inpatient-specific enums
+export type InpatientStatus = "admitted" | "in_care" | "discharge_approved" | "discharged" | "bpjs_finalized"
+export type InpatientRoomClass = "vip" | "kelas_1" | "kelas_2" | "kelas_3"
+export type InpatientShift = "pagi" | "sore" | "malam"
+export type AllergyCategory = "medication" | "food" | "environment"
+export type AllergyCriticality = "low" | "high" | "unable-to-assess"
+export type NutritionalStatus = "baik" | "kurang" | "lebih" | "buruk"
+export type LocationType = "poli" | "ward" | "patient_room" | "igd" | "ok" | "lab" | "pharmacy"
 
 // ---------------------------------------------------------------------------
 // Embedded shapes (referenced from multiple entities)
@@ -375,4 +385,169 @@ export interface Invoice {
     appointment_id?: string
     appointments?: Pick<AppointmentRef, "booking_code" | "chief_complaint">
   }
+}
+
+// ---------------------------------------------------------------------------
+// Location
+// ---------------------------------------------------------------------------
+
+export interface Location {
+  id: string
+  organization_id: string
+  name: string
+  code?: string
+  type: LocationType
+  floor?: string
+  capacity: number
+  is_active: boolean
+  occupied?: number  // computed: current occupancy count
+}
+
+// ---------------------------------------------------------------------------
+// Episode of Care
+// ---------------------------------------------------------------------------
+
+export interface EpisodeOfCare {
+  id: string
+  patient_id: string
+  organization_id: string
+  start_date: string
+  end_date?: string
+  status: InpatientStatus
+  diagnosis_primary?: string
+  room_location_id?: string
+  bed_number?: string
+  dpjp_id?: string
+  patients: Pick<Patient, "full_name" | "medical_record_no" | "date_of_birth" | "gender">
+  locations?: Pick<Location, "id" | "name" | "type" | "floor">
+  dpjp?: Pick<Practitioner, "full_name" | "role">
+}
+
+export interface EpisodeOfCareInput {
+  patient_id: string
+  room_location_id: string
+  bed_number: string
+  dpjp_id: string
+  diagnosis_primary?: string
+}
+
+// ---------------------------------------------------------------------------
+// Inpatient Admission
+// ---------------------------------------------------------------------------
+
+export interface InpatientAdmission {
+  id: string
+  episode_of_care_id: string
+  patient_id: string
+  admitted_from: string
+  admission_date: string
+  discharge_date?: string
+  dpjp_id: string
+  room_location_id: string
+  bed_number: string
+  room_class: InpatientRoomClass
+  status: InpatientStatus
+  discharge_approved_by?: string
+  discharge_approved_at?: string
+  discharge_summary?: string
+  sep_number?: string
+  bpjs_claim_status?: string
+  // Joined data
+  patients: Pick<Patient, "full_name" | "medical_record_no" | "date_of_birth" | "gender" | "phone" | "bpjs_no">
+  locations: Pick<Location, "id" | "name" | "type" | "floor">
+  dpjp: Pick<Practitioner, "full_name" | "role">
+  episodes_of_care: Pick<EpisodeOfCare, "id" | "diagnosis_primary" | "start_date">
+}
+
+export interface InpatientAdmissionInput {
+  episode_of_care_id: string
+  patient_id: string
+  room_location_id: string
+  bed_number: string
+  room_class: InpatientRoomClass
+  dpjp_id: string
+  admitted_from?: string
+}
+
+// ---------------------------------------------------------------------------
+// Inpatient Daily Record
+// ---------------------------------------------------------------------------
+
+export interface InpatientDailyRecord {
+  id: string
+  admission_id: string
+  encounter_id: string
+  record_date: string
+  shift: InpatientShift
+  encounter?: Encounter
+}
+
+export interface InpatientDailyRecordInput {
+  admission_id: string
+  encounter_id: string
+  record_date?: string
+  shift?: InpatientShift
+}
+
+// ---------------------------------------------------------------------------
+// Allergy Intolerance
+// ---------------------------------------------------------------------------
+
+export interface AllergyIntolerance {
+  id: string
+  patient_id: string
+  recorded_by: string
+  encounter_id?: string
+  substance_code?: string
+  substance_display: string
+  category: AllergyCategory
+  criticality: AllergyCriticality
+  reaction_description?: string
+  onset_date?: string
+  is_active: boolean
+  practitioners?: Pick<Practitioner, "full_name" | "role">
+}
+
+export interface AllergyInput {
+  patient_id: string
+  encounter_id?: string
+  substance_display: string
+  substance_code?: string
+  category?: AllergyCategory
+  criticality?: AllergyCriticality
+  reaction_description?: string
+  onset_date?: string
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition Order
+// ---------------------------------------------------------------------------
+
+export interface NutritionOrder {
+  id: string
+  episode_of_care_id: string
+  patient_id: string
+  nutritionist_id: string
+  encounter_id?: string
+  order_date: string
+  nutritional_status?: NutritionalStatus
+  dietary_restrictions?: string
+  energy_needs_kcal?: number
+  protein_needs_g?: number
+  meal_plan: Record<string, string>  // { pagi: "...", siang: "...", malam: "..." }
+  notes?: string
+  is_active: boolean
+  practitioners?: Pick<Practitioner, "full_name">
+}
+
+export interface NutritionOrderInput {
+  episode_of_care_id: string
+  patient_id: string
+  encounter_id?: string
+  nutritional_status?: NutritionalStatus
+  dietary_restrictions?: string
+  energy_needs_kcal?: number
+  protein_needs_g?: number
+  meal_plan?: Record<string, string>
+  notes?: string
 }

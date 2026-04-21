@@ -198,3 +198,129 @@ export async function syncInvoiceForEncounter(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Inpatient episode-level invoice sync
+// ---------------------------------------------------------------------------
+
+const ROOM_RATES: Record<string, number> = {
+  vip: 500_000,
+  kelas_1: 350_000,
+  kelas_2: 250_000,
+  kelas_3: 150_000,
+}
+
+/**
+ * Aggregates charges across ALL encounters in an episode of care.
+ * Includes room charges (daily rate × days) plus all clinical charges
+ * from every encounter linked to the episode.
+ */
+export async function syncInvoiceForEpisode(
+  supabase: SupabaseClient,
+  episodeOfCareId: string
+): Promise<void> {
+  // Fetch episode info
+  const { data: episode } = await supabase
+    .from('episodes_of_care')
+    .select('id, patient_id, organization_id, start_date, end_date')
+    .eq('id', episodeOfCareId)
+    .single()
+
+  if (!episode) return
+
+  // Fetch admission for room info
+  const { data: admission } = await supabase
+    .from('inpatient_admissions')
+    .select('id, room_class, admission_date, discharge_date')
+    .eq('episode_of_care_id', episodeOfCareId)
+    .order('admission_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // Fetch all encounters in this episode
+  const { data: encounters } = await supabase
+    .from('encounters')
+    .select('id')
+    .eq('episode_of_care_id', episodeOfCareId)
+
+  const encounterIds = (encounters ?? []).map((e: any) => e.id)
+
+  const allItems: InvoiceLineItem[] = []
+
+  // 1. Room charges
+  if (admission) {
+    const startDate = new Date(admission.admission_date)
+    const endDate = admission.discharge_date ? new Date(admission.discharge_date) : new Date()
+    const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
+    const dailyRate = ROOM_RATES[admission.room_class] ?? ROOM_RATES.kelas_3
+
+    allItems.push({
+      item_type: 'room' as any,
+      item_name: `Biaya Kamar (${admission.room_class.replace('_', ' ').toUpperCase()}) × ${days} hari`,
+      quantity: days,
+      unit_price: dailyRate,
+      reference_id: admission.id,
+    })
+  }
+
+  // 2. Aggregate charges from all encounters
+  for (const encId of encounterIds) {
+    const built = await buildInvoiceFromEncounter(
+      supabase,
+      encId,
+      (episode as any).organization_id,
+    )
+    allItems.push(...built.items)
+  }
+
+  const subtotal = allItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
+  const total_amount = subtotal
+
+  // Upsert episode-level invoice (use episode_of_care_id as reference)
+  let { data: invoice } = await supabase
+    .from('invoices')
+    .select('id')
+    .eq('episode_of_care_id', episodeOfCareId)
+    .maybeSingle()
+
+  if (!invoice) {
+    // Try linking to first encounter
+    const firstEncounterId = encounterIds[0] ?? null
+    const invoiceNumber = `INV-IP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
+    const { data: newInvoice } = await supabase
+      .from('invoices')
+      .insert({
+        encounter_id: firstEncounterId,
+        episode_of_care_id: episodeOfCareId,
+        patient_id: (episode as any).patient_id,
+        organization_id: (episode as any).organization_id,
+        invoice_number: invoiceNumber,
+        payment_type: 'umum',
+        subtotal,
+        discount_amount: 0,
+        tax_amount: 0,
+        total_amount,
+        status: 'unpaid',
+      })
+      .select('id')
+      .single()
+
+    if (newInvoice) invoice = newInvoice
+  } else {
+    await supabase
+      .from('invoices')
+      .update({ subtotal, total_amount, discount_amount: 0, tax_amount: 0 })
+      .eq('id', invoice.id)
+  }
+
+  // Rewrite line items
+  if (invoice) {
+    const invId = (invoice as any).id
+    await supabase.from('invoice_items').delete().eq('invoice_id', invId)
+    if (allItems.length > 0) {
+      await supabase.from('invoice_items').insert(
+        allItems.map((item) => ({ invoice_id: invId, ...item }))
+      )
+    }
+  }
+}

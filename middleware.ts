@@ -6,6 +6,7 @@ const ROLE_ROUTE_MAP: Record<string, string> = {
     '/admin': 'admin',
     '/doctor': 'doctor',
     '/nurse': 'nurse',
+    '/inpatient': 'nurse',
     '/pharmacist': 'pharmacist',
     '/cashier': 'cashier',
     '/lab': 'lab_nurse',

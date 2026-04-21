@@ -100,7 +100,7 @@ export function PaymentForm({ invoice, onPay, onCancel, loading, error }: Paymen
       <div className="space-y-1.5">
         <Label>Metode Pembayaran</Label>
         <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

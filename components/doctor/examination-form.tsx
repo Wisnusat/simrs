@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical } from "lucide-react"
-import type { Medication, VitalSigns } from "@/lib/types/outpatient"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble } from "lucide-react"
+import type { Medication, VitalSigns, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 interface ExaminationFormProps {
   patient: {
@@ -62,6 +62,24 @@ export default function ExaminationForm({
   const [icd10Code,    setIcd10Code]    = useState("")
   const [icd10Display, setIcd10Display] = useState("")
   const [careStatus,   setCareStatus]   = useState("rawat_jalan")
+
+  // ── Inpatient Room Selection ──
+  const [rooms,         setRooms]         = useState<Location[]>([])
+  const [roomsLoading,  setRoomsLoading]  = useState(false)
+  const [selectedRoom,  setSelectedRoom]  = useState<string>("")
+  const [bedNumber,     setBedNumber]     = useState("")
+  const [roomClass,     setRoomClass]     = useState<InpatientRoomClass>("kelas_3")
+
+  // Fetch rooms when rawat inap is selected
+  useEffect(() => {
+    if (careStatus === "rawat_inap") {
+      setRoomsLoading(true)
+      getLocations({ type: "patient_room" })
+        .then(setRooms)
+        .catch(() => {})
+        .finally(() => setRoomsLoading(false))
+    }
+  }, [careStatus])
 
   // ── Prescription ──
   const [rxSearch,    setRxSearch]    = useState("")
@@ -124,6 +142,12 @@ export default function ExaminationForm({
     try {
       if (!icd10Code || !icd10Display) throw new Error("Kode ICD-10 dan nama diagnosis wajib diisi")
 
+      // Validate inpatient fields
+      if (careStatus === "rawat_inap") {
+        if (!selectedRoom) throw new Error("Pilih kamar untuk rawat inap")
+        if (!bedNumber.trim()) throw new Error("Nomor bed wajib diisi")
+      }
+
       // 1. SOAP note
       await postClinicalNote({
         encounter_id: encounterId,
@@ -159,11 +183,45 @@ export default function ExaminationForm({
         })
       }
 
-      // 4. Encounter → finished (triggers auto-invoice update on API side)
-      await patchEncounter(encounterId, { status: "finished" } as any)
+      // ── Rawat Inap: create episode + admission, set encounter to admitted ──
+      if (careStatus === "rawat_inap") {
+        // 4a. Create Episode of Care
+        const episode = await postEpisodeOfCare({
+          patient_id:       patient.id,
+          room_location_id: selectedRoom,
+          bed_number:       bedNumber,
+          dpjp_id:          "__self__", // API will resolve to current practitioner
+          diagnosis_primary: `${icd10Code} - ${icd10Display}`,
+        })
 
-      // 5. Queue → done
-      if (queueId) await patchQueueStatus(queueId, "done")
+        // 4b. Create Inpatient Admission
+        await postInpatientAdmission({
+          episode_of_care_id: episode.id,
+          patient_id:         patient.id,
+          room_location_id:   selectedRoom,
+          bed_number:         bedNumber,
+          room_class:         roomClass,
+          dpjp_id:            "__self__",
+          admitted_from:      "outpatient",
+        })
+
+        // 4c. Encounter → admitted + link to episode
+        await patchEncounter(encounterId, {
+          status: "admitted",
+          episode_of_care_id: episode.id,
+        } as any)
+
+        // 5. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+
+      } else {
+        // ── Rawat Jalan: finish encounter normally ──
+        // 4. Encounter → finished (triggers auto-invoice update on API side)
+        await patchEncounter(encounterId, { status: "finished" } as any)
+
+        // 5. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+      }
 
       onSave()
     } catch (err: any) {
@@ -361,16 +419,77 @@ export default function ExaminationForm({
               </div>
 
               {careStatus === "rawat_inap" && (
-                <div className="space-y-2">
-                  <Label>Tipe Kamar *</Label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Pilih tipe kamar" /></SelectTrigger>
-                    <SelectContent>
-                      {["VIP", "Kelas 1", "Kelas 2", "Kelas 3"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-4 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                  <h4 className="font-semibold flex items-center gap-2 text-sm">
+                    <BedDouble className="w-4 h-4 text-blue-500" /> Pengaturan Rawat Inap
+                  </h4>
+
+                  {/* Room selection */}
+                  <div className="space-y-2">
+                    <Label>Pilih Kamar *</Label>
+                    {roomsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-foreground/50">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat kamar...
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        {rooms.map((room) => {
+                          const available = room.capacity - (room.occupied ?? 0)
+                          const isFull = available <= 0
+                          return (
+                            <button
+                              key={room.id}
+                              type="button"
+                              disabled={isFull}
+                              className={`p-3 rounded-lg border text-left text-sm transition-all ${
+                                selectedRoom === room.id
+                                  ? "border-blue-500 bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
+                                  : isFull
+                                  ? "border-border/40 opacity-50 cursor-not-allowed"
+                                  : "border-border hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10"
+                              }`}
+                              onClick={() => setSelectedRoom(room.id)}
+                            >
+                              <p className="font-medium">{room.name}</p>
+                              <p className="text-xs text-foreground/50">
+                                {room.floor ? `Lantai ${room.floor} · ` : ""}
+                                Tersedia: {available}/{room.capacity}
+                              </p>
+                            </button>
+                          )
+                        })}
+                        {rooms.length === 0 && (
+                          <p className="text-sm text-foreground/50 col-span-2 text-center py-4">Belum ada kamar tersedia.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Bed number */}
+                    <div className="space-y-2">
+                      <Label>Nomor Bed *</Label>
+                      <Input
+                        value={bedNumber}
+                        onChange={(e) => setBedNumber(e.target.value)}
+                        placeholder="mis. A1, B2"
+                      />
+                    </div>
+
+                    {/* Room class */}
+                    <div className="space-y-2">
+                      <Label>Kelas Kamar *</Label>
+                      <Select value={roomClass} onValueChange={(v) => setRoomClass(v as InpatientRoomClass)}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vip">VIP</SelectItem>
+                          <SelectItem value="kelas_1">Kelas 1</SelectItem>
+                          <SelectItem value="kelas_2">Kelas 2</SelectItem>
+                          <SelectItem value="kelas_3">Kelas 3</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
               )}
             </TabsContent>
@@ -484,15 +603,25 @@ export default function ExaminationForm({
           <Separator />
 
           <p className="text-xs text-foreground/50">
-            Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui.
+            {careStatus === "rawat_inap"
+              ? "Setelah menyimpan, pasien akan dipindahkan ke rawat inap dan invoice akan dibuat."
+              : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
           </p>
 
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="outline" onClick={onCancel} className="flex-1" disabled={loading}>
               Batal
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 bg-[#2E8B57] hover:bg-[#2E8B57]/90">
-              {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
+            <Button
+              type="submit"
+              disabled={loading}
+              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
+                : careStatus === "rawat_inap"
+                ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
+                : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>

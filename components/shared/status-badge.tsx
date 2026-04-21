@@ -9,7 +9,8 @@ import { CheckCircle, Clock, AlertCircle, XCircle } from "lucide-react"
 
 type AnyStatus =
   | "waiting" | "called" | "in_service" | "done" | "skipped"          // queue
-  | "planned" | "arrived" | "in_progress" | "waiting_lab" | "finished" | "cancelled"   // encounter
+  | "planned" | "arrived" | "in_progress" | "waiting_lab" | "admitted" | "finished" | "cancelled"   // encounter
+  | "admitted" | "in_care" | "discharge_approved" | "discharged" | "bpjs_finalized" // inpatient
   | "active" | "completed"                                               // prescription
   | "lab_ordered" | "sample_taken" | "processing" | "result_uploaded" | "verified" // lab
   | "unpaid" | "paid" | "bpjs_claim_pending"                            // invoice
@@ -34,8 +35,15 @@ const STATUS_MAP: Record<string, Config> = {
   arrived:          { label: "Tiba",               variant: "secondary" },
   in_progress:      { label: "Berjalan",           variant: "secondary",   Icon: Clock },
   waiting_lab:      { label: "Menunggu Lab",       variant: "secondary",   Icon: Clock },
+  admitted:         { label: "Rawat Inap",         variant: "secondary",   Icon: Clock },
   finished:         { label: "Selesai",            variant: "default",     Icon: CheckCircle },
   cancelled:        { label: "Dibatalkan",         variant: "destructive", Icon: XCircle },
+
+  // Inpatient Admission
+  in_care:               { label: "Dalam Perawatan",    variant: "secondary",   Icon: Clock },
+  discharge_approved:    { label: "Siap Pulang",        variant: "outline",     Icon: CheckCircle },
+  discharged:            { label: "Pulang",             variant: "default",     Icon: CheckCircle },
+  bpjs_finalized:        { label: "BPJS Selesai",       variant: "default",     Icon: CheckCircle },
 
   // Prescription
   active:           { label: "Menunggu",           variant: "outline",     Icon: Clock },

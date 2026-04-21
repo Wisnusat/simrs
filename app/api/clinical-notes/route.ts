@@ -58,13 +58,38 @@ export async function GET(req: NextRequest) {
   const auth = await requirePractitioner(supabase)
   if (isGuardError(auth)) return auth
 
-  const encounterId = new URL(req.url).searchParams.get('encounter_id')
-  if (!encounterId) return apiResponse.badRequest('encounter_id is required')
+  const { searchParams } = new URL(req.url)
+  const encounterId = searchParams.get('encounter_id')
+  const episodeOfCareId = searchParams.get('episode_of_care_id')
+
+  if (!encounterId && !episodeOfCareId) {
+    return apiResponse.badRequest('encounter_id or episode_of_care_id is required')
+  }
+
+  if (episodeOfCareId) {
+    // Fetch all notes across encounters in this episode
+    const { data: encounters } = await supabase
+      .from('encounters')
+      .select('id')
+      .eq('episode_of_care_id', episodeOfCareId)
+
+    const encounterIds = (encounters ?? []).map((e: any) => e.id)
+    if (encounterIds.length === 0) return apiResponse.ok([])
+
+    const { data, error } = await supabase
+      .from('clinical_notes')
+      .select('*, practitioners:written_by(full_name, role)')
+      .in('encounter_id', encounterIds)
+      .order('note_date', { ascending: false })
+
+    if (error) return apiResponse.serverError(error.message)
+    return apiResponse.ok(data)
+  }
 
   const { data, error } = await supabase
     .from('clinical_notes')
-    .select('*, practitioners(full_name, role)')
-    .eq('encounter_id', encounterId)
+    .select('*, practitioners:written_by(full_name, role)')
+    .eq('encounter_id', encounterId!)
     .order('note_date', { ascending: false })
 
   if (error) return apiResponse.serverError(error.message)

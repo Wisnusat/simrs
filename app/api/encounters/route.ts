@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
     .order('started_at', { ascending: true })
 
   if (status) query = query.eq('status', status)
+  const encounterClass = searchParams.get('encounter_class')
+  if (encounterClass) query = query.eq('encounter_class', encounterClass)
+  const episodeId = searchParams.get('episode_of_care_id')
+  if (episodeId) query = query.eq('episode_of_care_id', episodeId)
   if (date) {
     query = query
       .gte('arrived_at', `${date}T00:00:00`)
