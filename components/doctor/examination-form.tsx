@@ -2,212 +2,226 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission } from "@/lib/api/client"
+import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { HospitalStorage } from "@/lib/storage"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Appointment, type CareStatus } from "@/lib/types"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble } from "lucide-react"
+import type { Medication, VitalSigns, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 interface ExaminationFormProps {
-  appointment: any
+  patient: {
+    id: string
+    full_name: string
+    medical_record_no?: string
+  }
+  encounterId: string
+  queueId?: string
+  chiefComplaint?: string
+  queueNumber?: string | number
   onSave: () => void
   onCancel: () => void
 }
 
-export default function ExaminationForm({ appointment, onSave, onCancel }: ExaminationFormProps) {
-  const [formData, setFormData] = useState({
-    // Vital Signs
-    bloodPressure: "",
-    heartRate: "",
-    temperature: "",
-    respiration: "",
-    weight: "",
-    height: "",
+interface RxItem {
+  medication: Medication
+  dosage: string
+  frequency: string
+  duration_days: number
+  quantity: number
+  instructions: string
+}
 
-    // Examination
-    physicalExamination: "",
-    diagnosis: "",
-    treatment: "",
-    notes: "",
-    recommendations: "",
-
-    // Follow up
-    followUpDate: "",
-    followUpNotes: "",
-
-    // Care Status
-    careStatus: "rawat_jalan" as CareStatus,
-
-    // Rawat Inap Details
-    roomType: "",
-    inpatientNotes: "",
-
-    // Rujukan Details
-    referralHospital: "",
-    referralAddress: "",
-    referralPhone: "",
-    referralType: "",
-    referralReason: "",
-    referralUrgency: "Biasa",
-    referralNotes: "",
+export default function ExaminationForm({
+  patient,
+  encounterId,
+  queueId,
+  chiefComplaint,
+  queueNumber,
+  onSave,
+  onCancel,
+}: ExaminationFormProps) {
+  // ── SOAP ──
+  const [soap, setSoap] = useState({
+    subjective:  chiefComplaint ?? "",
+    objective:   "",
+    assessment:  "",
+    plan:        "",
   })
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  // ── Diagnosis ──
+  const [icd10Code,    setIcd10Code]    = useState("")
+  const [icd10Display, setIcd10Display] = useState("")
+  const [careStatus,   setCareStatus]   = useState("rawat_jalan")
 
-  const storage = HospitalStorage.getInstance()
+  // ── Inpatient Room Selection ──
+  const [rooms,         setRooms]         = useState<Location[]>([])
+  const [roomsLoading,  setRoomsLoading]  = useState(false)
+  const [selectedRoom,  setSelectedRoom]  = useState<string>("")
+  const [bedNumber,     setBedNumber]     = useState("")
+  const [roomClass,     setRoomClass]     = useState<InpatientRoomClass>("kelas_3")
+
+  // Fetch rooms when rawat inap is selected
+  useEffect(() => {
+    if (careStatus === "rawat_inap") {
+      setRoomsLoading(true)
+      getLocations({ type: "patient_room" })
+        .then(setRooms)
+        .catch(() => {})
+        .finally(() => setRoomsLoading(false))
+    }
+  }, [careStatus])
+
+  // ── Prescription ──
+  const [rxSearch,    setRxSearch]    = useState("")
+  const [rxResults,   setRxResults]   = useState<Medication[]>([])
+  const [rxSearching, setRxSearching] = useState(false)
+  const [rxItems,     setRxItems]     = useState<RxItem[]>([])
+  const [adding,      setAdding]      = useState<Medication | null>(null)
+  const [addForm,     setAddForm]     = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Vital signs (prefetch for display) ──
+  const [vitals, setVitals] = useState<VitalSigns | null>(null)
+  useEffect(() => {
+    getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => {})
+  }, [encounterId])
+
+  // ── Lab Orders ──
+  const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
+
+  // ── Medicine search (debounced 300ms) ──
+  useEffect(() => {
+    if (!rxSearch.trim()) { setRxResults([]); return }
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(async () => {
+      setRxSearching(true)
+      try { setRxResults(await getMedications(rxSearch)) }
+      catch { /* silent */ }
+      finally { setRxSearching(false) }
+    }, 300)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [rxSearch])
+
+  const selectMedicine = (med: Medication) => {
+    setAdding(med)
+    setAddForm({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+    setRxSearch("")
+    setRxResults([])
+  }
+
+  const confirmAdd = () => {
+    if (!adding || !addForm.dosage) return
+    setRxItems((prev) => [
+      ...prev,
+      { medication: adding, dosage: addForm.dosage, frequency: addForm.frequency,
+        duration_days: addForm.duration_days, quantity: addForm.quantity, instructions: addForm.instructions },
+    ])
+    setAdding(null)
+  }
+
+  const removeRx = (idx: number) => setRxItems((prev) => prev.filter((_, i) => i !== idx))
+
+  // ── Submit ──
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
-
     try {
-      // Validate required fields
-      if (!formData.diagnosis || !formData.treatment) {
-        throw new Error("Diagnosis dan tindakan wajib diisi")
+      if (!icd10Code || !icd10Display) throw new Error("Kode ICD-10 dan nama diagnosis wajib diisi")
+
+      // Validate inpatient fields
+      if (careStatus === "rawat_inap") {
+        if (!selectedRoom) throw new Error("Pilih kamar untuk rawat inap")
+        if (!bedNumber.trim()) throw new Error("Nomor bed wajib diisi")
       }
 
-      // Validate care status specific fields
-      if (formData.careStatus === "rawat_inap" && !formData.roomType) {
-        throw new Error("Tipe kamar wajib diisi untuk rawat inap")
-      }
-
-      if (formData.careStatus === "rujukan") {
-        if (!formData.referralHospital || !formData.referralReason) {
-          throw new Error("Rumah sakit tujuan dan alasan rujukan wajib diisi")
-        }
-      }
-
-      // Get current doctor info
-      const currentUser = storage.getCurrentUser()
-      if (!currentUser || currentUser.role !== "doctor") {
-        throw new Error("Anda tidak memiliki akses untuk melakukan tindakan ini")
-      }
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Create medical record
-      const medicalRecord = {
-        id: "MR" + storage.generateId(),
-        patientId: appointment.patientId,
-        patientName: appointment.patientName,
-        appointmentId: appointment.id,
-        date: new Date().toISOString().split("T")[0],
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-        complaint: appointment.complaint,
-        vitalSigns: {
-          bloodPressure: formData.bloodPressure,
-          heartRate: formData.heartRate ? Number.parseInt(formData.heartRate) : null,
-          temperature: formData.temperature ? Number.parseFloat(formData.temperature) : null,
-          respiration: formData.respiration ? Number.parseInt(formData.respiration) : null,
-          weight: formData.weight ? Number.parseFloat(formData.weight) : null,
-          height: formData.height ? Number.parseFloat(formData.height) : null,
-        },
-        examination: formData.physicalExamination,
-        diagnosis: formData.diagnosis,
-        treatment: formData.treatment,
-        notes: formData.notes,
-        recommendations: formData.recommendations,
-        followUp: {
-          date: formData.followUpDate,
-          notes: formData.followUpNotes,
-        },
-        doctorId: currentUser.id,
-        doctorName: currentUser.name,
-        status: "completed",
-        careStatus: formData.careStatus,
-        careDetails: {
-          roomType: formData.roomType,
-          referralHospital: formData.referralHospital,
-          referralReason: formData.referralReason,
-        },
-      }
-
-      // Save medical record
-      storage.create("medicalRecords", medicalRecord)
-
-      // Handle specific care status actions
-      if (formData.careStatus === "rawat_inap") {
-        // Create inpatient record
-        const inpatientRecord = {
-          id: "INP" + storage.generateId(),
-          patientId: appointment.patientId,
-          patientName: appointment.patientName,
-          appointmentId: appointment.id,
-          admissionDate: new Date().toISOString().split("T")[0],
-          admissionTime: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-          roomNumber: `${Math.floor(Math.random() * 300) + 100}${String.fromCharCode(65 + Math.floor(Math.random() * 3))}`,
-          roomType: formData.roomType,
-          diagnosis: formData.diagnosis,
-          doctorId: currentUser.id,
-          doctorName: currentUser.name,
-          status: "active",
-          notes: formData.inpatientNotes || formData.notes,
-        }
-        storage.create("inpatients", inpatientRecord)
-      } else if (formData.careStatus === "rujukan") {
-        // Create referral record
-        const referralRecord = {
-          id: "REF" + storage.generateId(),
-          patientId: appointment.patientId,
-          patientName: appointment.patientName,
-          appointmentId: appointment.id,
-          referralDate: new Date().toISOString().split("T")[0],
-          referralTime: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-          fromHospital: "PUSKESMAS MKP KELOMPOK 6",
-          toHospital: formData.referralHospital,
-          toHospitalAddress: formData.referralAddress,
-          toHospitalPhone: formData.referralPhone,
-          referralType: formData.referralType,
-          diagnosis: formData.diagnosis,
-          reason: formData.referralReason,
-          urgency: formData.referralUrgency,
-          doctorId: currentUser.id,
-          doctorName: currentUser.name,
-          status: "pending",
-          notes: formData.referralNotes || formData.notes,
-        }
-        storage.create("referrals", referralRecord)
-      }
-
-      // Update appointment status
-      let appointmentStatus: "completed" | "waiting" | "in-progress" | "cancelled" = "completed"
-      if (formData.careStatus === "rawat_inap") {
-        appointmentStatus = "completed"
-      } else if (formData.careStatus === "rujukan") {
-        appointmentStatus = "completed"
-      }
-
-      storage.update<Appointment>("appointments", appointment.id, {
-        status: appointmentStatus,
-        completedAt: new Date().toISOString(),
+      // 1. SOAP note
+      await postClinicalNote({
+        encounter_id: encounterId,
+        patient_id:   patient.id,
+        subjective:   soap.subjective,
+        objective:    soap.objective,
+        assessment:   soap.assessment,
+        plan:         soap.plan,
       })
 
-      // Create medical note as well
-      const medicalNote = {
-        id: "MN" + storage.generateId(),
-        patientId: appointment.patientId,
-        patientName: appointment.patientName,
-        date: new Date().toISOString().split("T")[0],
-        diagnosis: formData.diagnosis,
-        notes: `${formData.physicalExamination}\n\nCatatan: ${formData.notes}\n\nStatus Perawatan: ${formData.careStatus === "rawat_jalan" ? "Rawat Jalan" : formData.careStatus === "rawat_inap" ? "Rawat Inap" : "Rujukan"}`,
-        recommendations: formData.recommendations,
-        doctorId: currentUser.id,
-        doctorName: currentUser.name,
+      // 2. Diagnosis
+      await postDiagnosis({
+        encounter_id:  encounterId,
+        patient_id:    patient.id,
+        icd10_code:    icd10Code,
+        icd10_display: icd10Display,
+        diagnosis_type: "primary",
+      })
+
+      // 3. Prescription (if any medicines added)
+      if (rxItems.length > 0) {
+        await postPrescription({
+          encounter_id: encounterId,
+          patient_id:   patient.id,
+          items: rxItems.map((item) => ({
+            medication_id: item.medication.id,
+            dosage:        item.dosage,
+            frequency:     item.frequency,
+            duration_days: item.duration_days,
+            quantity:      item.quantity,
+            instructions:  item.instructions,
+          })),
+        })
       }
 
-      storage.create("medicalNotes", medicalNote)
+      // ── Rawat Inap: create episode + admission, set encounter to admitted ──
+      if (careStatus === "rawat_inap") {
+        // 4a. Create Episode of Care
+        const episode = await postEpisodeOfCare({
+          patient_id:       patient.id,
+          room_location_id: selectedRoom,
+          bed_number:       bedNumber,
+          dpjp_id:          "__self__", // API will resolve to current practitioner
+          diagnosis_primary: `${icd10Code} - ${icd10Display}`,
+        })
+
+        // 4b. Create Inpatient Admission
+        await postInpatientAdmission({
+          episode_of_care_id: episode.id,
+          patient_id:         patient.id,
+          room_location_id:   selectedRoom,
+          bed_number:         bedNumber,
+          room_class:         roomClass,
+          dpjp_id:            "__self__",
+          admitted_from:      "outpatient",
+        })
+
+        // 4c. Encounter → admitted + link to episode
+        await patchEncounter(encounterId, {
+          status: "admitted",
+          episode_of_care_id: episode.id,
+        } as any)
+
+        // 5. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+
+      } else {
+        // ── Rawat Jalan: finish encounter normally ──
+        // 4. Encounter → finished (triggers auto-invoice update on API side)
+        await patchEncounter(encounterId, { status: "finished" } as any)
+
+        // 5. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+      }
 
       onSave()
     } catch (err: any) {
@@ -217,366 +231,401 @@ export default function ExaminationForm({ appointment, onSave, onCancel }: Exami
     }
   }
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  // ── Vital signs summary strip ──
+  const VitalStrip = () => {
+    if (!vitals) return null
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2 mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+        {vitals.systolic_bp && (
+          <div className="flex items-center gap-2 text-sm">
+            <Heart className="w-4 h-4 text-red-500 shrink-0" />
+            <span className="text-foreground/60">TD:</span>
+            <span className="font-medium">{vitals.systolic_bp}/{vitals.diastolic_bp} mmHg</span>
+          </div>
+        )}
+        {vitals.heart_rate && (
+          <div className="flex items-center gap-2 text-sm">
+            <Activity className="w-4 h-4 text-pink-500 shrink-0" />
+            <span className="text-foreground/60">Nadi:</span>
+            <span className="font-medium">{vitals.heart_rate} bpm</span>
+          </div>
+        )}
+        {vitals.temperature && (
+          <div className="flex items-center gap-2 text-sm">
+            <Thermometer className="w-4 h-4 text-orange-500 shrink-0" />
+            <span className="text-foreground/60">Suhu:</span>
+            <span className="font-medium">{vitals.temperature}°C</span>
+          </div>
+        )}
+        {vitals.oxygen_saturation && (
+          <div className="flex items-center gap-2 text-sm">
+            <Activity className="w-4 h-4 text-blue-500 shrink-0" />
+            <span className="text-foreground/60">SpO₂:</span>
+            <span className="font-medium">{vitals.oxygen_saturation}%</span>
+          </div>
+        )}
+        {vitals.weight_kg && (
+          <div className="flex items-center gap-2 text-sm col-span-2 md:col-span-1">
+            <span className="text-foreground/60">BB/TB:</span>
+            <span className="font-medium">{vitals.weight_kg} kg{vitals.height_cm ? ` / ${vitals.height_cm} cm` : ""}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Lab Strip ──
+  const LabStrip = () => {
+    if (labLoading) return <div className="text-sm text-foreground/50 mb-4 flex items-center"><Loader2 className="w-4 h-4 animate-spin mr-2" />Memuat hasil lab...</div>
+    const completedLabs = labOrders.filter(o => o.status === "result_uploaded" || o.status === "verified")
+    if (completedLabs.length === 0) return null
+
+    return (
+      <div className="mb-4 space-y-2">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <FlaskConical className="w-4 h-4 text-purple-500" /> Hasil Pemeriksaan Lab
+        </h4>
+        {completedLabs.map(order => (
+          <div key={order.id}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {order.lab_order_items.map(item => (
+                <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
+                  <span className="font-medium">{item.test_name}</span>
+                  <div className="flex items-center justify-between">
+                    <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
+                    <Badge variant={
+                      item.result_status === "critical" ? "destructive" :
+                      item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
+                    } className="text-[10px] px-1.5 py-0">
+                      {item.result_status === "normal" ? "Normal" :
+                       item.result_status === "abnormal_low" ? "Rendah" :
+                       item.result_status === "abnormal_high" ? "Tinggi" :
+                       item.result_status === "critical" ? "Kritis" : "—"}
+                    </Badge>
+                  </div>
+                  {item.reference_range && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
+                </div>
+              ))}
+            </div>
+            {order.clinical_notes && (
+              <p className="mt-2 text-xs text-foreground/60 italic">Catatan: {order.clinical_notes}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
-    <Card className="w-full max-w-5xl mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Hasil Pemeriksaan Pasien</span>
-          <Badge variant="outline">#{appointment.queueNumber}</Badge>
-        </CardTitle>
-        <div className="text-sm text-foreground/60">
-          <p>
-            <strong>Pasien:</strong> {appointment.patientName}
-          </p>
-          <p>
-            <strong>Keluhan:</strong> {appointment.complaint}
-          </p>
-          <p>
-            <strong>Tanggal:</strong> {new Date().toLocaleDateString("id-ID")}
-          </p>
+    <div className="w-full max-w-5xl mx-auto">
+      <div>
+        <div className="flex items-start justify-between">
+          <div className="text-sm text-foreground/60 space-y-0.5">
+            <p><strong>Pasien:</strong> {patient.full_name}</p>
+            {patient.medical_record_no && <p><strong>No. MR:</strong> {patient.medical_record_no}</p>}
+            <p><strong>Keluhan:</strong> {chiefComplaint ?? "—"}</p>
+            <p><strong>Tanggal:</strong> {new Date().toLocaleDateString("id-ID")}</p>
+          </div>
+          {queueNumber && <Badge variant="outline">#{queueNumber}</Badge>}
         </div>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
+      </div>
+
+      <div>
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
-          {/* Vital Signs Section */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Tanda Vital</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="bloodPressure">Tekanan Darah</Label>
-                <Input
-                  id="bloodPressure"
-                  value={formData.bloodPressure}
-                  onChange={(e) => handleChange("bloodPressure", e.target.value)}
-                  placeholder="120/80"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="heartRate">Detak Jantung (bpm)</Label>
-                <Input
-                  id="heartRate"
-                  type="number"
-                  value={formData.heartRate}
-                  onChange={(e) => handleChange("heartRate", e.target.value)}
-                  placeholder="80"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="temperature">Suhu (°C)</Label>
-                <Input
-                  id="temperature"
-                  type="number"
-                  step="0.1"
-                  value={formData.temperature}
-                  onChange={(e) => handleChange("temperature", e.target.value)}
-                  placeholder="36.5"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="respiration">Pernapasan (/menit)</Label>
-                <Input
-                  id="respiration"
-                  type="number"
-                  value={formData.respiration}
-                  onChange={(e) => handleChange("respiration", e.target.value)}
-                  placeholder="20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="weight">Berat Badan (kg)</Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  step="0.1"
-                  value={formData.weight}
-                  onChange={(e) => handleChange("weight", e.target.value)}
-                  placeholder="65"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="height">Tinggi Badan (cm)</Label>
-                <Input
-                  id="height"
-                  type="number"
-                  value={formData.height}
-                  onChange={(e) => handleChange("height", e.target.value)}
-                  placeholder="170"
-                />
-              </div>
-            </div>
-          </div>
+          <VitalStrip />
+          <LabStrip />
 
-          <Separator />
+          <Tabs defaultValue="soap" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="soap">Catatan SOAP</TabsTrigger>
+              <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
+              <TabsTrigger value="prescription">
+                Resep Obat
+                {rxItems.length > 0 && (
+                  <Badge className="ml-2 h-5 px-1.5 text-xs" variant="secondary">{rxItems.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Physical Examination */}
-          <div className="space-y-2">
-            <Label htmlFor="physicalExamination">Pemeriksaan Fisik</Label>
-            <Textarea
-              id="physicalExamination"
-              value={formData.physicalExamination}
-              onChange={(e) => handleChange("physicalExamination", e.target.value)}
-              placeholder="Hasil pemeriksaan fisik pasien..."
-              rows={4}
-            />
-          </div>
-
-          {/* Diagnosis */}
-          <div className="space-y-2">
-            <Label htmlFor="diagnosis">Diagnosis *</Label>
-            <Input
-              id="diagnosis"
-              value={formData.diagnosis}
-              onChange={(e) => handleChange("diagnosis", e.target.value)}
-              placeholder="Diagnosis penyakit"
-              required
-            />
-          </div>
-
-          {/* Treatment */}
-          <div className="space-y-2">
-            <Label htmlFor="treatment">Tindakan/Terapi *</Label>
-            <Textarea
-              id="treatment"
-              value={formData.treatment}
-              onChange={(e) => handleChange("treatment", e.target.value)}
-              placeholder="Tindakan yang diberikan kepada pasien..."
-              rows={3}
-              required
-            />
-          </div>
-
-          <Separator />
-
-          {/* Care Status Selection */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Status Perawatan</h3>
-            <RadioGroup
-              value={formData.careStatus}
-              onValueChange={(value: any) => handleChange("careStatus", value)}
-              className="flex flex-col space-y-2"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="rawat_jalan" id="rawat_jalan" />
-                <Label htmlFor="rawat_jalan">Rawat Jalan</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="rawat_inap" id="rawat_inap" />
-                <Label htmlFor="rawat_inap">Rawat Inap</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="rujukan" id="rujukan" />
-                <Label htmlFor="rujukan">Rujukan</Label>
-              </div>
-            </RadioGroup>
-          </div>
-
-          {/* Rawat Inap Details */}
-          {formData.careStatus === "rawat_inap" && (
-            <Card className="p-4 bg-muted/40">
-              <h4 className="font-semibold mb-3">Detail Rawat Inap</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="roomType">Tipe Kamar *</Label>
-                  <Select value={formData.roomType} onValueChange={(value) => handleChange("roomType", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih tipe kamar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="VIP">VIP</SelectItem>
-                      <SelectItem value="Kelas 1">Kelas 1</SelectItem>
-                      <SelectItem value="Kelas 2">Kelas 2</SelectItem>
-                      <SelectItem value="Kelas 3">Kelas 3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="inpatientNotes">Catatan Rawat Inap</Label>
+            {/* ── SOAP ── */}
+            <TabsContent value="soap" className="space-y-4 mt-4">
+              {(["subjective", "objective", "assessment", "plan"] as const).map((field) => (
+                <div key={field} className="space-y-2">
+                  <Label htmlFor={field}>
+                    {field === "subjective" ? "Subjective (Keluhan Pasien)"
+                      : field === "objective" ? "Objective (Pemeriksaan Fisik)"
+                      : field === "assessment" ? "Assessment (Penilaian)"
+                      : "Plan (Rencana Tatalaksana)"}
+                  </Label>
                   <Textarea
-                    id="inpatientNotes"
-                    value={formData.inpatientNotes}
-                    onChange={(e) => handleChange("inpatientNotes", e.target.value)}
-                    placeholder="Catatan khusus untuk rawat inap..."
-                    rows={2}
+                    id={field}
+                    rows={3}
+                    value={soap[field]}
+                    onChange={(e) => setSoap((prev) => ({ ...prev, [field]: e.target.value }))}
+                    placeholder={
+                      field === "subjective" ? "Keluhan yang dirasakan pasien..."
+                      : field === "objective" ? "Hasil pemeriksaan fisik..."
+                      : field === "assessment" ? "Penilaian klinis dokter..."
+                      : "Rencana pengobatan dan tatalaksana..."
+                    }
                   />
                 </div>
-              </div>
-            </Card>
-          )}
+              ))}
+            </TabsContent>
 
-          {/* Rujukan Details */}
-          {formData.careStatus === "rujukan" && (
-            <Card className="p-4 bg-muted/40">
-              <h4 className="font-semibold mb-3">Detail Rujukan</h4>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="referralHospital">Rumah Sakit Tujuan *</Label>
-                    <Input
-                      id="referralHospital"
-                      value={formData.referralHospital}
-                      onChange={(e) => handleChange("referralHospital", e.target.value)}
-                      placeholder="Nama rumah sakit tujuan"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="referralType">Jenis Rujukan</Label>
-                    <Select
-                      value={formData.referralType}
-                      onValueChange={(value) => handleChange("referralType", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih jenis rujukan" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Konsultasi">Konsultasi</SelectItem>
-                        <SelectItem value="Rawat Inap">Rawat Inap</SelectItem>
-                        <SelectItem value="Tindakan Khusus">Tindakan Khusus</SelectItem>
-                        <SelectItem value="Pemeriksaan Lanjutan">Pemeriksaan Lanjutan</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="referralAddress">Alamat Rumah Sakit</Label>
-                    <Input
-                      id="referralAddress"
-                      value={formData.referralAddress}
-                      onChange={(e) => handleChange("referralAddress", e.target.value)}
-                      placeholder="Alamat lengkap rumah sakit"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="referralPhone">Telepon Rumah Sakit</Label>
-                    <Input
-                      id="referralPhone"
-                      value={formData.referralPhone}
-                      onChange={(e) => handleChange("referralPhone", e.target.value)}
-                      placeholder="Nomor telepon rumah sakit"
-                    />
-                  </div>
-                </div>
-
+            {/* ── DIAGNOSIS ── */}
+            <TabsContent value="diagnosis" className="space-y-6 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="referralReason">Alasan Rujukan *</Label>
-                  <Textarea
-                    id="referralReason"
-                    value={formData.referralReason}
-                    onChange={(e) => handleChange("referralReason", e.target.value)}
-                    placeholder="Alasan mengapa pasien perlu dirujuk..."
-                    rows={3}
+                  <Label htmlFor="icd10Code">Kode ICD-10 *</Label>
+                  <Input
+                    id="icd10Code"
+                    value={icd10Code}
+                    onChange={(e) => setIcd10Code(e.target.value.toUpperCase())}
+                    placeholder="Contoh: J11, A09, K29.7"
                     required
                   />
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="referralUrgency">Tingkat Urgensi</Label>
-                    <Select
-                      value={formData.referralUrgency}
-                      onValueChange={(value) => handleChange("referralUrgency", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih tingkat urgensi" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Biasa">Biasa</SelectItem>
-                        <SelectItem value="Segera">Segera</SelectItem>
-                        <SelectItem value="Darurat">Darurat</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="referralNotes">Catatan Rujukan</Label>
-                    <Textarea
-                      id="referralNotes"
-                      value={formData.referralNotes}
-                      onChange={(e) => handleChange("referralNotes", e.target.value)}
-                      placeholder="Catatan tambahan untuk rujukan..."
-                      rows={2}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="icd10Display">Nama Diagnosis *</Label>
+                  <Input
+                    id="icd10Display"
+                    value={icd10Display}
+                    onChange={(e) => setIcd10Display(e.target.value)}
+                    placeholder="Nama penyakit sesuai ICD-10"
+                    required
+                  />
                 </div>
               </div>
-            </Card>
-          )}
+
+              <Separator />
+
+              <div className="space-y-3">
+                <h4 className="font-semibold">Status Perawatan</h4>
+                <RadioGroup value={careStatus} onValueChange={setCareStatus} className="flex gap-6">
+                  {[["rawat_jalan", "Rawat Jalan"], ["rawat_inap", "Rawat Inap"], ["rujukan", "Rujukan"]].map(([v, l]) => (
+                    <div key={v} className="flex items-center space-x-2">
+                      <RadioGroupItem value={v} id={v} />
+                      <Label htmlFor={v}>{l}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {careStatus === "rawat_inap" && (
+                <div className="space-y-4 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                  <h4 className="font-semibold flex items-center gap-2 text-sm">
+                    <BedDouble className="w-4 h-4 text-blue-500" /> Pengaturan Rawat Inap
+                  </h4>
+
+                  {/* Room selection */}
+                  <div className="space-y-2">
+                    <Label>Pilih Kamar *</Label>
+                    {roomsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-foreground/50">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat kamar...
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        {rooms.map((room) => {
+                          const available = room.capacity - (room.occupied ?? 0)
+                          const isFull = available <= 0
+                          return (
+                            <button
+                              key={room.id}
+                              type="button"
+                              disabled={isFull}
+                              className={`p-3 rounded-lg border text-left text-sm transition-all ${
+                                selectedRoom === room.id
+                                  ? "border-blue-500 bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
+                                  : isFull
+                                  ? "border-border/40 opacity-50 cursor-not-allowed"
+                                  : "border-border hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10"
+                              }`}
+                              onClick={() => setSelectedRoom(room.id)}
+                            >
+                              <p className="font-medium">{room.name}</p>
+                              <p className="text-xs text-foreground/50">
+                                {room.floor ? `Lantai ${room.floor} · ` : ""}
+                                Tersedia: {available}/{room.capacity}
+                              </p>
+                            </button>
+                          )
+                        })}
+                        {rooms.length === 0 && (
+                          <p className="text-sm text-foreground/50 col-span-2 text-center py-4">Belum ada kamar tersedia.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Bed number */}
+                    <div className="space-y-2">
+                      <Label>Nomor Bed *</Label>
+                      <Input
+                        value={bedNumber}
+                        onChange={(e) => setBedNumber(e.target.value)}
+                        placeholder="mis. A1, B2"
+                      />
+                    </div>
+
+                    {/* Room class */}
+                    <div className="space-y-2">
+                      <Label>Kelas Kamar *</Label>
+                      <Select value={roomClass} onValueChange={(v) => setRoomClass(v as InpatientRoomClass)}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vip">VIP</SelectItem>
+                          <SelectItem value="kelas_1">Kelas 1</SelectItem>
+                          <SelectItem value="kelas_2">Kelas 2</SelectItem>
+                          <SelectItem value="kelas_3">Kelas 3</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── PRESCRIPTION ── */}
+            <TabsContent value="prescription" className="space-y-4 mt-4">
+              {/* Search */}
+              <div className="relative">
+                <div className="flex items-center gap-2 border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
+                  <Search className="w-4 h-4 text-foreground/40 shrink-0" />
+                  <input
+                    className="flex-1 bg-transparent outline-none text-sm placeholder:text-foreground/40"
+                    placeholder="Cari nama obat..."
+                    value={rxSearch}
+                    onChange={(e) => setRxSearch(e.target.value)}
+                  />
+                  {rxSearching && <Loader2 className="w-4 h-4 animate-spin text-foreground/40 shrink-0" />}
+                </div>
+                {rxResults.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    {rxResults.map((med) => (
+                      <button
+                        key={med.id}
+                        type="button"
+                        className="w-full text-left px-4 py-2.5 hover:bg-muted transition-colors"
+                        onClick={() => selectMedicine(med)}
+                      >
+                        <p className="font-medium text-sm">{med.name}</p>
+                        <p className="text-xs text-foreground/50">
+                          {med.form} {med.strength} · Stok: {med.stock_available}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add medicine mini-form */}
+              {adding && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="font-semibold text-sm">{adding.name} <span className="text-foreground/50 font-normal">· {adding.form} {adding.strength}</span></p>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(null)}>✕</Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Dosis *</Label>
+                      <Input size={1} placeholder="mis. 500mg" value={addForm.dosage}
+                        onChange={(e) => setAddForm((p) => ({ ...p, dosage: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Frekuensi</Label>
+                      <Select value={addForm.frequency} onValueChange={(v) => setAddForm((p) => ({ ...p, frequency: v }))}>
+                        <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["1x1", "2x1", "3x1", "4x1", "3x1/2", "Jika perlu"].map((f) => (
+                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Durasi (hari)</Label>
+                      <Input type="number" min={1} value={addForm.duration_days}
+                        onChange={(e) => setAddForm((p) => ({ ...p, duration_days: +e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Jumlah (tablet/kapsul)</Label>
+                      <Input type="number" min={1} value={addForm.quantity}
+                        onChange={(e) => setAddForm((p) => ({ ...p, quantity: +e.target.value }))} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Instruksi (opsional)</Label>
+                      <Input placeholder="mis. Sesudah makan" value={addForm.instructions}
+                        onChange={(e) => setAddForm((p) => ({ ...p, instructions: e.target.value }))} />
+                    </div>
+                  </div>
+                  <Button type="button" size="sm" onClick={confirmAdd} disabled={!addForm.dosage}
+                    className="w-full bg-green-600 hover:bg-green-700">
+                    <Plus className="w-4 h-4 mr-1" /> Tambahkan ke Resep
+                  </Button>
+                </div>
+              )}
+
+              {/* Added items list */}
+              {rxItems.length === 0 && !adding ? (
+                <p className="text-sm text-foreground/50 text-center py-6 border rounded-lg border-dashed">
+                  Belum ada obat yang ditambahkan. Cari obat di atas.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground/60">{rxItems.length} obat ditambahkan</p>
+                  {rxItems.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-muted/30">
+                      <div className="text-sm">
+                        <p className="font-semibold">{item.medication.name}</p>
+                        <p className="text-foreground/50">{item.dosage} · {item.frequency} · {item.duration_days} hari · Qty: {item.quantity}</p>
+                        {item.instructions && <p className="text-foreground/40 italic">{item.instructions}</p>}
+                      </div>
+                      <Button type="button" size="icon" variant="ghost" className="text-red-500 hover:text-red-600"
+                        onClick={() => removeRx(idx)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
 
           <Separator />
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Catatan Tambahan</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => handleChange("notes", e.target.value)}
-              placeholder="Catatan tambahan untuk pasien..."
-              rows={3}
-            />
-          </div>
+          <p className="text-xs text-foreground/50">
+            {careStatus === "rawat_inap"
+              ? "Setelah menyimpan, pasien akan dipindahkan ke rawat inap dan invoice akan dibuat."
+              : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
+          </p>
 
-          {/* Recommendations */}
-          <div className="space-y-2">
-            <Label htmlFor="recommendations">Rekomendasi</Label>
-            <Textarea
-              id="recommendations"
-              value={formData.recommendations}
-              onChange={(e) => handleChange("recommendations", e.target.value)}
-              placeholder="Rekomendasi untuk pasien (obat, kontrol, dll)..."
-              rows={3}
-            />
-          </div>
-
-          <Separator />
-
-          {/* Follow Up */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Tindak Lanjut</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="followUpDate">Tanggal Kontrol</Label>
-                <Input
-                  id="followUpDate"
-                  type="date"
-                  value={formData.followUpDate}
-                  onChange={(e) => handleChange("followUpDate", e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="followUpNotes">Catatan Kontrol</Label>
-                <Textarea
-                  id="followUpNotes"
-                  value={formData.followUpNotes}
-                  onChange={(e) => handleChange("followUpNotes", e.target.value)}
-                  placeholder="Catatan untuk kontrol berikutnya..."
-                  rows={2}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={onCancel} className="flex-1" disabled={loading}>
               Batal
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 bg-[#2E8B57] hover:bg-[#2E8B57]/90">
-              {loading ? "Menyimpan..." : "Simpan Hasil Pemeriksaan"}
+            <Button
+              type="submit"
+              disabled={loading}
+              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
+                : careStatus === "rawat_inap"
+                ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
+                : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

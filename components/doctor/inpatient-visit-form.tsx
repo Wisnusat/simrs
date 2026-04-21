@@ -1,0 +1,319 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useCallback } from "react"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Loader2, ArrowLeft, Activity, Heart, Thermometer,
+  BedDouble, Calendar, FlaskConical, Pill, FileText,
+} from "lucide-react"
+import {
+  postClinicalNote, postDiagnosis, postPrescription,
+  getClinicalNotesByEpisode, getVitalSigns, getMedications,
+  patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
+  createEncounter, postInpatientDailyRecord,
+} from "@/lib/api/client"
+import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
+import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
+import { StatusBadge } from "@/components/shared/status-badge"
+import { CpptForm } from "@/components/inpatient/cppt-form"
+import { LabOrderForm } from "@/components/doctor/lab-order-form"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication } from "@/lib/types/outpatient"
+
+interface InpatientVisitFormProps {
+  admission: InpatientAdmission
+  onBack: () => void
+  onDischarge: () => void
+}
+
+export function InpatientVisitForm({ admission, onBack, onDischarge }: InpatientVisitFormProps) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
+  const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
+  const [discharging, setDischarging] = useState(false)
+  const [dischargeSummary, setDischargeSummary] = useState("")
+
+  // SOAP for visit note
+  const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
+
+  // Current encounter for today's visit
+  const {
+    todayRecords, createDailyRecord, actionLoading: drAction, refresh: refreshDr,
+  } = useDailyRecords({
+    admissionId: admission.id,
+    episodeOfCareId: admission.episode_of_care_id,
+    patientId: admission.patient_id,
+    poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b",
+  })
+
+  const currentEncounterId = todayRecords[0]?.encounter_id ?? null
+
+  // Lab orders for current encounter
+  const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
+    encounterId: currentEncounterId ?? undefined,
+    pollIntervalMs: 0,
+  })
+
+  // Load CPPT history
+  useEffect(() => {
+    getClinicalNotesByEpisode(admission.episode_of_care_id)
+      .then(setPreviousNotes)
+      .catch(() => setPreviousNotes([]))
+  }, [admission.episode_of_care_id])
+
+  // Load vitals
+  useEffect(() => {
+    if (currentEncounterId) {
+      getVitalSigns(currentEncounterId)
+        .then((vs) => setLatestVitals(vs[0] ?? null))
+        .catch(() => {})
+    }
+  }, [currentEncounterId])
+
+  const daysSince = Math.floor(
+    (Date.now() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
+  )
+
+  // Submit visit note
+  const handleSubmitNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentEncounterId) return
+    setLoading(true)
+    setError("")
+    try {
+      await postClinicalNote({
+        encounter_id: currentEncounterId,
+        patient_id: admission.patient_id,
+        ...soap,
+      })
+      setSoap({ subjective: "", objective: "", assessment: "", plan: "" })
+      const notes = await getClinicalNotesByEpisode(admission.episode_of_care_id)
+      setPreviousNotes(notes)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Discharge flow
+  const handleDischarge = async () => {
+    if (!dischargeSummary.trim()) {
+      setError("Ringkasan pulang wajib diisi")
+      return
+    }
+    setLoading(true)
+    setError("")
+    try {
+      await patchInpatientAdmission(admission.id, {
+        status: "discharged",
+        discharge_summary: dischargeSummary,
+      })
+      await patchEpisodeOfCare(admission.episode_of_care_id, {
+        status: "discharged",
+        end_date: new Date().toISOString().split("T")[0],
+      })
+      onDischarge()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={onBack}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-bold">{admission.patients.full_name}</h2>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
+            <span>MR: {admission.patients.medical_record_no}</span>
+            <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {admission.locations?.name} · Bed {admission.bed_number}</span>
+            <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Hari ke-{daysSince + 1}</span>
+          </div>
+          {admission.episodes_of_care?.diagnosis_primary && (
+            <p className="text-xs text-foreground/40 mt-0.5">Dx: {admission.episodes_of_care.diagnosis_primary}</p>
+          )}
+        </div>
+        <StatusBadge status={admission.status} />
+      </div>
+
+      {/* Vitals strip */}
+      {latestVitals && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+          {latestVitals.systolic_bp && (
+            <div className="flex items-center gap-2 text-sm">
+              <Heart className="w-4 h-4 text-red-500" />
+              <span className="text-foreground/60">TD:</span>
+              <span className="font-medium">{latestVitals.systolic_bp}/{latestVitals.diastolic_bp}</span>
+            </div>
+          )}
+          {latestVitals.heart_rate && (
+            <div className="flex items-center gap-2 text-sm">
+              <Activity className="w-4 h-4 text-pink-500" />
+              <span className="text-foreground/60">Nadi:</span>
+              <span className="font-medium">{latestVitals.heart_rate} bpm</span>
+            </div>
+          )}
+          {latestVitals.temperature && (
+            <div className="flex items-center gap-2 text-sm">
+              <Thermometer className="w-4 h-4 text-orange-500" />
+              <span className="text-foreground/60">Suhu:</span>
+              <span className="font-medium">{latestVitals.temperature}°C</span>
+            </div>
+          )}
+          {latestVitals.oxygen_saturation && (
+            <div className="flex items-center gap-2 text-sm">
+              <Activity className="w-4 h-4 text-blue-500" />
+              <span className="text-foreground/60">SpO₂:</span>
+              <span className="font-medium">{latestVitals.oxygen_saturation}%</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Create encounter for today if needed */}
+      {!currentEncounterId && (
+        <div className="p-4 rounded-lg border border-dashed border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20">
+          <p className="text-sm font-medium mb-2">Mulai Kunjungan Hari Ini</p>
+          <Button size="sm" onClick={() => createDailyRecord()} disabled={drAction}>
+            {drAction ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Buat Encounter Visite
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
+      )}
+
+      {/* Main tabs */}
+      {currentEncounterId && (
+        <Tabs defaultValue="notes" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="notes"><FileText className="w-4 h-4 mr-1" /> Catatan Visite</TabsTrigger>
+            <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
+            <TabsTrigger value="discharge"><BedDouble className="w-4 h-4 mr-1" /> Pulang</TabsTrigger>
+          </TabsList>
+
+          {/* Visit Notes Tab */}
+          <TabsContent value="notes" className="space-y-4 mt-4">
+            <form onSubmit={handleSubmitNote} className="space-y-3">
+              {(["subjective", "objective", "assessment", "plan"] as const).map((field) => (
+                <div key={field} className="space-y-1">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-foreground/60">
+                    {field === "subjective" ? "S — Subjective"
+                      : field === "objective" ? "O — Objective"
+                      : field === "assessment" ? "A — Assessment"
+                      : "P — Plan"}
+                  </Label>
+                  <Textarea
+                    rows={2}
+                    value={soap[field]}
+                    onChange={(e) => setSoap((p) => ({ ...p, [field]: e.target.value }))}
+                  />
+                </div>
+              ))}
+              <Button type="submit" disabled={loading || (!soap.subjective && !soap.objective)} className="w-full">
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan Catatan Visite"}
+              </Button>
+            </form>
+
+            <Separator />
+
+            {/* CPPT Timeline */}
+            {previousNotes.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm">Riwayat CPPT</h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {previousNotes.map((note) => (
+                    <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <Badge variant="outline" className="text-[10px]">
+                          {note.writer_role === "doctor" ? "Dokter" : note.writer_role === "nurse" ? "Perawat" : note.writer_role}
+                        </Badge>
+                        <span className="text-foreground/40">
+                          {new Date(note.note_date).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      {note.subjective && <p><strong className="text-foreground/60">S:</strong> {note.subjective}</p>}
+                      {note.objective && <p><strong className="text-foreground/60">O:</strong> {note.objective}</p>}
+                      {note.assessment && <p><strong className="text-foreground/60">A:</strong> {note.assessment}</p>}
+                      {note.plan && <p><strong className="text-foreground/60">P:</strong> {note.plan}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Lab Tab */}
+          <TabsContent value="lab" className="mt-4">
+            <LabOrderForm
+              encounterId={currentEncounterId}
+              patientId={admission.patient_id}
+              onSubmit={async (input) => { const ok = await createLab(input); return ok }}
+              onCancel={() => {}}
+              loading={labActing}
+              error={labError}
+            />
+            {labOrders.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="font-semibold text-sm">Lab Orders</h4>
+                {labOrders.map((lo) => (
+                  <div key={lo.id} className="flex justify-between items-center p-3 rounded-lg border text-sm">
+                    <div>
+                      <p className="font-medium">{lo.lab_order_items.map((i) => i.test_name).join(", ")}</p>
+                      <p className="text-xs text-foreground/50">{lo.priority}</p>
+                    </div>
+                    <StatusBadge status={lo.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Discharge Tab */}
+          <TabsContent value="discharge" className="space-y-4 mt-4">
+            <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 space-y-3">
+              <h4 className="font-semibold text-sm">Proses Kepulangan Pasien</h4>
+              <p className="text-xs text-foreground/60">
+                Isi ringkasan pulang untuk memproses discharge pasien. Invoice akan difinalisasi otomatis.
+              </p>
+              <div className="space-y-2">
+                <Label>Ringkasan Pulang *</Label>
+                <Textarea
+                  rows={4}
+                  value={dischargeSummary}
+                  onChange={(e) => setDischargeSummary(e.target.value)}
+                  placeholder="Ringkasan perawatan, kondisi pulang, dan instruksi kontrol..."
+                />
+              </div>
+              <Button
+                onClick={handleDischarge}
+                disabled={loading || !dischargeSummary.trim()}
+                className="w-full bg-orange-600 hover:bg-orange-700"
+              >
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Pulangkan Pasien"}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  )
+}

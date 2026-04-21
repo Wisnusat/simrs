@@ -10,6 +10,7 @@ export interface AdminGuardResult extends AuthGuardResult {
         id: string
         role: string
         organization_id: string
+        full_name?: string
     }
 }
 
@@ -19,15 +20,7 @@ export interface AdminGuardResult extends AuthGuardResult {
  */
 export async function requireAuth(
     supabase: SupabaseClient,
-    req?: Request
 ): Promise<AuthGuardResult | ReturnType<typeof apiResponse.unauthorized>> {
-    if (req) {
-        const apiKey = req.headers.get('x-api-key')
-        if (apiKey && process.env.SIMRS_API_KEY && apiKey === process.env.SIMRS_API_KEY) {
-            return { user: { id: 'service-account', email: 'service@simrs.local' } }
-        }
-    }
-
     const {
         data: { user },
         error,
@@ -46,9 +39,8 @@ export async function requireAuth(
  */
 export async function requireAdmin(
     supabase: SupabaseClient,
-    req?: Request
 ): Promise<AdminGuardResult | ReturnType<typeof apiResponse.forbidden>> {
-    const authResult = await requireAuth(supabase, req)
+    const authResult = await requireAuth(supabase)
 
     // If requireAuth returned a NextResponse (error), propagate it
     if (isGuardError(authResult)) {
@@ -63,13 +55,43 @@ export async function requireAdmin(
 
     const { data: practitioner, error } = await supabase
         .from('practitioners')
-        .select('id, role, organization_id')
+        .select('id, role, organization_id, full_name')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .single()
 
     if (error || !practitioner || practitioner.role !== 'admin') {
         return apiResponse.forbidden('Forbidden — admin only')
+    }
+
+    return { user, practitioner }
+}
+
+/**
+ * Verifies the request has a valid session AND the user is any active practitioner.
+ * Returns { user, practitioner } or an error response.
+ * Use this for all outpatient clinical routes (nurse, doctor, pharmacist, etc.)
+ */
+export async function requirePractitioner(
+    supabase: SupabaseClient,
+): Promise<AdminGuardResult | ReturnType<typeof apiResponse.unauthorized> | ReturnType<typeof apiResponse.forbidden>> {
+    const authResult = await requireAuth(supabase)
+
+    if (isGuardError(authResult)) {
+        return authResult
+    }
+
+    const { user } = authResult
+
+    const { data: practitioner, error } = await supabase
+        .from('practitioners')
+        .select('id, role, organization_id, full_name')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single()
+
+    if (error || !practitioner) {
+        return apiResponse.forbidden('Forbidden — active practitioner required')
     }
 
     return { user, practitioner }
