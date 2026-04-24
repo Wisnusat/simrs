@@ -88,6 +88,7 @@ export async function PATCH(
             result_unit: item.result_unit ?? null,
             reference_range: item.reference_range ?? null,
             result_status: item.result_status ?? 'normal',
+            file_id: item.file_id ?? null,
             result_entered_at: now,
             result_entered_by: practitioner.id,
             notes: item.notes ?? null,

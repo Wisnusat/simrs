@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { UploadCloud, FileIcon, Loader2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import type { LabOrder, LabResultInput, ResultStatus } from "@/lib/types/outpatient"
 
 interface ResultEntryFormProps {
@@ -26,6 +28,7 @@ type ItemResult = {
   result_unit: string
   reference_range: string
   result_status: ResultStatus
+  file_id?: string
 }
 
 export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: ResultEntryFormProps) {
@@ -37,10 +40,14 @@ export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: R
         result_unit: item.result_unit ?? "",
         reference_range: item.reference_range ?? "",
         result_status: (item.result_status as ResultStatus) ?? "normal",
+        file_id: item.file_id ?? undefined,
       }
     }
     return init
   })
+
+  const [uploading, setUploading] = useState<Record<string, boolean>>({})
+  const supabase = createClient()
 
   const set = (id: string, field: keyof ItemResult, value: string) =>
     setResults((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
@@ -101,6 +108,39 @@ export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: R
                   placeholder="Contoh: g/dL"
                 />
               </div>
+              
+              <div className="space-y-1.5 col-span-2 md:col-span-1">
+                <Label>Unggah File / Gambar Hasil (Opsional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="file" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      
+                      try {
+                        setUploading(prev => ({ ...prev, [item.id]: true }))
+                        const fileExt = file.name.split('.').pop()
+                        const fileName = `${item.id}-${Date.now()}.${fileExt}`
+                        
+                        const { error: uploadError } = await supabase.storage.from('lab_result').upload(fileName, file)
+                        if (uploadError) throw uploadError
+                        
+                        set(item.id, "file_id", fileName)
+                      } catch (error) {
+                        console.error('Error uploading file:', error)
+                        alert('Gagal mengupload file. ' + (error as any).message)
+                      } finally {
+                        setUploading(prev => ({ ...prev, [item.id]: false }))
+                      }
+                    }}
+                    disabled={uploading[item.id]}
+                  />
+                  {uploading[item.id] && <Loader2 className="w-5 h-5 animate-spin" />}
+                  {results[item.id]?.file_id && !uploading[item.id] && <FileIcon className="w-5 h-5 text-green-500" />}
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <Label>Nilai Rujukan</Label>
                 <Input

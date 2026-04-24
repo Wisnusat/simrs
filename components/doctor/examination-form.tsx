@@ -15,8 +15,9 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble } from "lucide-react"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon } from "lucide-react"
 import type { Medication, VitalSigns, Location, InpatientRoomClass } from "@/lib/types/outpatient"
+import { createClient } from "@/lib/supabase/client"
 
 interface ExaminationFormProps {
   patient: {
@@ -288,24 +289,43 @@ export default function ExaminationForm({
         {completedLabs.map(order => (
           <div key={order.id}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-              {order.lab_order_items.map(item => (
-                <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
-                  <span className="font-medium">{item.test_name}</span>
-                  <div className="flex items-center justify-between">
-                    <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
-                    <Badge variant={
-                      item.result_status === "critical" ? "destructive" :
-                      item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
-                    } className="text-[10px] px-1.5 py-0">
-                      {item.result_status === "normal" ? "Normal" :
-                       item.result_status === "abnormal_low" ? "Rendah" :
-                       item.result_status === "abnormal_high" ? "Tinggi" :
-                       item.result_status === "critical" ? "Kritis" : "—"}
-                    </Badge>
+              {order.lab_order_items.map(item => {
+                const supabase = createClient()
+                const fileUrl = item.file_id 
+                  ? supabase.storage.from("lab_result").getPublicUrl(item.file_id).data.publicUrl 
+                  : null
+
+                return (
+                  <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
+                    <span className="font-medium">{item.test_name}</span>
+                    <div className="flex items-center justify-between mt-1">
+                      {fileUrl ? (
+                        <a 
+                          href={fileUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:underline"
+                        >
+                          <FileIcon className="w-3 h-3" /> Lihat Dokumen / Gambar
+                        </a>
+                      ) : (
+                        <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
+                      )}
+                      
+                      <Badge variant={
+                        item.result_status === "critical" ? "destructive" :
+                        item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
+                      } className="text-[10px] px-1.5 py-0">
+                        {item.result_status === "normal" ? "Normal" :
+                         item.result_status === "abnormal_low" ? "Rendah" :
+                         item.result_status === "abnormal_high" ? "Tinggi" :
+                         item.result_status === "critical" ? "Kritis" : "—"}
+                      </Badge>
+                    </div>
+                    {item.reference_range && !fileUrl && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
                   </div>
-                  {item.reference_range && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
-                </div>
-              ))}
+                )
+              })}
             </div>
             {order.clinical_notes && (
               <p className="mt-2 text-xs text-foreground/60 italic">Catatan: {order.clinical_notes}</p>
