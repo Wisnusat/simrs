@@ -32,6 +32,9 @@ export type AllergyCriticality = "low" | "high" | "unable-to-assess"
 export type NutritionalStatus = "baik" | "kurang" | "lebih" | "buruk"
 export type LocationType = "poli" | "ward" | "patient_room" | "igd" | "ok" | "lab" | "pharmacy"
 
+// Emergency-specific enums
+export type EmergencyStatus = "emergency_admitted" | "in_triage" | "in_treatment" | "completed" | "referred_out" | "admitted_to_inpatient"
+export type TriageCategory = "P1" | "P2" | "P3" | "P4"
 // ---------------------------------------------------------------------------
 // Embedded shapes (referenced from multiple entities)
 // ---------------------------------------------------------------------------
@@ -256,6 +259,7 @@ export interface LabOrderItem {
   result_entered_at?: string
   result_entered_by?: string
   notes?: string
+  file_id?: string
 }
 
 export interface LabOrder {
@@ -288,6 +292,7 @@ export interface LabResultInput {
   reference_range?: string
   result_status?: ResultStatus
   notes?: string
+  file_id?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -550,4 +555,28 @@ export interface NutritionOrderInput {
   protein_needs_g?: number
   meal_plan?: Record<string, string>
   notes?: string
+}
+
+export interface EmergencyEncounter {
+  id: string
+  encounter_id: string
+  patient_id: string
+  status: EmergencyStatus
+  triage_category?: TriageCategory | string
+  triage_complaint?: string
+  triage_nurse_id?: string
+  triaged_at?: string
+  is_critical: boolean
+  resuscitation_notes?: string
+  outcome?: string
+  referred_to?: string
+  referral_letter_no?: string
+  needs_ambulance: boolean
+  created_at: string
+  updated_at: string
+  
+  // Relations
+  patients: Patient
+  encounters?: Encounter
+  triage_nurse?: Practitioner
 }

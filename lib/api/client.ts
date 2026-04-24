@@ -475,3 +475,59 @@ export async function patchNutritionOrder(
     body: JSON.stringify(update),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Emergency Encounters  /api/emergency
+// ---------------------------------------------------------------------------
+
+export async function getEmergencyEncounters(opts?: {
+  status?: string
+  search?: string
+  page?: number
+  limit?: number
+}): Promise<{ data: any[], meta: { total: number, page: number, limit: number } }> {
+  // Returns raw response since it's wrapped in { data, meta }
+  const res = await fetch(`/api/emergency${qs(opts ?? {})}`)
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to fetch emergency encounters')
+  }
+  return res.json()
+}
+
+export async function getEmergencyEncounter(id: string): Promise<any> {
+  return fetchJson(`/api/emergency/${id}`)
+}
+
+export async function postEmergencyEncounter(input: {
+  patient_id: string
+  triage_category?: string
+  triage_complaint?: string
+  is_critical?: boolean
+  needs_ambulance?: boolean
+}): Promise<any> {
+  return fetchJson('/api/emergency', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchEmergencyEncounter(
+  id: string,
+  update: Partial<{
+    status: string
+    triage_category: string
+    triage_complaint: string
+    resuscitation_notes: string
+    outcome: string
+    referred_to: string
+    referral_letter_no: string
+    is_critical: boolean
+    needs_ambulance: boolean
+  }>,
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}

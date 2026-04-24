@@ -2,11 +2,12 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Which role is allowed on which route prefix
-const ROLE_ROUTE_MAP: Record<string, string> = {
+const ROLE_ROUTE_MAP: Record<string, string | string[]> = {
     '/admin': 'admin',
     '/doctor': 'doctor',
     '/nurse': 'nurse',
     '/inpatient': 'nurse',
+    '/emergency': ['nurse', 'doctor'],
     '/pharmacist': 'pharmacist',
     '/cashier': 'cashier',
     '/lab': 'lab_nurse',
@@ -64,22 +65,32 @@ export async function middleware(request: NextRequest) {
         // If on login page, redirect to their own dashboard
         if (pathname === '/') {
             const ownRoute = Object.entries(ROLE_ROUTE_MAP).find(
-                ([, role]) => role === userRole
+                ([, rules]) => {
+                    return Array.isArray(rules) && rules.includes(userRole) || rules === userRole;
+                }
             )?.[0] ?? '/admin'
             return NextResponse.redirect(new URL(ownRoute, request.url))
         }
 
         // If on a protected route, check they own that role
-        const requiredRole = Object.entries(ROLE_ROUTE_MAP).find(
+        const requiredRoleOrRoles = Object.entries(ROLE_ROUTE_MAP).find(
             ([prefix]) => pathname.startsWith(prefix)
         )?.[1]
 
-        if (requiredRole && userRole !== requiredRole) {
-            // Wrong role — redirect to their own dashboard instead of 403
-            const ownRoute = Object.entries(ROLE_ROUTE_MAP).find(
-                ([, role]) => role === userRole
-            )?.[0] ?? '/admin'
-            return NextResponse.redirect(new URL(ownRoute, request.url))
+        if (requiredRoleOrRoles) {
+            const isAllowed = Array.isArray(requiredRoleOrRoles) 
+                ? requiredRoleOrRoles.includes(userRole)
+                : userRole === requiredRoleOrRoles;
+
+            if (!isAllowed) {
+                // Wrong role — redirect to their own dashboard instead of 403
+                const ownRoute = Object.entries(ROLE_ROUTE_MAP).find(
+                    ([, rules]) => {
+                        return Array.isArray(rules) && rules.includes(userRole) || rules === userRole;
+                    }
+                )?.[0] ?? '/admin'
+                return NextResponse.redirect(new URL(ownRoute, request.url))
+            }
         }
     }
 
