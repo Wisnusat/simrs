@@ -12,7 +12,7 @@ const ROLE_ROUTES: Record<string, string> = {
   nurse:        '/nurse',
   pharmacist:   '/pharmacist',
   cashier:      '/cashier',
-  lab_nurse:    '/lab-nurse',
+  lab_nurse:    '/lab',
   nutritionist: '/nutritionist',
 }
 
