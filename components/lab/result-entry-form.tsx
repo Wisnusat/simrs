@@ -110,7 +110,7 @@ export function ResultEntryForm({ order, onSubmit, onCancel, loading, error }: R
               </div>
               
               <div className="space-y-1.5 col-span-2 md:col-span-1">
-                <Label>Unggah File / Gambar Hasil (Opsional)</Label>
+                <Label>Unggah File / Gambar</Label>
                 <div className="flex items-center gap-2">
                   <Input 
                     type="file" 
