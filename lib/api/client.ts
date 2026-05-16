@@ -531,3 +531,18 @@ export async function patchEmergencyEncounter(
     body: JSON.stringify(update),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Walk-in Registration  /api/walkin
+// ---------------------------------------------------------------------------
+
+export async function postWalkinRegistration(input: {
+  patientId: string
+  poliServiceId: string
+  paymentMethod: string
+}): Promise<any> {
+  return fetchJson('/api/walkin', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}

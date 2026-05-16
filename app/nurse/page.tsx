@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Activity, CheckCircle, Clock, LayoutDashboard, Users } from "lucide-react"
+import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { createEncounter } from "@/lib/api/client"
@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
 import type { QueueEntry } from "@/lib/types/outpatient"
+import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
 
 // ---------------------------------------------------------------------------
 // Text-to-Speech helper (Web Speech API — no external deps)
@@ -52,6 +53,7 @@ function announcePatient(name: string, queueNumber: string | number) {
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard",        active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users,           label: "Antrian Pasien",   active: active === "queue",    onClick: () => set("queue") },
+  { icon: UserPlus,        label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
   { icon: Activity,        label: "Riwayat",          active: active === "history",  onClick: () => set("history") },
 ]
 
@@ -231,6 +233,29 @@ export default function NurseDashboard() {
               {queue.filter((q) => q.vital_signs_recorded).length === 0 && (
                 <EmptyState message="Belum ada tanda vital yang dicatat." />
               )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── WALKIN REGISTRATION ── */}
+      {view === "walkin" && (
+        <div className="space-y-6">
+          <PageHeader
+            title="Registrasi Walk-In"
+            description="Pendaftaran pasien offline / di tempat"
+            onRefresh={refresh}
+            isRefreshing={loading}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Form Pendaftaran</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WalkinRegistrationForm onSuccess={() => {
+                refresh()
+                setView("queue") // Switch to queue view to see the new patient
+              }} />
             </CardContent>
           </Card>
         </div>
