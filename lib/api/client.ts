@@ -40,6 +40,7 @@ import type {
   InpatientDailyRecord, InpatientDailyRecordInput,
   AllergyIntolerance, AllergyInput,
   NutritionOrder, NutritionOrderInput,
+  Referral, ReferralInput
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -542,6 +543,17 @@ export async function postWalkinRegistration(input: {
   paymentMethod: string
 }): Promise<any> {
   return fetchJson('/api/walkin', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Referrals  /api/referrals
+// ---------------------------------------------------------------------------
+
+export async function postReferral(input: ReferralInput): Promise<Referral> {
+  return fetchJson('/api/referrals', {
     method: 'POST',
     body: JSON.stringify(input),
   })

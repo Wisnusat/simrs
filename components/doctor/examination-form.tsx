@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission, postReferral } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,6 +63,12 @@ export default function ExaminationForm({
   const [icd10Code,    setIcd10Code]    = useState("")
   const [icd10Display, setIcd10Display] = useState("")
   const [careStatus,   setCareStatus]   = useState("rawat_jalan")
+
+  // ── Rujukan ──
+  const [referralDestination, setReferralDestination] = useState("")
+  const [referralSpecialty,   setReferralSpecialty]   = useState("")
+  const [referralUrgency,     setReferralUrgency]     = useState<"routine" | "urgent" | "emergency">("routine")
+  const [referralReason,      setReferralReason]      = useState("")
 
   // ── Inpatient Room Selection ──
   const [rooms,         setRooms]         = useState<Location[]>([])
@@ -149,6 +155,12 @@ export default function ExaminationForm({
         if (!bedNumber.trim()) throw new Error("Nomor bed wajib diisi")
       }
 
+      // Validate referral fields
+      if (careStatus === "rujukan") {
+        if (!referralDestination.trim()) throw new Error("Faskes tujuan rujukan wajib diisi")
+        if (!referralReason.trim()) throw new Error("Alasan klinis rujukan wajib diisi")
+      }
+
       // 1. SOAP note
       await postClinicalNote({
         encounter_id: encounterId,
@@ -213,6 +225,21 @@ export default function ExaminationForm({
         } as any)
 
         // 5. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+
+      } else if (careStatus === "rujukan") {
+        // 4. Create Referral Record
+        await postReferral({
+          encounter_id: encounterId,
+          patient_id: patient.id,
+          destination_facility_name: referralDestination,
+          destination_specialty: referralSpecialty,
+          referral_reason: referralReason,
+          urgency: referralUrgency
+        })
+
+        // 5. Encounter → finished
+        await patchEncounter(encounterId, { status: "finished" } as any)
         if (queueId) await patchQueueStatus(queueId, "done")
 
       } else {
@@ -506,6 +533,51 @@ export default function ExaminationForm({
                           <SelectItem value="kelas_1">Kelas 1</SelectItem>
                           <SelectItem value="kelas_2">Kelas 2</SelectItem>
                           <SelectItem value="kelas_3">Kelas 3</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {careStatus === "rujukan" && (
+                <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
+                  <h4 className="font-semibold flex items-center gap-2 text-sm">
+                    <Activity className="w-4 h-4 text-purple-500" /> Pengaturan Rujukan Keluar
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Faskes Tujuan *</Label>
+                      <Input
+                        value={referralDestination}
+                        onChange={(e) => setReferralDestination(e.target.value)}
+                        placeholder="Mis. RSUD Kota Bandung"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Poli / Spesialisasi</Label>
+                      <Input
+                        value={referralSpecialty}
+                        onChange={(e) => setReferralSpecialty(e.target.value)}
+                        placeholder="Mis. Poli Jantung"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Alasan Rujukan *</Label>
+                      <Input
+                        value={referralReason}
+                        onChange={(e) => setReferralReason(e.target.value)}
+                        placeholder="Mis. Fasilitas tidak memadai, butuh spesialis"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Urgensi</Label>
+                      <Select value={referralUrgency} onValueChange={(v) => setReferralUrgency(v as "routine" | "urgent" | "emergency")}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="routine">Rutin (Biasa)</SelectItem>
+                          <SelectItem value="urgent">Urgen (Segera)</SelectItem>
+                          <SelectItem value="emergency">Gawat Darurat</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -580,3 +580,34 @@ export interface EmergencyEncounter {
   encounters?: Encounter
   triage_nurse?: Practitioner
 }
+
+// ---------------------------------------------------------------------------
+// Referrals (Rujukan Keluar)
+// ---------------------------------------------------------------------------
+
+export type ReferralUrgency = "routine" | "urgent" | "emergency"
+
+export interface Referral {
+  id: string
+  encounter_id: string
+  patient_id: string
+  referred_by: string
+  destination_facility_name: string
+  destination_specialty?: string
+  referral_reason: string
+  referral_date: string
+  urgency: ReferralUrgency
+  ss_service_request_id?: string
+  ss_sync_status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ReferralInput {
+  encounter_id: string
+  patient_id: string
+  destination_facility_name: string
+  destination_specialty?: string
+  referral_reason: string
+  urgency?: ReferralUrgency
+}
