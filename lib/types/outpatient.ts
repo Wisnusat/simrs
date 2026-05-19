@@ -430,8 +430,8 @@ export interface EpisodeOfCare {
 
 export interface EpisodeOfCareInput {
   patient_id: string
-  room_location_id: string
-  bed_number: string
+  room_location_id?: string
+  bed_number?: string
   dpjp_id: string
   diagnosis_primary?: string
 }
@@ -574,7 +574,7 @@ export interface EmergencyEncounter {
   needs_ambulance: boolean
   created_at: string
   updated_at: string
-  
+
   // Relations
   patients: Patient
   encounters?: Encounter

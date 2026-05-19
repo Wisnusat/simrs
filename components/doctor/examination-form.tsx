@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission, postReferral } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,23 +70,7 @@ export default function ExaminationForm({
   const [referralUrgency,     setReferralUrgency]     = useState<"routine" | "urgent" | "emergency">("routine")
   const [referralReason,      setReferralReason]      = useState("")
 
-  // ── Inpatient Room Selection ──
-  const [rooms,         setRooms]         = useState<Location[]>([])
-  const [roomsLoading,  setRoomsLoading]  = useState(false)
-  const [selectedRoom,  setSelectedRoom]  = useState<string>("")
-  const [bedNumber,     setBedNumber]     = useState("")
-  const [roomClass,     setRoomClass]     = useState<InpatientRoomClass>("kelas_3")
-
-  // Fetch rooms when rawat inap is selected
-  useEffect(() => {
-    if (careStatus === "rawat_inap") {
-      setRoomsLoading(true)
-      getLocations({ type: "patient_room" })
-        .then(setRooms)
-        .catch(() => {})
-        .finally(() => setRoomsLoading(false))
-    }
-  }, [careStatus])
+  // ── Inpatient Room Selection (Handled by Nurse Dashboard) ──
 
   // ── Prescription ──
   const [rxSearch,    setRxSearch]    = useState("")
@@ -149,11 +133,7 @@ export default function ExaminationForm({
     try {
       if (!icd10Code || !icd10Display) throw new Error("Kode ICD-10 dan nama diagnosis wajib diisi")
 
-      // Validate inpatient fields
-      if (careStatus === "rawat_inap") {
-        if (!selectedRoom) throw new Error("Pilih kamar untuk rawat inap")
-        if (!bedNumber.trim()) throw new Error("Nomor bed wajib diisi")
-      }
+
 
       // Validate referral fields
       if (careStatus === "rujukan") {
@@ -196,35 +176,22 @@ export default function ExaminationForm({
         })
       }
 
-      // ── Rawat Inap: create episode + admission, set encounter to admitted ──
+      // ── Rawat Inap: request admission, let Nurse assign room ──
       if (careStatus === "rawat_inap") {
-        // 4a. Create Episode of Care
+        // 4. Create Episode of Care (No room assigned yet)
         const episode = await postEpisodeOfCare({
           patient_id:       patient.id,
-          room_location_id: selectedRoom,
-          bed_number:       bedNumber,
-          dpjp_id:          "__self__", // API will resolve to current practitioner
+          dpjp_id:          "__self__", 
           diagnosis_primary: `${icd10Code} - ${icd10Display}`,
         })
 
-        // 4b. Create Inpatient Admission
-        await postInpatientAdmission({
-          episode_of_care_id: episode.id,
-          patient_id:         patient.id,
-          room_location_id:   selectedRoom,
-          bed_number:         bedNumber,
-          room_class:         roomClass,
-          dpjp_id:            "__self__",
-          admitted_from:      "outpatient",
-        })
-
-        // 4c. Encounter → admitted + link to episode
+        // 5. Encounter → admitted + link to episode
         await patchEncounter(encounterId, {
           status: "admitted",
           episode_of_care_id: episode.id,
         } as any)
 
-        // 5. Queue → done
+        // 6. Queue → done
         if (queueId) await patchQueueStatus(queueId, "done")
 
       } else if (careStatus === "rujukan") {
@@ -465,80 +432,7 @@ export default function ExaminationForm({
                 </RadioGroup>
               </div>
 
-              {careStatus === "rawat_inap" && (
-                <div className="space-y-4 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-                  <h4 className="font-semibold flex items-center gap-2 text-sm">
-                    <BedDouble className="w-4 h-4 text-blue-500" /> Pengaturan Rawat Inap
-                  </h4>
 
-                  {/* Room selection */}
-                  <div className="space-y-2">
-                    <Label>Pilih Kamar *</Label>
-                    {roomsLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-foreground/50">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat kamar...
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                        {rooms.map((room) => {
-                          const available = room.capacity - (room.occupied ?? 0)
-                          const isFull = available <= 0
-                          return (
-                            <button
-                              key={room.id}
-                              type="button"
-                              disabled={isFull}
-                              className={`p-3 rounded-lg border text-left text-sm transition-all ${
-                                selectedRoom === room.id
-                                  ? "border-blue-500 bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
-                                  : isFull
-                                  ? "border-border/40 opacity-50 cursor-not-allowed"
-                                  : "border-border hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10"
-                              }`}
-                              onClick={() => setSelectedRoom(room.id)}
-                            >
-                              <p className="font-medium">{room.name}</p>
-                              <p className="text-xs text-foreground/50">
-                                {room.floor ? `Lantai ${room.floor} · ` : ""}
-                                Tersedia: {available}/{room.capacity}
-                              </p>
-                            </button>
-                          )
-                        })}
-                        {rooms.length === 0 && (
-                          <p className="text-sm text-foreground/50 col-span-2 text-center py-4">Belum ada kamar tersedia.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Bed number */}
-                    <div className="space-y-2">
-                      <Label>Nomor Bed *</Label>
-                      <Input
-                        value={bedNumber}
-                        onChange={(e) => setBedNumber(e.target.value)}
-                        placeholder="mis. A1, B2"
-                      />
-                    </div>
-
-                    {/* Room class */}
-                    <div className="space-y-2">
-                      <Label>Kelas Kamar *</Label>
-                      <Select value={roomClass} onValueChange={(v) => setRoomClass(v as InpatientRoomClass)}>
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vip">VIP</SelectItem>
-                          <SelectItem value="kelas_1">Kelas 1</SelectItem>
-                          <SelectItem value="kelas_2">Kelas 2</SelectItem>
-                          <SelectItem value="kelas_3">Kelas 3</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {careStatus === "rujukan" && (
                 <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">

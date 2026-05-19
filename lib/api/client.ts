@@ -558,3 +558,23 @@ export async function postReferral(input: ReferralInput): Promise<Referral> {
     body: JSON.stringify(input),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Admission Requests /api/admission-requests
+// ---------------------------------------------------------------------------
+
+export async function getAdmissionRequests(): Promise<EpisodeOfCare[]> {
+  return fetchJson<EpisodeOfCare[]>('/api/admission-requests')
+}
+
+export async function postInpatientAssignment(input: {
+  episode_of_care_id: string
+  room_location_id: string
+  bed_number: string
+  room_class: string
+}): Promise<InpatientAdmission> {
+  return fetchJson('/api/admission-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}

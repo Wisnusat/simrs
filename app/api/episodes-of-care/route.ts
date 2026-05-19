@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
 
   const { patient_id, room_location_id, bed_number, dpjp_id, diagnosis_primary } = body
 
-  if (!patient_id || !room_location_id || !bed_number || !dpjp_id) {
-    return apiResponse.badRequest('patient_id, room_location_id, bed_number, and dpjp_id are required')
+  if (!patient_id || !dpjp_id) {
+    return apiResponse.badRequest('patient_id and dpjp_id are required')
   }
 
   // Resolve __self__ to current practitioner
@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
       start_date: new Date().toISOString().split('T')[0],
       status: 'admitted',
       diagnosis_primary: diagnosis_primary ?? null,
-      room_location_id,
-      bed_number,
+      room_location_id: room_location_id ?? null,
+      bed_number: bed_number ?? null,
       dpjp_id: resolvedDpjpId,
     })
     .select()
