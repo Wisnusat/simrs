@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
-import { createEncounter } from "@/lib/api/client"
+import { createEncounter, patchQueueStatus } from "@/lib/api/client"
 import { QueueCard } from "@/components/nurse/queue-card"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
 import { StatCard } from "@/components/shared/stat-card"
@@ -73,24 +73,22 @@ export default function NurseDashboard() {
   const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId: '9bba8621-c9b7-4d62-8301-3d0dfa048a6b' })
   const { submit, loading: vsLoading, error: vsError, clearError } = useVitalSigns()
 
+  const [preparingEncounter, setPreparingEncounter] = useState<string | null>(null)
+
   // ── Stage 1: Nurse clicks "Panggil" ──────────────────────────────────────
   const handleCallPatient = useCallback(async (entry: QueueEntry) => {
     setCallingId(entry.id)
     setCallError(null)
     try {
-      // Create the encounter (idempotent — safe to call twice)
-      await createEncounter({
-        patient_id:      entry.patient_id,
-        poli_service_id: entry.poli_service_id,
-        appointment_id:  entry.appointment_id,
-        queue_id:        entry.id,
-        payment_type:    entry.appointments?.payment_type,
-        encounter_class: "outpatient",
-      })
+      if (entry.status === "waiting") {
+        await patchQueueStatus(entry.id, "called")
+      }
       // Announce via TTS
       announcePatient(entry.patients.full_name, entry.queue_number)
-      // Refresh so queue entry status shows "called" and encounter is linked
-      await refresh()
+      
+      if (entry.status === "waiting") {
+        await refresh()
+      }
     } catch (err: unknown) {
       setCallError(err instanceof Error ? err.message : "Gagal memanggil pasien")
     } finally {
@@ -99,10 +97,30 @@ export default function NurseDashboard() {
   }, [refresh])
 
   // ── Stage 2: Nurse opens vital signs form ────────────────────────────────
-  const handleOpenVitalSigns = useCallback((entry: QueueEntry) => {
+  const handleOpenVitalSigns = useCallback(async (entry: QueueEntry) => {
     clearError()
-    setSelected(entry)
-  }, [clearError])
+    if (!entry.encounter) {
+      setPreparingEncounter(entry.id)
+      try {
+        const enc = await createEncounter({
+          patient_id:      entry.patient_id,
+          poli_service_id: entry.poli_service_id,
+          appointment_id:  entry.appointment_id,
+          queue_id:        entry.id,
+          payment_type:    entry.appointments?.payment_type,
+          encounter_class: "outpatient",
+        })
+        setSelected({ ...entry, encounter: { id: enc.id, status: "planned" } })
+        refresh() // Refresh list in background
+      } catch (err: unknown) {
+        setCallError(err instanceof Error ? err.message : "Gagal membuat kunjungan")
+      } finally {
+        setPreparingEncounter(null)
+      }
+    } else {
+      setSelected(entry)
+    }
+  }, [clearError, refresh])
 
   // ── Vital signs submitted ─────────────────────────────────────────────────
   const handleVitalSignsSubmit = useCallback(
@@ -155,7 +173,7 @@ export default function NurseDashboard() {
                     entry={entry}
                     onCallPatient={handleCallPatient}
                     onInputVitalSigns={handleOpenVitalSigns}
-                    calling={callingId === entry.id}
+                    calling={callingId === entry.id || preparingEncounter === entry.id}
                   />
                 ))}
               {stats.waiting === 0 && (
