@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Activity, Heart, Ruler, Thermometer, Weight } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Activity, Heart, Ruler, Thermometer, Weight, MessageSquare } from "lucide-react"
 import type { VitalSignsInput } from "@/lib/types/outpatient"
 
 interface VitalSignsFormProps {
@@ -36,12 +37,13 @@ type FormState = {
   oxygen_saturation: string
   weight_kg: string
   height_cm: string
+  notes: string
 }
 
 const EMPTY: FormState = {
   systolic_bp: "", diastolic_bp: "", heart_rate: "",
   respiratory_rate: "", temperature: "", oxygen_saturation: "",
-  weight_kg: "", height_cm: "",
+  weight_kg: "", height_cm: "", notes: "",
 }
 
 function num(v: string) { return v ? Number(v) : undefined }
@@ -83,6 +85,7 @@ export function VitalSignsForm({
       oxygen_saturation: num(form.oxygen_saturation),
       weight_kg: num(form.weight_kg),
       height_cm: num(form.height_cm),
+      notes: form.notes || undefined,
     })
     if (ok) setForm(EMPTY)
   }
@@ -152,6 +155,19 @@ export function VitalSignsForm({
             Tinggi Badan (cm)
           </Label>
           <Input id="height_cm" type="number" value={form.height_cm} onChange={set("height_cm")} placeholder="170" />
+        </div>
+        <div className="col-span-1 sm:col-span-2 space-y-1.5 mt-2">
+          <Label htmlFor="notes">
+            <MessageSquare className="w-3.5 h-3.5 inline mr-1" />
+            Keluhan / Catatan
+          </Label>
+          <Textarea 
+            id="notes" 
+            value={form.notes} 
+            onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} 
+            placeholder="Tuliskan keluhan atau gejala yang dirasakan pasien..." 
+            rows={2}
+          />
         </div>
       </div>
 

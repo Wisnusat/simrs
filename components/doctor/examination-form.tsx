@@ -265,6 +265,12 @@ export default function ExaminationForm({
             <span className="font-medium">{vitals.weight_kg} kg{vitals.height_cm ? ` / ${vitals.height_cm} cm` : ""}</span>
           </div>
         )}
+        {vitals.notes && (
+          <div className="col-span-2 md:col-span-4 mt-1 pt-2 border-t border-blue-200/50 dark:border-blue-800/50 text-sm flex gap-2">
+            <span className="text-foreground/60 shrink-0">Catatan Perawat:</span>
+            <span className="font-medium italic">{vitals.notes}</span>
+          </div>
+        )}
       </div>
     )
   }
