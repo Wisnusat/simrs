@@ -40,7 +40,8 @@ import type {
   InpatientDailyRecord, InpatientDailyRecordInput,
   AllergyIntolerance, AllergyInput,
   NutritionOrder, NutritionOrderInput,
-  Referral, ReferralInput
+  Referral, ReferralInput,
+  LabService
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -206,6 +207,10 @@ export async function getProcedures(encounterId: string): Promise<Procedure[]> {
 // ---------------------------------------------------------------------------
 // Lab Orders  /api/lab-orders
 // ---------------------------------------------------------------------------
+
+export async function getLabServices(): Promise<LabService[]> {
+  return fetchJson<LabService[]>('/api/lab-services')
+}
 
 export async function getLabOrders(opts?: {
   encounter_id?: string

@@ -246,6 +246,15 @@ export interface Procedure {
 // Lab Orders
 // ---------------------------------------------------------------------------
 
+export interface LabService {
+  id: string
+  organization_id: string
+  name: string
+  loinc_code: string
+  category: string
+  is_active: boolean
+}
+
 export interface LabOrderItem {
   id: string
   lab_order_id: string

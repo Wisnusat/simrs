@@ -4,13 +4,15 @@
  */
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Trash2 } from "lucide-react"
-import type { LabOrderInput } from "@/lib/types/outpatient"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Plus, Trash2, Loader2 } from "lucide-react"
+import type { LabOrderInput, LabService } from "@/lib/types/outpatient"
+import { getLabServices } from "@/lib/api/client"
 
 interface LabItem {
   test_name: string
@@ -36,6 +38,16 @@ export function LabOrderForm({
 }: LabOrderFormProps) {
   const [items, setItems] = useState<LabItem[]>([{ test_name: "", loinc_code: "" }])
   const [localError, setLocalError] = useState("")
+
+  const [services, setServices] = useState<LabService[]>([])
+  const [loadingServices, setLoadingServices] = useState(true)
+
+  useEffect(() => {
+    getLabServices()
+      .then(setServices)
+      .catch(() => {})
+      .finally(() => setLoadingServices(false))
+  }, [])
 
   const setItem = (index: number, field: keyof LabItem, value: string) => {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)))
@@ -70,19 +82,40 @@ export function LabOrderForm({
         {items.map((item, idx) => (
           <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
             <div className="space-y-1.5">
-              {idx === 0 && <Label>Nama Pemeriksaan</Label>}
-              <Input
-                value={item.test_name}
-                onChange={(e) => setItem(idx, "test_name", e.target.value)}
-                placeholder="Contoh: Darah Lengkap"
-              />
+              {idx === 0 && <Label>Pilih Pemeriksaan</Label>}
+              {loadingServices ? (
+                <div className="h-10 flex items-center gap-2 text-sm text-foreground/50 border rounded-md px-3 bg-muted/50">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat...
+                </div>
+              ) : (
+                <Select
+                  value={item.test_name ? `${item.test_name}|${item.loinc_code}` : ""}
+                  onValueChange={(val) => {
+                    const [name, code] = val.split("|")
+                    setItem(idx, "test_name", name)
+                    setItem(idx, "loinc_code", code || "")
+                  }}
+                >
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Pilih layanan lab" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((svc) => (
+                      <SelectItem key={svc.id} value={`${svc.name}|${svc.loinc_code || ""}`}>
+                        {svc.name} {svc.loinc_code ? `(${svc.loinc_code})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-1.5">
               {idx === 0 && <Label>Kode LOINC</Label>}
               <Input
                 value={item.loinc_code}
-                onChange={(e) => setItem(idx, "loinc_code", e.target.value)}
-                placeholder="Contoh: 58410-2"
+                readOnly
+                className="bg-muted text-foreground/70"
+                placeholder="Otomatis"
               />
             </div>
             <Button
