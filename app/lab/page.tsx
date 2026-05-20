@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Activity, CheckCircle, Clock, FlaskConical, LayoutDashboard, MapPin, TestTube } from "lucide-react"
+import { Activity, CheckCircle, Clock, FlaskConical, LayoutDashboard, MapPin, TestTube, Mic } from "lucide-react"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { getEncounters, patchEncounter } from "@/lib/api/client"
 import { ResultEntryForm } from "@/components/lab/result-entry-form"
@@ -16,6 +16,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { EmptyState } from "@/components/shared/empty-state"
+import { announcePatient } from "@/lib/utils"
 import type { LabOrder, LabOrderStatus, LabResultInput, Encounter } from "@/lib/types/outpatient"
 
 const STATUS_CFG: Record<LabOrderStatus, { next: LabOrderStatus | null; nextLabel: string | null }> = {
@@ -39,6 +40,7 @@ export default function LabDashboard() {
   const [encounters,   setEncounters]   = useState<Encounter[]>([])
   const [encLoading,   setEncLoading]   = useState(false)
   const [labDoneId,    setLabDoneId]    = useState<string | null>(null) // encounter being completed
+  const [callingId,    setCallingId]    = useState<string | null>(null)
 
   const { data: orders, loading, refresh, stats, advanceStatus, submitResults, actionLoading, error } = useLabOrders({ today: true })
 
@@ -113,8 +115,23 @@ export default function LabDashboard() {
                 <span>Poli: {(enc as any).poli_services?.name ?? "—"}</span>
               </div>
             </div>
-            <div className="text-right space-y-1">
-              {/* <StatusBadge status={enc.status} /> */}
+            <div className="text-right space-y-2">
+              {!isDone && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                  onClick={() => {
+                    setCallingId(enc.id)
+                    announcePatient((enc as any).patients?.full_name, undefined, undefined, "silakan masuk ke ruang Laboratorium")
+                    setTimeout(() => setCallingId(null), 1000)
+                  }}
+                  disabled={callingId === enc.id}
+                >
+                  <Mic className="w-4 h-4 mr-1" />
+                  {callingId === enc.id ? "Memanggil..." : "Panggil"}
+                </Button>
+              )}
               {isDone && <Badge variant="default" className="block text-xs bg-green-600">Hasil Siap</Badge>}
             </div>
           </div>

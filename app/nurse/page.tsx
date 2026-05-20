@@ -19,34 +19,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
 import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
-
-// ---------------------------------------------------------------------------
-// Text-to-Speech helper (Web Speech API — no external deps)
-// ---------------------------------------------------------------------------
-function announcePatient(name: string, queueNumber: string | number) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return
-  // Cancel any ongoing speech first
-  window.speechSynthesis.cancel()
-
-  const text = `Nomor antrian ${queueNumber}, ${name}, silakan masuk.`
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = "id-ID"
-  utterance.rate = 0.85
-  utterance.pitch = 1.0
-  utterance.volume = 1.0
-
-  // Repeat once after a short pause (common in clinic PA systems)
-  utterance.onend = () => {
-    setTimeout(() => {
-      const repeat = new SpeechSynthesisUtterance(text)
-      repeat.lang = "id-ID"
-      repeat.rate = 0.85
-      window.speechSynthesis.speak(repeat)
-    }, 600)
-  }
-
-  window.speechSynthesis.speak(utterance)
-}
+import { announcePatient } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
 // Sidebar
