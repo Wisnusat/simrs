@@ -53,38 +53,38 @@ export default function ExaminationForm({
 }: ExaminationFormProps) {
   // ── SOAP ──
   const [soap, setSoap] = useState({
-    subjective:  chiefComplaint ?? "",
-    objective:   "",
-    assessment:  "",
-    plan:        "",
+    subjective: chiefComplaint ?? "",
+    objective: "",
+    assessment: "",
+    plan: "",
   })
 
   // ── Diagnosis ──
-  const [icd10Code,    setIcd10Code]    = useState("")
+  const [icd10Code, setIcd10Code] = useState("")
   const [icd10Display, setIcd10Display] = useState("")
-  const [careStatus,   setCareStatus]   = useState("rawat_jalan")
+  const [careStatus, setCareStatus] = useState("rawat_jalan")
 
   // ── Rujukan ──
   const [referralDestination, setReferralDestination] = useState("")
-  const [referralSpecialty,   setReferralSpecialty]   = useState("")
-  const [referralUrgency,     setReferralUrgency]     = useState<"routine" | "urgent" | "emergency">("routine")
-  const [referralReason,      setReferralReason]      = useState("")
+  const [referralSpecialty, setReferralSpecialty] = useState("")
+  const [referralUrgency, setReferralUrgency] = useState<"routine" | "urgent" | "emergency">("routine")
+  const [referralReason, setReferralReason] = useState("")
 
   // ── Inpatient Room Selection (Handled by Nurse Dashboard) ──
 
   // ── Prescription ──
-  const [rxSearch,    setRxSearch]    = useState("")
-  const [rxResults,   setRxResults]   = useState<Medication[]>([])
+  const [rxSearch, setRxSearch] = useState("")
+  const [rxResults, setRxResults] = useState<Medication[]>([])
   const [rxSearching, setRxSearching] = useState(false)
-  const [rxItems,     setRxItems]     = useState<RxItem[]>([])
-  const [adding,      setAdding]      = useState<Medication | null>(null)
-  const [addForm,     setAddForm]     = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+  const [rxItems, setRxItems] = useState<RxItem[]>([])
+  const [adding, setAdding] = useState<Medication | null>(null)
+  const [addForm, setAddForm] = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Vital signs (prefetch for display) ──
   const [vitals, setVitals] = useState<VitalSigns | null>(null)
   useEffect(() => {
-    getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => {})
+    getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => { })
   }, [encounterId])
 
   // ── Lab Orders ──
@@ -114,8 +114,10 @@ export default function ExaminationForm({
     if (!adding || !addForm.dosage) return
     setRxItems((prev) => [
       ...prev,
-      { medication: adding, dosage: addForm.dosage, frequency: addForm.frequency,
-        duration_days: addForm.duration_days, quantity: addForm.quantity, instructions: addForm.instructions },
+      {
+        medication: adding, dosage: addForm.dosage, frequency: addForm.frequency,
+        duration_days: addForm.duration_days, quantity: addForm.quantity, instructions: addForm.instructions
+      },
     ])
     setAdding(null)
   }
@@ -124,7 +126,7 @@ export default function ExaminationForm({
 
   // ── Submit ──
   const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState("")
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -144,18 +146,18 @@ export default function ExaminationForm({
       // 1. SOAP note
       await postClinicalNote({
         encounter_id: encounterId,
-        patient_id:   patient.id,
-        subjective:   soap.subjective,
-        objective:    soap.objective,
-        assessment:   soap.assessment,
-        plan:         soap.plan,
+        patient_id: patient.id,
+        subjective: soap.subjective,
+        objective: soap.objective,
+        assessment: soap.assessment,
+        plan: soap.plan,
       })
 
       // 2. Diagnosis
       await postDiagnosis({
-        encounter_id:  encounterId,
-        patient_id:    patient.id,
-        icd10_code:    icd10Code,
+        encounter_id: encounterId,
+        patient_id: patient.id,
+        icd10_code: icd10Code,
         icd10_display: icd10Display,
         diagnosis_type: "primary",
       })
@@ -164,14 +166,14 @@ export default function ExaminationForm({
       if (rxItems.length > 0) {
         await postPrescription({
           encounter_id: encounterId,
-          patient_id:   patient.id,
+          patient_id: patient.id,
           items: rxItems.map((item) => ({
             medication_id: item.medication.id,
-            dosage:        item.dosage,
-            frequency:     item.frequency,
+            dosage: item.dosage,
+            frequency: item.frequency,
             duration_days: item.duration_days,
-            quantity:      item.quantity,
-            instructions:  item.instructions,
+            quantity: item.quantity,
+            instructions: item.instructions,
           })),
         })
       }
@@ -180,8 +182,8 @@ export default function ExaminationForm({
       if (careStatus === "rawat_inap") {
         // 4. Create Episode of Care (No room assigned yet)
         const episode = await postEpisodeOfCare({
-          patient_id:       patient.id,
-          dpjp_id:          "__self__", 
+          patient_id: patient.id,
+          dpjp_id: "__self__",
           diagnosis_primary: `${icd10Code} - ${icd10Display}`,
         })
 
@@ -291,8 +293,8 @@ export default function ExaminationForm({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               {order.lab_order_items.map(item => {
                 const supabase = createClient()
-                const fileUrl = item.file_id 
-                  ? supabase.storage.from("lab_result").getPublicUrl(item.file_id).data.publicUrl 
+                const fileUrl = item.file_id
+                  ? supabase.storage.from("lab_result").getPublicUrl(item.file_id).data.publicUrl
                   : null
 
                 return (
@@ -300,9 +302,9 @@ export default function ExaminationForm({
                     <span className="font-medium">{item.test_name}</span>
                     <div className="flex items-center justify-between mt-1">
                       {fileUrl ? (
-                        <a 
-                          href={fileUrl} 
-                          target="_blank" 
+                        <a
+                          href={fileUrl}
+                          target="_blank"
                           rel="noreferrer"
                           className="flex items-center gap-1 text-blue-600 hover:underline"
                         >
@@ -311,15 +313,15 @@ export default function ExaminationForm({
                       ) : (
                         <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
                       )}
-                      
+
                       <Badge variant={
                         item.result_status === "critical" ? "destructive" :
-                        item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
+                          item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
                       } className="text-[10px] px-1.5 py-0">
                         {item.result_status === "normal" ? "Normal" :
-                         item.result_status === "abnormal_low" ? "Rendah" :
-                         item.result_status === "abnormal_high" ? "Tinggi" :
-                         item.result_status === "critical" ? "Kritis" : "—"}
+                          item.result_status === "abnormal_low" ? "Rendah" :
+                            item.result_status === "abnormal_high" ? "Tinggi" :
+                              item.result_status === "critical" ? "Kritis" : "—"}
                       </Badge>
                     </div>
                     {item.reference_range && !fileUrl && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
@@ -380,8 +382,8 @@ export default function ExaminationForm({
                   <Label htmlFor={field}>
                     {field === "subjective" ? "Subjective (Keluhan Pasien)"
                       : field === "objective" ? "Objective (Pemeriksaan Fisik)"
-                      : field === "assessment" ? "Assessment (Penilaian)"
-                      : "Plan (Rencana Tatalaksana)"}
+                        : field === "assessment" ? "Assessment (Penilaian)"
+                          : "Plan (Rencana Tatalaksana)"}
                   </Label>
                   <Textarea
                     id={field}
@@ -390,9 +392,9 @@ export default function ExaminationForm({
                     onChange={(e) => setSoap((prev) => ({ ...prev, [field]: e.target.value }))}
                     placeholder={
                       field === "subjective" ? "Keluhan yang dirasakan pasien..."
-                      : field === "objective" ? "Hasil pemeriksaan fisik..."
-                      : field === "assessment" ? "Penilaian klinis dokter..."
-                      : "Rencana pengobatan dan tatalaksana..."
+                        : field === "objective" ? "Hasil pemeriksaan fisik..."
+                          : field === "assessment" ? "Penilaian klinis dokter..."
+                            : "Rencana pengobatan dan tatalaksana..."
                     }
                   />
                 </div>
@@ -451,7 +453,7 @@ export default function ExaminationForm({
                       <Input
                         value={referralDestination}
                         onChange={(e) => setReferralDestination(e.target.value)}
-                        placeholder="Mis. RSUD Kota Bandung"
+                        placeholder="Ex: RSUD Kota Bandung"
                       />
                     </div>
                     <div className="space-y-2">
@@ -459,7 +461,7 @@ export default function ExaminationForm({
                       <Input
                         value={referralSpecialty}
                         onChange={(e) => setReferralSpecialty(e.target.value)}
-                        placeholder="Mis. Poli Jantung"
+                        placeholder="Ex: Poli Jantung"
                       />
                     </div>
                     <div className="space-y-2">
@@ -612,8 +614,8 @@ export default function ExaminationForm({
               {loading
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
                 : careStatus === "rawat_inap"
-                ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
-                : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
+                  ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
+                  : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>
