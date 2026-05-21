@@ -5,17 +5,17 @@ import { useState, useCallback, useEffect } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList, FlaskConical,
-  Activity, Heart, Thermometer, ArrowLeft, ShieldAlert,
+  Activity, Heart, Thermometer, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
+import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
 import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
@@ -69,6 +69,9 @@ export default function InpatientNurseDashboard() {
   const {
     data: allergies, loading: alLoading, actionLoading: alActing, error: alError, create: createAllergy,
   } = useAllergies(cpptAdm?.patient_id ?? null)
+
+  // Nutrition order for selected CPPT patient (read-only for nurse/doctor context)
+  const { activeOrder: nutritionOrder } = useNutritionOrders(cpptAdm?.episode_of_care_id ?? null)
 
   // Load vitals using the correct encounter_id once the daily record is known
   useEffect(() => {
@@ -262,17 +265,83 @@ export default function InpatientNurseDashboard() {
                 <span
                   key={al.id}
                   className={`text-xs px-2 py-1 rounded-full border font-medium ${al.criticality === "high"
-                      ? "bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                      : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                    ? "bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                    : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
                     }`}
                 >
-                  ⚠ {al.substance_display}
+                  <AlertTriangle className="w-3 h-3 inline mr-0.5" />
+                  {al.substance_display}
                   {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
                 </span>
               ))}
             </div>
           )}
           {alLoading && <p className="text-xs text-foreground/40">Memuat data alergi...</p>}
+
+          {/* Nutrition Plan Card — from nutritionist, read-only */}
+          {nutritionOrder && (
+            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Apple className="w-4 h-4 text-green-600" />
+                  <span className="font-semibold text-sm">Rencana Nutrisi</span>
+                  <span className="text-xs text-foreground/50">
+                    oleh {nutritionOrder.practitioners?.full_name ?? "Ahli Gizi"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {nutritionOrder.nutritional_status && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium border border-green-200 dark:border-green-700">
+                      {nutritionOrder.nutritional_status === "baik" ? "Status Gizi Baik" :
+                        nutritionOrder.nutritional_status === "kurang" ? "Gizi Kurang" :
+                          nutritionOrder.nutritional_status === "lebih" ? "Gizi Lebih" : "Gizi Buruk"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                {nutritionOrder.energy_needs_kcal && (
+                  <div className="bg-background/70 rounded-md p-2 border">
+                    <p className="text-foreground/50">Kebutuhan Energi</p>
+                    <p className="font-semibold">{nutritionOrder.energy_needs_kcal} kkal</p>
+                  </div>
+                )}
+                {nutritionOrder.protein_needs_g && (
+                  <div className="bg-background/70 rounded-md p-2 border">
+                    <p className="text-foreground/50">Kebutuhan Protein</p>
+                    <p className="font-semibold">{nutritionOrder.protein_needs_g} g</p>
+                  </div>
+                )}
+                {nutritionOrder.dietary_restrictions && (
+                  <div className="bg-background/70 rounded-md p-2 border col-span-2 sm:col-span-1">
+                    <p className="text-foreground/50">Pantangan / Restriksi</p>
+                    <p className="font-semibold">{nutritionOrder.dietary_restrictions}</p>
+                  </div>
+                )}
+              </div>
+              {nutritionOrder.meal_plan && Object.keys(nutritionOrder.meal_plan).length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground/60 flex items-center gap-1">
+                    <UtensilsCrossed className="w-3 h-3" /> Rencana Makan
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {Object.entries(nutritionOrder.meal_plan).map(([waktu, menu]) => (
+                      <div key={waktu} className="bg-background/70 rounded-md p-2 border text-xs">
+                        <span className="font-semibold capitalize">{waktu}:</span>{" "}
+                        <span className="text-foreground/70">{menu || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {nutritionOrder.notes && (
+                <p className="text-xs text-foreground/60 italic border-t pt-2 flex items-start gap-1">
+                  <FileText className="w-3 h-3 mt-0.5 shrink-0" />
+                  {nutritionOrder.notes}
+                </p>
+              )}
+            </div>
+          )}
 
           <Separator />
 
