@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -62,23 +62,25 @@ export default function InpatientNurseDashboard() {
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
   const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ encounterId: currentEncounterId ?? undefined, pollIntervalMs: 0 })
 
+  // Load vitals using the correct encounter_id once the daily record is known
+  useEffect(() => {
+    if (!currentEncounterId) return
+    getVitalSigns(currentEncounterId)
+      .then((vs) => setPatientVitals(vs[0] ?? null))
+      .catch(() => setPatientVitals(null))
+  }, [currentEncounterId])
+
   // Handle opening CPPT for a patient
   const handleOpenCppt = useCallback(async (adm: InpatientAdmission) => {
     setCpptAdm(adm)
     setView("cppt")
+    setPatientVitals(null) // reset; will be loaded once encounter is known
     // Load previous notes from all encounters in this episode
     try {
       const notes = await getClinicalNotesByEpisode(adm.episode_of_care_id)
       setPreviousNotes(notes)
     } catch {
       setPreviousNotes([])
-    }
-    // Load latest vitals
-    try {
-      const vs = await getVitalSigns(adm.episode_of_care_id)
-      setPatientVitals(vs[0] ?? null)
-    } catch {
-      setPatientVitals(null)
     }
   }, [])
 

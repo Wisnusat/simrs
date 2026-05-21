@@ -44,6 +44,30 @@ function getCurrentShift(): InpatientShift {
   return "malam"
 }
 
+// SOAPIE field config — nursing standard (SNARS)
+const SOAPIE_FIELDS = [
+  {
+    key: "subjective",
+    label: "S — Subjektif (Keluhan Pasien)",
+    placeholder: "Keluhan yang disampaikan pasien secara langsung, misal: 'Pasien mengeluh nyeri perut skala 6'...",
+  },
+  {
+    key: "objective",
+    label: "O — Objektif (Data Observasi & Tanda Vital)",
+    placeholder: "Hasil observasi perawat: TTV, kondisi luka, output cairan, saturasi, dsb...",
+  },
+  {
+    key: "assessment",
+    label: "A — Analisis Diagnosis Keperawatan",
+    placeholder: "Diagnosis keperawatan berdasarkan SDKI, misal: 'Nyeri Akut b.d agen pencedera fisiologis'...",
+  },
+  {
+    key: "plan",
+    label: "P/I/E — Rencana, Implementasi & Evaluasi",
+    placeholder: "Rencana tindakan (SLKI/SIKI), implementasi yang sudah dilakukan, dan evaluasi respon pasien...",
+  },
+] as const
+
 export function CpptForm({
   encounterId,
   patientId,
@@ -108,10 +132,13 @@ export function CpptForm({
         </div>
       )}
 
-      {/* CPPT SOAP Form */}
+      {/* CPPT SOAPIE Form */}
       {encounterId && (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <h4 className="font-semibold text-sm">Catatan CPPT (SOAP)</h4>
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-sm">Catatan CPPT Keperawatan (SOAPIE)</h4>
+            <Badge variant="outline" className="text-xs">Standar SNARS / SDKI-SLKI-SIKI</Badge>
+          </div>
 
           {error && (
             <Alert variant="destructive">
@@ -119,31 +146,30 @@ export function CpptForm({
             </Alert>
           )}
 
-          {(["subjective", "objective", "assessment", "plan"] as const).map((field) => (
-            <div key={field} className="space-y-1">
-              <Label htmlFor={`cppt-${field}`} className="text-xs font-medium uppercase tracking-wide text-foreground/60">
-                {field === "subjective" ? "S — Keluhan / Kondisi Pasien"
-                  : field === "objective" ? "O — Pemeriksaan / Observasi"
-                  : field === "assessment" ? "A — Penilaian Klinis"
-                  : "P — Rencana Tindakan"}
+          {SOAPIE_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-1.5">
+              <Label
+                htmlFor={`cppt-${field.key}`}
+                className="text-xs font-semibold uppercase tracking-wide text-foreground/70"
+              >
+                {field.label}
               </Label>
               <Textarea
-                id={`cppt-${field}`}
-                rows={2}
-                value={soap[field]}
-                onChange={(e) => setSoap((prev) => ({ ...prev, [field]: e.target.value }))}
-                placeholder={
-                  field === "subjective" ? "Keluhan yang disampaikan pasien..."
-                  : field === "objective" ? "Hasil observasi / pemeriksaan fisik..."
-                  : field === "assessment" ? "Penilaian klinis perawat..."
-                  : "Rencana perawatan selanjutnya..."
-                }
+                id={`cppt-${field.key}`}
+                rows={field.key === "plan" ? 4 : 2}
+                value={soap[field.key]}
+                onChange={(e) => setSoap((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                placeholder={field.placeholder}
               />
             </div>
           ))}
 
-          <Button type="submit" disabled={loading || (!soap.subjective && !soap.objective)} className="w-full">
-            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan CPPT"}
+          <Button
+            type="submit"
+            disabled={loading || (!soap.subjective && !soap.objective)}
+            className="w-full"
+          >
+            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan CPPT Keperawatan"}
           </Button>
         </form>
       )}
@@ -152,34 +178,46 @@ export function CpptForm({
       {previousNotes.length > 0 && (
         <div className="space-y-3">
           <Separator />
-          <h4 className="font-semibold text-sm">Riwayat CPPT</h4>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {previousNotes.map((note) => (
-              <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-foreground/40" />
-                    <span className="font-medium">{note.practitioners?.full_name ?? "—"}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      {note.writer_role === "doctor" ? "Dokter"
-                        : note.writer_role === "nurse" ? "Perawat"
-                        : note.writer_role === "nutritionist" ? "Ahli Gizi"
-                        : note.writer_role}
-                    </Badge>
+          <h4 className="font-semibold text-sm">Riwayat CPPT (Semua Profesi)</h4>
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+            {previousNotes.map((note) => {
+              const roleLabel =
+                note.writer_role === "doctor" ? "Dokter" :
+                note.writer_role === "nurse" ? "Perawat" :
+                note.writer_role === "nutritionist" ? "Ahli Gizi" :
+                note.writer_role === "pharmacist" ? "Apoteker" :
+                note.writer_role ?? "—"
+
+              const roleColor =
+                note.writer_role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+                note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+                note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                "bg-muted text-foreground/60"
+
+              return (
+                <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-foreground/40" />
+                      <span className="font-medium">{note.practitioners?.full_name ?? "—"}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleColor}`}>
+                        {roleLabel}
+                      </span>
+                    </div>
+                    <span className="flex items-center gap-1 text-xs text-foreground/40">
+                      <Clock className="w-3 h-3" />
+                      {new Date(note.note_date).toLocaleString("id-ID", {
+                        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                      })}
+                    </span>
                   </div>
-                  <span className="flex items-center gap-1 text-xs text-foreground/40">
-                    <Clock className="w-3 h-3" />
-                    {new Date(note.note_date).toLocaleString("id-ID", {
-                      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-                    })}
-                  </span>
+                  {note.subjective && <p><span className="font-semibold text-foreground/60 text-xs">S:</span> {note.subjective}</p>}
+                  {note.objective && <p><span className="font-semibold text-foreground/60 text-xs">O:</span> {note.objective}</p>}
+                  {note.assessment && <p><span className="font-semibold text-foreground/60 text-xs">A:</span> {note.assessment}</p>}
+                  {note.plan && <p><span className="font-semibold text-foreground/60 text-xs">P/I/E:</span> {note.plan}</p>}
                 </div>
-                {note.subjective && <p><span className="font-semibold text-foreground/60">S:</span> {note.subjective}</p>}
-                {note.objective && <p><span className="font-semibold text-foreground/60">O:</span> {note.objective}</p>}
-                {note.assessment && <p><span className="font-semibold text-foreground/60">A:</span> {note.assessment}</p>}
-                {note.plan && <p><span className="font-semibold text-foreground/60">P:</span> {note.plan}</p>}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
