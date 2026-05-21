@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList, FlaskConical,
-  Activity, Heart, Thermometer, ArrowLeft, Loader2, ShieldAlert,
+  Activity, Heart, Thermometer, ArrowLeft, ShieldAlert,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
@@ -32,9 +32,9 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",         active: active === "dashboard",  onClick: () => set("dashboard") },
-  { icon: BedDouble,       label: "Pasien Rawat Inap", active: active === "patients",   onClick: () => set("patients") },
-  { icon: ClipboardList,   label: "CPPT Harian",       active: active === "cppt",       onClick: () => set("cppt") },
+  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: BedDouble, label: "Pasien Rawat Inap", active: active === "patients", onClick: () => set("patients") },
+  { icon: ClipboardList, label: "CPPT Harian", active: active === "cppt", onClick: () => set("cppt") },
 ]
 
 export default function InpatientNurseDashboard() {
@@ -138,10 +138,10 @@ export default function InpatientNurseDashboard() {
           />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Total Pasien"     value={stats.total}          icon={BedDouble}     colorClass="text-blue-600" />
-            <StatCard label="Baru Masuk"       value={stats.admitted}       icon={Activity}      colorClass="text-green-600" />
-            <StatCard label="Dalam Perawatan"  value={stats.inCare}         icon={ClipboardList} colorClass="text-orange-600" />
-            <StatCard label="Siap Pulang"      value={stats.dischargeReady} icon={Heart}         colorClass="text-pink-600" />
+            <StatCard label="Total Pasien" value={stats.total} icon={BedDouble} colorClass="text-blue-600" />
+            <StatCard label="Baru Masuk" value={stats.admitted} icon={Activity} colorClass="text-green-600" />
+            <StatCard label="Dalam Perawatan" value={stats.inCare} icon={ClipboardList} colorClass="text-orange-600" />
+            <StatCard label="Siap Pulang" value={stats.dischargeReady} icon={Heart} colorClass="text-pink-600" />
           </div>
 
           <Card>
@@ -261,11 +261,10 @@ export default function InpatientNurseDashboard() {
               {allergies.map((al) => (
                 <span
                   key={al.id}
-                  className={`text-xs px-2 py-1 rounded-full border font-medium ${
-                    al.criticality === "high"
+                  className={`text-xs px-2 py-1 rounded-full border font-medium ${al.criticality === "high"
                       ? "bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:text-red-300"
                       : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-                  }`}
+                    }`}
                 >
                   ⚠ {al.substance_display}
                   {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
