@@ -10,11 +10,12 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList, FlaskConical,
-  Activity, Heart, Thermometer, ArrowLeft, Loader2,
+  Activity, Heart, Thermometer, ArrowLeft, Loader2, ShieldAlert,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
+import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
@@ -23,6 +24,7 @@ import { InpatientPatientList } from "@/components/inpatient/patient-list"
 import { CpptForm } from "@/components/inpatient/cppt-form"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
+import { AllergyForm } from "@/components/nutritionist/allergy-form"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -41,6 +43,7 @@ export default function InpatientNurseDashboard() {
   const [cpptAdm, setCpptAdm] = useState<InpatientAdmission | null>(null)
   const [vitalsAdm, setVitalsAdm] = useState<InpatientAdmission | null>(null)
   const [labAdm, setLabAdm] = useState<InpatientAdmission | null>(null)
+  const [allergyAdm, setAllergyAdm] = useState<InpatientAdmission | null>(null)
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [patientVitals, setPatientVitals] = useState<VitalSignsType | null>(null)
 
@@ -61,6 +64,11 @@ export default function InpatientNurseDashboard() {
   const { submit: submitVitals, loading: vsLoading, error: vsError, clearError: clearVsError } = useVitalSigns()
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
   const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ encounterId: currentEncounterId ?? undefined, pollIntervalMs: 0 })
+
+  // Allergies for selected CPPT patient
+  const {
+    data: allergies, loading: alLoading, actionLoading: alActing, error: alError, create: createAllergy,
+  } = useAllergies(cpptAdm?.patient_id ?? null)
 
   // Load vitals using the correct encounter_id once the daily record is known
   useEffect(() => {
@@ -110,6 +118,12 @@ export default function InpatientNurseDashboard() {
     if (ok) setLabAdm(null)
     return ok
   }, [createLab])
+
+  const handleAllergySubmit = useCallback(async (input: any) => {
+    const ok = await createAllergy(input)
+    if (ok) setAllergyAdm(null)
+    return ok
+  }, [createAllergy])
 
   return (
     <DashboardLayout title="Rawat Inap" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
@@ -214,7 +228,7 @@ export default function InpatientNurseDashboard() {
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               size="sm"
               variant="outline"
@@ -231,7 +245,35 @@ export default function InpatientNurseDashboard() {
             >
               <FlaskConical className="w-4 h-4 mr-1" /> Permintaan Lab
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-400 text-red-600 hover:bg-red-50"
+              onClick={() => setAllergyAdm(cpptAdm)}
+            >
+              <ShieldAlert className="w-4 h-4 mr-1" /> Tambah Alergi
+            </Button>
           </div>
+
+          {/* Allergy summary for this patient */}
+          {allergies.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {allergies.map((al) => (
+                <span
+                  key={al.id}
+                  className={`text-xs px-2 py-1 rounded-full border font-medium ${
+                    al.criticality === "high"
+                      ? "bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                  }`}
+                >
+                  ⚠ {al.substance_display}
+                  {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
+                </span>
+              ))}
+            </div>
+          )}
+          {alLoading && <p className="text-xs text-foreground/40">Memuat data alergi...</p>}
 
           <Separator />
 
@@ -279,6 +321,24 @@ export default function InpatientNurseDashboard() {
               onCancel={() => setLabAdm(null)}
               loading={labActing}
               error={labError}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Allergy Dialog ── */}
+      <Dialog open={!!allergyAdm} onOpenChange={(o) => { if (!o) setAllergyAdm(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-red-500" /> Tambah Data Alergi
+          </DialogTitle>
+          <p className="text-sm text-foreground/60 -mt-2">Pengkajian alergi oleh perawat rawat inap</p>
+          {allergyAdm && (
+            <AllergyForm
+              patientId={allergyAdm.patient_id}
+              onSubmit={handleAllergySubmit}
+              loading={alActing}
+              error={alError}
             />
           )}
         </DialogContent>
