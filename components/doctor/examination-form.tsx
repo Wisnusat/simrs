@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, getPatientHistory } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon } from "lucide-react"
-import type { Medication, VitalSigns, Location, InpatientRoomClass } from "@/lib/types/outpatient"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon, ChevronDown, ChevronRight, Calendar, Stethoscope } from "lucide-react"
+import type { Medication, VitalSigns, Location, InpatientRoomClass, Encounter } from "@/lib/types/outpatient"
 import { createClient } from "@/lib/supabase/client"
 
 interface ExaminationFormProps {
@@ -89,6 +89,24 @@ export default function ExaminationForm({
 
   // ── Lab Orders ──
   const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
+
+  // ── Patient history (past encounters, collapsed by default) ──
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState<Encounter[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!historyOpen || history.length > 0) return
+    setHistoryLoading(true)
+    getPatientHistory(patient.id, 10)
+      .then((enc) => {
+        // Exclude the current encounter from history
+        setHistory(enc.filter((e) => e.id !== encounterId))
+      })
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false))
+  }, [historyOpen, patient.id, encounterId, history.length])
 
   // ── Medicine search (debounced 300ms) ──
   useEffect(() => {
@@ -362,6 +380,126 @@ export default function ExaminationForm({
 
           <VitalStrip />
           <LabStrip />
+
+          {/* ── PATIENT HISTORY (collapsible) ── */}
+          <div className="rounded-lg border bg-muted/20">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2 text-foreground/70">
+                <Stethoscope className="w-4 h-4" />
+                Riwayat Kunjungan Sebelumnya
+                {history.length > 0 && !historyOpen && (
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-medium">
+                    {history.length} kunjungan
+                  </span>
+                )}
+              </div>
+              {historyOpen
+                ? <ChevronDown className="w-4 h-4 text-foreground/50" />
+                : <ChevronRight className="w-4 h-4 text-foreground/50" />}
+            </button>
+
+            {historyOpen && (
+              <div className="px-4 pb-4 space-y-2 border-t">
+                {historyLoading && (
+                  <div className="flex items-center gap-2 py-4 text-sm text-foreground/50">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Memuat riwayat...
+                  </div>
+                )}
+                {!historyLoading && history.length === 0 && (
+                  <p className="py-4 text-sm text-foreground/50 text-center">Belum ada riwayat kunjungan sebelumnya.</p>
+                )}
+                {!historyLoading && history.map((enc) => {
+                  const isOpen = historyExpanded === enc.id
+                  const diagnosis = (enc as any).diagnoses?.[0]
+                  const soap = (enc as any).clinical_notes?.[0]
+                  const date = enc.started_at
+                    ? new Date(enc.started_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—"
+
+                  return (
+                    <div key={enc.id} className="rounded-md border overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setHistoryExpanded(isOpen ? null : enc.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-background hover:bg-muted/30 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium">{date}</p>
+                            <p className="text-xs text-foreground/50">
+                              {(enc as any).poli_services?.name ?? "—"}
+                              {diagnosis ? ` · ${diagnosis.icd10_code} ${diagnosis.icd10_display}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        {isOpen
+                          ? <ChevronDown className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
+                          : <ChevronRight className="w-3.5 h-3.5 text-foreground/40 shrink-0" />}
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-3 py-3 bg-muted/10 space-y-2 text-xs border-t">
+                          {soap?.subjective && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">S: </span>
+                              <span>{soap.subjective}</span>
+                            </div>
+                          )}
+                          {soap?.objective && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">O: </span>
+                              <span>{soap.objective}</span>
+                            </div>
+                          )}
+                          {soap?.assessment && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">A: </span>
+                              <span>{soap.assessment}</span>
+                            </div>
+                          )}
+                          {soap?.plan && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">P: </span>
+                              <span>{soap.plan}</span>
+                            </div>
+                          )}
+                          {(enc as any).diagnoses?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t">
+                              {(enc as any).diagnoses.map((d: any) => (
+                                <span key={d.id} className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                                  {d.icd10_code} {d.icd10_display}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {(enc as any).lab_orders?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t">
+                              <span className="text-foreground/50 mr-1">Lab:</span>
+                              {(enc as any).lab_orders.flatMap((lo: any) =>
+                                lo.lab_order_items?.map((item: any) => (
+                                  <span key={item.id} className="px-1.5 py-0.5 rounded bg-muted border text-foreground/70">
+                                    {item.test_name}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          )}
+                          {!soap && !diagnosis && (
+                            <p className="text-foreground/40 italic">Tidak ada catatan pada kunjungan ini.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           <Tabs defaultValue="soap" className="w-full">
             <TabsList className="grid w-full grid-cols-3">

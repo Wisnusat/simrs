@@ -134,6 +134,10 @@ export async function getEncounters(opts?: {
   return fetchJson(`/api/encounters${qs({ ...rest, today: today ? '1' : undefined })}`)
 }
 
+export async function getPatientHistory(patientId: string, limit = 10): Promise<Encounter[]> {
+  return fetchJson(`/api/encounters${qs({ patient_id: patientId, limit: String(limit) })}`)
+}
+
 export async function getEncounter(encounterId: string): Promise<Encounter> {
   return fetchJson(`/api/encounters/${encounterId}`)
 }

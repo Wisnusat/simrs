@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status')
   const today = searchParams.get('today')
   const dateParam = searchParams.get('date')
+  const patientId = searchParams.get('patient_id')
   const date = dateParam ?? (today === '1' ? new Date().toISOString().split('T')[0] : null)
 
   let query = supabase
@@ -34,11 +35,14 @@ export async function GET(req: NextRequest) {
       patients ( id, full_name, medical_record_no, date_of_birth, gender, phone ),
       poli_services ( id, name, code ),
       vital_signs ( id, systolic_bp, diastolic_bp, heart_rate, temperature, oxygen_saturation, weight_kg, recorded_at ),
-      lab_orders ( id, status, order_date, lab_order_items(*) )
+      lab_orders ( id, status, order_date, lab_order_items(*) ),
+      clinical_notes ( id, subjective, objective, assessment, plan, note_date, writer_role, practitioners:written_by(full_name, role) ),
+      diagnoses ( id, icd10_code, icd10_display, diagnosis_type, noted_at )
     `)
     .eq('organization_id', practitioner.organization_id)
-    .order('started_at', { ascending: true })
+    .order('started_at', { ascending: false })
 
+  if (patientId) query = query.eq('patient_id', patientId)
   if (status) query = query.eq('status', status)
   const encounterClass = searchParams.get('encounter_class')
   if (encounterClass) query = query.eq('encounter_class', encounterClass)
