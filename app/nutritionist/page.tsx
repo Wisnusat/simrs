@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, UtensilsCrossed, AlertTriangle,
   ArrowLeft, ShieldAlert, Apple, Loader2, Calendar,
@@ -18,7 +17,6 @@ import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
 
 import { InpatientPatientList } from "@/components/inpatient/patient-list"
-import { AllergyForm } from "@/components/nutritionist/allergy-form"
 import { NutritionOrderForm } from "@/components/nutritionist/nutrition-order-form"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
@@ -34,22 +32,17 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
 export default function NutritionistDashboard() {
   const [view, setView] = useState("dashboard")
   const [selectedAdm, setSelectedAdm] = useState<InpatientAdmission | null>(null)
-  const [showAllergyForm, setShowAllergyForm] = useState(false)
 
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
 
   // Allergies & nutrition for selected patient
-  const { data: allergies, loading: alLoading, actionLoading: alActing, error: alError, create: createAllergy } = useAllergies(selectedAdm?.patient_id ?? null)
+  const { data: allergies, loading: alLoading } = useAllergies(selectedAdm?.patient_id ?? null)
   const { data: nutritionOrders, activeOrder, loading: noLoading, actionLoading: noActing, error: noError, create: createNutrition, update: updateNutrition } = useNutritionOrders(selectedAdm?.episode_of_care_id ?? null)
 
   const handleSelectPatient = (adm: InpatientAdmission) => {
     setSelectedAdm(adm)
     setView("detail")
   }
-
-  const handleAllergySubmit = useCallback(async (input: any) => {
-    return createAllergy(input)
-  }, [createAllergy])
 
   const handleNutritionSubmit = useCallback(async (input: any) => {
     if (activeOrder) {
@@ -131,18 +124,17 @@ export default function NutritionistDashboard() {
             <StatusBadge status={selectedAdm.status} />
           </div>
 
-          {/* ── ALLERGIES ── */}
+          {/* ── ALLERGIES (read-only reference for diet planning) ── */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <ShieldAlert className="w-5 h-5 text-red-500" /> Alergi Pasien
                 </CardTitle>
-                <CardDescription>Daftar alergi yang tercatat</CardDescription>
+                <CardDescription>
+                  Data alergi dikaji oleh perawat. Digunakan sebagai referensi penyusunan diet.
+                </CardDescription>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setShowAllergyForm(true)}>
-                + Tambah Alergi
-              </Button>
             </CardHeader>
             <CardContent>
               {alLoading ? (
@@ -230,24 +222,6 @@ export default function NutritionistDashboard() {
         </div>
       )}
 
-      {/* Allergy Form Dialog */}
-      <Dialog open={showAllergyForm} onOpenChange={(o) => { if (!o) setShowAllergyForm(false) }}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>Tambah Alergi</DialogTitle>
-          {selectedAdm && (
-            <AllergyForm
-              patientId={selectedAdm.patient_id}
-              onSubmit={async (input) => {
-                const ok = await handleAllergySubmit(input)
-                if (ok) setShowAllergyForm(false)
-                return ok
-              }}
-              loading={alActing}
-              error={alError}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   )
 }

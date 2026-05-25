@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, getLocations, postEpisodeOfCare, postInpatientAdmission } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, getPatientHistory } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,9 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble } from "lucide-react"
-import type { Medication, VitalSigns, Location, InpatientRoomClass } from "@/lib/types/outpatient"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon, ChevronDown, ChevronRight, Calendar, Stethoscope } from "lucide-react"
+import type { Medication, VitalSigns, Location, InpatientRoomClass, Encounter } from "@/lib/types/outpatient"
+import { createClient } from "@/lib/supabase/client"
 
 interface ExaminationFormProps {
   patient: {
@@ -52,52 +53,60 @@ export default function ExaminationForm({
 }: ExaminationFormProps) {
   // ── SOAP ──
   const [soap, setSoap] = useState({
-    subjective:  chiefComplaint ?? "",
-    objective:   "",
-    assessment:  "",
-    plan:        "",
+    subjective: chiefComplaint ?? "",
+    objective: "",
+    assessment: "",
+    plan: "",
   })
 
   // ── Diagnosis ──
-  const [icd10Code,    setIcd10Code]    = useState("")
+  const [icd10Code, setIcd10Code] = useState("")
   const [icd10Display, setIcd10Display] = useState("")
-  const [careStatus,   setCareStatus]   = useState("rawat_jalan")
+  const [careStatus, setCareStatus] = useState("rawat_jalan")
 
-  // ── Inpatient Room Selection ──
-  const [rooms,         setRooms]         = useState<Location[]>([])
-  const [roomsLoading,  setRoomsLoading]  = useState(false)
-  const [selectedRoom,  setSelectedRoom]  = useState<string>("")
-  const [bedNumber,     setBedNumber]     = useState("")
-  const [roomClass,     setRoomClass]     = useState<InpatientRoomClass>("kelas_3")
+  // ── Rujukan ──
+  const [referralDestination, setReferralDestination] = useState("")
+  const [referralSpecialty, setReferralSpecialty] = useState("")
+  const [referralUrgency, setReferralUrgency] = useState<"routine" | "urgent" | "emergency">("routine")
+  const [referralReason, setReferralReason] = useState("")
 
-  // Fetch rooms when rawat inap is selected
-  useEffect(() => {
-    if (careStatus === "rawat_inap") {
-      setRoomsLoading(true)
-      getLocations({ type: "patient_room" })
-        .then(setRooms)
-        .catch(() => {})
-        .finally(() => setRoomsLoading(false))
-    }
-  }, [careStatus])
+  // ── Inpatient Room Selection (Handled by Nurse Dashboard) ──
 
   // ── Prescription ──
-  const [rxSearch,    setRxSearch]    = useState("")
-  const [rxResults,   setRxResults]   = useState<Medication[]>([])
+  const [rxSearch, setRxSearch] = useState("")
+  const [rxResults, setRxResults] = useState<Medication[]>([])
   const [rxSearching, setRxSearching] = useState(false)
-  const [rxItems,     setRxItems]     = useState<RxItem[]>([])
-  const [adding,      setAdding]      = useState<Medication | null>(null)
-  const [addForm,     setAddForm]     = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+  const [rxItems, setRxItems] = useState<RxItem[]>([])
+  const [adding, setAdding] = useState<Medication | null>(null)
+  const [addForm, setAddForm] = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Vital signs (prefetch for display) ──
   const [vitals, setVitals] = useState<VitalSigns | null>(null)
   useEffect(() => {
-    getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => {})
+    getVitalSigns(encounterId).then((vs) => setVitals(vs[0] ?? null)).catch(() => { })
   }, [encounterId])
 
   // ── Lab Orders ──
   const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
+
+  // ── Patient history (past encounters, collapsed by default) ──
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState<Encounter[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!historyOpen || history.length > 0) return
+    setHistoryLoading(true)
+    getPatientHistory(patient.id, 10)
+      .then((enc) => {
+        // Exclude the current encounter from history
+        setHistory(enc.filter((e) => e.id !== encounterId))
+      })
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false))
+  }, [historyOpen, patient.id, encounterId, history.length])
 
   // ── Medicine search (debounced 300ms) ──
   useEffect(() => {
@@ -123,8 +132,10 @@ export default function ExaminationForm({
     if (!adding || !addForm.dosage) return
     setRxItems((prev) => [
       ...prev,
-      { medication: adding, dosage: addForm.dosage, frequency: addForm.frequency,
-        duration_days: addForm.duration_days, quantity: addForm.quantity, instructions: addForm.instructions },
+      {
+        medication: adding, dosage: addForm.dosage, frequency: addForm.frequency,
+        duration_days: addForm.duration_days, quantity: addForm.quantity, instructions: addForm.instructions
+      },
     ])
     setAdding(null)
   }
@@ -133,7 +144,7 @@ export default function ExaminationForm({
 
   // ── Submit ──
   const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState("")
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -142,27 +153,29 @@ export default function ExaminationForm({
     try {
       if (!icd10Code || !icd10Display) throw new Error("Kode ICD-10 dan nama diagnosis wajib diisi")
 
-      // Validate inpatient fields
-      if (careStatus === "rawat_inap") {
-        if (!selectedRoom) throw new Error("Pilih kamar untuk rawat inap")
-        if (!bedNumber.trim()) throw new Error("Nomor bed wajib diisi")
+
+
+      // Validate referral fields
+      if (careStatus === "rujukan") {
+        if (!referralDestination.trim()) throw new Error("Faskes tujuan rujukan wajib diisi")
+        if (!referralReason.trim()) throw new Error("Alasan klinis rujukan wajib diisi")
       }
 
       // 1. SOAP note
       await postClinicalNote({
         encounter_id: encounterId,
-        patient_id:   patient.id,
-        subjective:   soap.subjective,
-        objective:    soap.objective,
-        assessment:   soap.assessment,
-        plan:         soap.plan,
+        patient_id: patient.id,
+        subjective: soap.subjective,
+        objective: soap.objective,
+        assessment: soap.assessment,
+        plan: soap.plan,
       })
 
       // 2. Diagnosis
       await postDiagnosis({
-        encounter_id:  encounterId,
-        patient_id:    patient.id,
-        icd10_code:    icd10Code,
+        encounter_id: encounterId,
+        patient_id: patient.id,
+        icd10_code: icd10Code,
         icd10_display: icd10Display,
         diagnosis_type: "primary",
       })
@@ -171,47 +184,49 @@ export default function ExaminationForm({
       if (rxItems.length > 0) {
         await postPrescription({
           encounter_id: encounterId,
-          patient_id:   patient.id,
+          patient_id: patient.id,
           items: rxItems.map((item) => ({
             medication_id: item.medication.id,
-            dosage:        item.dosage,
-            frequency:     item.frequency,
+            dosage: item.dosage,
+            frequency: item.frequency,
             duration_days: item.duration_days,
-            quantity:      item.quantity,
-            instructions:  item.instructions,
+            quantity: item.quantity,
+            instructions: item.instructions,
           })),
         })
       }
 
-      // ── Rawat Inap: create episode + admission, set encounter to admitted ──
+      // ── Rawat Inap: request admission, let Nurse assign room ──
       if (careStatus === "rawat_inap") {
-        // 4a. Create Episode of Care
+        // 4. Create Episode of Care (No room assigned yet)
         const episode = await postEpisodeOfCare({
-          patient_id:       patient.id,
-          room_location_id: selectedRoom,
-          bed_number:       bedNumber,
-          dpjp_id:          "__self__", // API will resolve to current practitioner
+          patient_id: patient.id,
+          dpjp_id: "__self__",
           diagnosis_primary: `${icd10Code} - ${icd10Display}`,
         })
 
-        // 4b. Create Inpatient Admission
-        await postInpatientAdmission({
-          episode_of_care_id: episode.id,
-          patient_id:         patient.id,
-          room_location_id:   selectedRoom,
-          bed_number:         bedNumber,
-          room_class:         roomClass,
-          dpjp_id:            "__self__",
-          admitted_from:      "outpatient",
-        })
-
-        // 4c. Encounter → admitted + link to episode
+        // 5. Encounter → admitted + link to episode
         await patchEncounter(encounterId, {
           status: "admitted",
           episode_of_care_id: episode.id,
         } as any)
 
-        // 5. Queue → done
+        // 6. Queue → done
+        if (queueId) await patchQueueStatus(queueId, "done")
+
+      } else if (careStatus === "rujukan") {
+        // 4. Create Referral Record
+        await postReferral({
+          encounter_id: encounterId,
+          patient_id: patient.id,
+          destination_facility_name: referralDestination,
+          destination_specialty: referralSpecialty,
+          referral_reason: referralReason,
+          urgency: referralUrgency
+        })
+
+        // 5. Encounter → finished
+        await patchEncounter(encounterId, { status: "finished" } as any)
         if (queueId) await patchQueueStatus(queueId, "done")
 
       } else {
@@ -270,6 +285,12 @@ export default function ExaminationForm({
             <span className="font-medium">{vitals.weight_kg} kg{vitals.height_cm ? ` / ${vitals.height_cm} cm` : ""}</span>
           </div>
         )}
+        {vitals.notes && (
+          <div className="col-span-2 md:col-span-4 mt-1 pt-2 border-t border-blue-200/50 dark:border-blue-800/50 text-sm flex gap-2">
+            <span className="text-foreground/60 shrink-0">Catatan Perawat:</span>
+            <span className="font-medium italic">{vitals.notes}</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -288,24 +309,43 @@ export default function ExaminationForm({
         {completedLabs.map(order => (
           <div key={order.id}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-              {order.lab_order_items.map(item => (
-                <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
-                  <span className="font-medium">{item.test_name}</span>
-                  <div className="flex items-center justify-between">
-                    <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
-                    <Badge variant={
-                      item.result_status === "critical" ? "destructive" :
-                      item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
-                    } className="text-[10px] px-1.5 py-0">
-                      {item.result_status === "normal" ? "Normal" :
-                       item.result_status === "abnormal_low" ? "Rendah" :
-                       item.result_status === "abnormal_high" ? "Tinggi" :
-                       item.result_status === "critical" ? "Kritis" : "—"}
-                    </Badge>
+              {order.lab_order_items.map(item => {
+                const supabase = createClient()
+                const fileUrl = item.file_id
+                  ? supabase.storage.from("lab_result").getPublicUrl(item.file_id).data.publicUrl
+                  : null
+
+                return (
+                  <div key={item.id} className="flex flex-col gap-1 bg-background p-2 rounded-md border text-xs">
+                    <span className="font-medium">{item.test_name}</span>
+                    <div className="flex items-center justify-between mt-1">
+                      {fileUrl ? (
+                        <a
+                          href={fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:underline"
+                        >
+                          <FileIcon className="w-3 h-3" /> Lihat Dokumen / Gambar
+                        </a>
+                      ) : (
+                        <span>{item.result_value ?? "—"} {item.result_unit ?? ""} </span>
+                      )}
+
+                      <Badge variant={
+                        item.result_status === "critical" ? "destructive" :
+                          item.result_status?.startsWith("abnormal") ? "secondary" : "outline"
+                      } className="text-[10px] px-1.5 py-0">
+                        {item.result_status === "normal" ? "Normal" :
+                          item.result_status === "abnormal_low" ? "Rendah" :
+                            item.result_status === "abnormal_high" ? "Tinggi" :
+                              item.result_status === "critical" ? "Kritis" : "—"}
+                      </Badge>
+                    </div>
+                    {item.reference_range && !fileUrl && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
                   </div>
-                  {item.reference_range && <span className="text-foreground/50">Ref: {item.reference_range}</span>}
-                </div>
-              ))}
+                )
+              })}
             </div>
             {order.clinical_notes && (
               <p className="mt-2 text-xs text-foreground/60 italic">Catatan: {order.clinical_notes}</p>
@@ -341,6 +381,126 @@ export default function ExaminationForm({
           <VitalStrip />
           <LabStrip />
 
+          {/* ── PATIENT HISTORY (collapsible) ── */}
+          <div className="rounded-lg border bg-muted/20">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2 text-foreground/70">
+                <Stethoscope className="w-4 h-4" />
+                Riwayat Kunjungan Sebelumnya
+                {history.length > 0 && !historyOpen && (
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-medium">
+                    {history.length} kunjungan
+                  </span>
+                )}
+              </div>
+              {historyOpen
+                ? <ChevronDown className="w-4 h-4 text-foreground/50" />
+                : <ChevronRight className="w-4 h-4 text-foreground/50" />}
+            </button>
+
+            {historyOpen && (
+              <div className="px-4 pb-4 space-y-2 border-t">
+                {historyLoading && (
+                  <div className="flex items-center gap-2 py-4 text-sm text-foreground/50">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Memuat riwayat...
+                  </div>
+                )}
+                {!historyLoading && history.length === 0 && (
+                  <p className="py-4 text-sm text-foreground/50 text-center">Belum ada riwayat kunjungan sebelumnya.</p>
+                )}
+                {!historyLoading && history.map((enc) => {
+                  const isOpen = historyExpanded === enc.id
+                  const diagnosis = (enc as any).diagnoses?.[0]
+                  const soap = (enc as any).clinical_notes?.[0]
+                  const date = enc.started_at
+                    ? new Date(enc.started_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—"
+
+                  return (
+                    <div key={enc.id} className="rounded-md border overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setHistoryExpanded(isOpen ? null : enc.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-background hover:bg-muted/30 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium">{date}</p>
+                            <p className="text-xs text-foreground/50">
+                              {(enc as any).poli_services?.name ?? "—"}
+                              {diagnosis ? ` · ${diagnosis.icd10_code} ${diagnosis.icd10_display}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        {isOpen
+                          ? <ChevronDown className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
+                          : <ChevronRight className="w-3.5 h-3.5 text-foreground/40 shrink-0" />}
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-3 py-3 bg-muted/10 space-y-2 text-xs border-t">
+                          {soap?.subjective && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">S: </span>
+                              <span>{soap.subjective}</span>
+                            </div>
+                          )}
+                          {soap?.objective && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">O: </span>
+                              <span>{soap.objective}</span>
+                            </div>
+                          )}
+                          {soap?.assessment && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">A: </span>
+                              <span>{soap.assessment}</span>
+                            </div>
+                          )}
+                          {soap?.plan && (
+                            <div>
+                              <span className="font-semibold text-foreground/60">P: </span>
+                              <span>{soap.plan}</span>
+                            </div>
+                          )}
+                          {(enc as any).diagnoses?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t">
+                              {(enc as any).diagnoses.map((d: any) => (
+                                <span key={d.id} className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                                  {d.icd10_code} {d.icd10_display}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {(enc as any).lab_orders?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t">
+                              <span className="text-foreground/50 mr-1">Lab:</span>
+                              {(enc as any).lab_orders.flatMap((lo: any) =>
+                                lo.lab_order_items?.map((item: any) => (
+                                  <span key={item.id} className="px-1.5 py-0.5 rounded bg-muted border text-foreground/70">
+                                    {item.test_name}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          )}
+                          {!soap && !diagnosis && (
+                            <p className="text-foreground/40 italic">Tidak ada catatan pada kunjungan ini.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           <Tabs defaultValue="soap" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="soap">Catatan SOAP</TabsTrigger>
@@ -360,8 +520,8 @@ export default function ExaminationForm({
                   <Label htmlFor={field}>
                     {field === "subjective" ? "Subjective (Keluhan Pasien)"
                       : field === "objective" ? "Objective (Pemeriksaan Fisik)"
-                      : field === "assessment" ? "Assessment (Penilaian)"
-                      : "Plan (Rencana Tatalaksana)"}
+                        : field === "assessment" ? "Assessment (Penilaian)"
+                          : "Plan (Rencana Tatalaksana)"}
                   </Label>
                   <Textarea
                     id={field}
@@ -370,9 +530,9 @@ export default function ExaminationForm({
                     onChange={(e) => setSoap((prev) => ({ ...prev, [field]: e.target.value }))}
                     placeholder={
                       field === "subjective" ? "Keluhan yang dirasakan pasien..."
-                      : field === "objective" ? "Hasil pemeriksaan fisik..."
-                      : field === "assessment" ? "Penilaian klinis dokter..."
-                      : "Rencana pengobatan dan tatalaksana..."
+                        : field === "objective" ? "Hasil pemeriksaan fisik..."
+                          : field === "assessment" ? "Penilaian klinis dokter..."
+                            : "Rencana pengobatan dan tatalaksana..."
                     }
                   />
                 </div>
@@ -418,74 +578,46 @@ export default function ExaminationForm({
                 </RadioGroup>
               </div>
 
-              {careStatus === "rawat_inap" && (
-                <div className="space-y-4 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+
+
+              {careStatus === "rujukan" && (
+                <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
                   <h4 className="font-semibold flex items-center gap-2 text-sm">
-                    <BedDouble className="w-4 h-4 text-blue-500" /> Pengaturan Rawat Inap
+                    <Activity className="w-4 h-4 text-purple-500" /> Pengaturan Rujukan Keluar
                   </h4>
-
-                  {/* Room selection */}
-                  <div className="space-y-2">
-                    <Label>Pilih Kamar *</Label>
-                    {roomsLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-foreground/50">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat kamar...
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                        {rooms.map((room) => {
-                          const available = room.capacity - (room.occupied ?? 0)
-                          const isFull = available <= 0
-                          return (
-                            <button
-                              key={room.id}
-                              type="button"
-                              disabled={isFull}
-                              className={`p-3 rounded-lg border text-left text-sm transition-all ${
-                                selectedRoom === room.id
-                                  ? "border-blue-500 bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
-                                  : isFull
-                                  ? "border-border/40 opacity-50 cursor-not-allowed"
-                                  : "border-border hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10"
-                              }`}
-                              onClick={() => setSelectedRoom(room.id)}
-                            >
-                              <p className="font-medium">{room.name}</p>
-                              <p className="text-xs text-foreground/50">
-                                {room.floor ? `Lantai ${room.floor} · ` : ""}
-                                Tersedia: {available}/{room.capacity}
-                              </p>
-                            </button>
-                          )
-                        })}
-                        {rooms.length === 0 && (
-                          <p className="text-sm text-foreground/50 col-span-2 text-center py-4">Belum ada kamar tersedia.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Bed number */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Nomor Bed *</Label>
+                      <Label>Faskes Tujuan *</Label>
                       <Input
-                        value={bedNumber}
-                        onChange={(e) => setBedNumber(e.target.value)}
-                        placeholder="mis. A1, B2"
+                        value={referralDestination}
+                        onChange={(e) => setReferralDestination(e.target.value)}
+                        placeholder="Ex: RSUD Kota Bandung"
                       />
                     </div>
-
-                    {/* Room class */}
                     <div className="space-y-2">
-                      <Label>Kelas Kamar *</Label>
-                      <Select value={roomClass} onValueChange={(v) => setRoomClass(v as InpatientRoomClass)}>
+                      <Label>Poli / Spesialisasi</Label>
+                      <Input
+                        value={referralSpecialty}
+                        onChange={(e) => setReferralSpecialty(e.target.value)}
+                        placeholder="Ex: Poli Jantung"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Alasan Rujukan *</Label>
+                      <Input
+                        value={referralReason}
+                        onChange={(e) => setReferralReason(e.target.value)}
+                        placeholder="Mis. Fasilitas tidak memadai, butuh spesialis"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Urgensi</Label>
+                      <Select value={referralUrgency} onValueChange={(v) => setReferralUrgency(v as "routine" | "urgent" | "emergency")}>
                         <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="vip">VIP</SelectItem>
-                          <SelectItem value="kelas_1">Kelas 1</SelectItem>
-                          <SelectItem value="kelas_2">Kelas 2</SelectItem>
-                          <SelectItem value="kelas_3">Kelas 3</SelectItem>
+                          <SelectItem value="routine">Rutin (Biasa)</SelectItem>
+                          <SelectItem value="urgent">Urgen (Segera)</SelectItem>
+                          <SelectItem value="emergency">Gawat Darurat</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -620,8 +752,8 @@ export default function ExaminationForm({
               {loading
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
                 : careStatus === "rawat_inap"
-                ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
-                : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
+                  ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
+                  : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>

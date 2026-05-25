@@ -1,13 +1,3 @@
-/**
- * components/nurse/queue-card.tsx
- *
- * Two-stage nurse actions:
- *   1. "Panggil"      — visible when status === "waiting"
- *                       → PATCH queue to "called" + POST /api/encounters
- *                       → fires Web Speech API TTS announcement
- *   2. "Input Vital"  — visible when status === "called" (encounter created, no VS yet)
- *                       → opens the VitalSignsForm dialog
- */
 "use client"
 
 import { Badge } from "@/components/ui/badge"
@@ -33,8 +23,8 @@ export function QueueCard({
   calling = false,
 }: QueueCardProps) {
   const isWaiting = entry.status === "waiting"
-  const isCalled  = entry.status === "called"
-  const canInput  = isCalled && !entry.vital_signs_recorded
+  const isCalled = entry.status === "called"
+  const canInput = isCalled && !entry.vital_signs_recorded
 
   return (
     <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/30 transition-colors">
@@ -62,8 +52,8 @@ export function QueueCard({
           status={entry.vital_signs_recorded ? "in_service" : entry.status}
         />
 
-        {/* Stage 1 — Panggil (waiting → called + create encounter) */}
-        {isWaiting && (
+        {/* Stage 1 — Panggil (waiting → called or recall) */}
+        {(isWaiting || isCalled) && (
           <Button
             size="sm"
             variant="outline"
@@ -72,7 +62,7 @@ export function QueueCard({
             disabled={calling}
           >
             <Mic className="w-4 h-4 mr-1" />
-            {calling ? "Memanggil..." : "Panggil"}
+            {calling ? "Memanggil..." : isCalled ? "Panggil Ulang" : "Panggil"}
           </Button>
         )}
 

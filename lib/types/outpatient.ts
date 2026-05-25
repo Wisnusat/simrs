@@ -32,6 +32,9 @@ export type AllergyCriticality = "low" | "high" | "unable-to-assess"
 export type NutritionalStatus = "baik" | "kurang" | "lebih" | "buruk"
 export type LocationType = "poli" | "ward" | "patient_room" | "igd" | "ok" | "lab" | "pharmacy"
 
+// Emergency-specific enums
+export type EmergencyStatus = "emergency_admitted" | "in_triage" | "in_treatment" | "completed" | "referred_out" | "admitted_to_inpatient"
+export type TriageCategory = "P1" | "P2" | "P3" | "P4"
 // ---------------------------------------------------------------------------
 // Embedded shapes (referenced from multiple entities)
 // ---------------------------------------------------------------------------
@@ -243,6 +246,15 @@ export interface Procedure {
 // Lab Orders
 // ---------------------------------------------------------------------------
 
+export interface LabService {
+  id: string
+  organization_id: string
+  name: string
+  loinc_code: string
+  category: string
+  is_active: boolean
+}
+
 export interface LabOrderItem {
   id: string
   lab_order_id: string
@@ -256,6 +268,7 @@ export interface LabOrderItem {
   result_entered_at?: string
   result_entered_by?: string
   notes?: string
+  file_id?: string
 }
 
 export interface LabOrder {
@@ -288,6 +301,7 @@ export interface LabResultInput {
   reference_range?: string
   result_status?: ResultStatus
   notes?: string
+  file_id?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -425,8 +439,8 @@ export interface EpisodeOfCare {
 
 export interface EpisodeOfCareInput {
   patient_id: string
-  room_location_id: string
-  bed_number: string
+  room_location_id?: string
+  bed_number?: string
   dpjp_id: string
   diagnosis_primary?: string
 }
@@ -550,4 +564,59 @@ export interface NutritionOrderInput {
   protein_needs_g?: number
   meal_plan?: Record<string, string>
   notes?: string
+}
+
+export interface EmergencyEncounter {
+  id: string
+  encounter_id: string
+  patient_id: string
+  status: EmergencyStatus
+  triage_category?: TriageCategory | string
+  triage_complaint?: string
+  triage_nurse_id?: string
+  triaged_at?: string
+  is_critical: boolean
+  resuscitation_notes?: string
+  outcome?: string
+  referred_to?: string
+  referral_letter_no?: string
+  needs_ambulance: boolean
+  created_at: string
+  updated_at: string
+
+  // Relations
+  patients: Patient
+  encounters?: Encounter
+  triage_nurse?: Practitioner
+}
+
+// ---------------------------------------------------------------------------
+// Referrals (Rujukan Keluar)
+// ---------------------------------------------------------------------------
+
+export type ReferralUrgency = "routine" | "urgent" | "emergency"
+
+export interface Referral {
+  id: string
+  encounter_id: string
+  patient_id: string
+  referred_by: string
+  destination_facility_name: string
+  destination_specialty?: string
+  referral_reason: string
+  referral_date: string
+  urgency: ReferralUrgency
+  ss_service_request_id?: string
+  ss_sync_status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ReferralInput {
+  encounter_id: string
+  patient_id: string
+  destination_facility_name: string
+  destination_specialty?: string
+  referral_reason: string
+  urgency?: ReferralUrgency
 }

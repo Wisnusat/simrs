@@ -6,10 +6,10 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Activity, CheckCircle, Clock, LayoutDashboard, Users } from "lucide-react"
+import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
-import { createEncounter } from "@/lib/api/client"
+import { createEncounter, patchQueueStatus } from "@/lib/api/client"
 import { QueueCard } from "@/components/nurse/queue-card"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
 import { StatCard } from "@/components/shared/stat-card"
@@ -17,34 +17,9 @@ import { PageHeader } from "@/components/shared/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
 import type { QueueEntry } from "@/lib/types/outpatient"
-
-// ---------------------------------------------------------------------------
-// Text-to-Speech helper (Web Speech API — no external deps)
-// ---------------------------------------------------------------------------
-function announcePatient(name: string, queueNumber: string | number) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return
-  // Cancel any ongoing speech first
-  window.speechSynthesis.cancel()
-
-  const text = `Nomor antrian ${queueNumber}, ${name}, silakan masuk.`
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = "id-ID"
-  utterance.rate = 0.85
-  utterance.pitch = 1.0
-  utterance.volume = 1.0
-
-  // Repeat once after a short pause (common in clinic PA systems)
-  utterance.onend = () => {
-    setTimeout(() => {
-      const repeat = new SpeechSynthesisUtterance(text)
-      repeat.lang = "id-ID"
-      repeat.rate = 0.85
-      window.speechSynthesis.speak(repeat)
-    }, 600)
-  }
-
-  window.speechSynthesis.speak(utterance)
-}
+import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
+import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
+import { announcePatient } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
 // Sidebar
@@ -52,6 +27,8 @@ function announcePatient(name: string, queueNumber: string | number) {
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard",        active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users,           label: "Antrian Pasien",   active: active === "queue",    onClick: () => set("queue") },
+  { icon: UserPlus,        label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
+  { icon: BedDouble,       label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
   { icon: Activity,        label: "Riwayat",          active: active === "history",  onClick: () => set("history") },
 ]
 
@@ -69,24 +46,22 @@ export default function NurseDashboard() {
   const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId: '9bba8621-c9b7-4d62-8301-3d0dfa048a6b' })
   const { submit, loading: vsLoading, error: vsError, clearError } = useVitalSigns()
 
+  const [preparingEncounter, setPreparingEncounter] = useState<string | null>(null)
+
   // ── Stage 1: Nurse clicks "Panggil" ──────────────────────────────────────
   const handleCallPatient = useCallback(async (entry: QueueEntry) => {
     setCallingId(entry.id)
     setCallError(null)
     try {
-      // Create the encounter (idempotent — safe to call twice)
-      await createEncounter({
-        patient_id:      entry.patient_id,
-        poli_service_id: entry.poli_service_id,
-        appointment_id:  entry.appointment_id,
-        queue_id:        entry.id,
-        payment_type:    entry.appointments?.payment_type,
-        encounter_class: "outpatient",
-      })
+      if (entry.status === "waiting") {
+        await patchQueueStatus(entry.id, "called")
+      }
       // Announce via TTS
       announcePatient(entry.patients.full_name, entry.queue_number)
-      // Refresh so queue entry status shows "called" and encounter is linked
-      await refresh()
+      
+      if (entry.status === "waiting") {
+        await refresh()
+      }
     } catch (err: unknown) {
       setCallError(err instanceof Error ? err.message : "Gagal memanggil pasien")
     } finally {
@@ -95,10 +70,30 @@ export default function NurseDashboard() {
   }, [refresh])
 
   // ── Stage 2: Nurse opens vital signs form ────────────────────────────────
-  const handleOpenVitalSigns = useCallback((entry: QueueEntry) => {
+  const handleOpenVitalSigns = useCallback(async (entry: QueueEntry) => {
     clearError()
-    setSelected(entry)
-  }, [clearError])
+    if (!entry.encounter) {
+      setPreparingEncounter(entry.id)
+      try {
+        const enc = await createEncounter({
+          patient_id:      entry.patient_id,
+          poli_service_id: entry.poli_service_id,
+          appointment_id:  entry.appointment_id,
+          queue_id:        entry.id,
+          payment_type:    entry.appointments?.payment_type,
+          encounter_class: "outpatient",
+        })
+        setSelected({ ...entry, encounter: { id: enc.id, status: "planned" } })
+        refresh() // Refresh list in background
+      } catch (err: unknown) {
+        setCallError(err instanceof Error ? err.message : "Gagal membuat kunjungan")
+      } finally {
+        setPreparingEncounter(null)
+      }
+    } else {
+      setSelected(entry)
+    }
+  }, [clearError, refresh])
 
   // ── Vital signs submitted ─────────────────────────────────────────────────
   const handleVitalSignsSubmit = useCallback(
@@ -151,7 +146,7 @@ export default function NurseDashboard() {
                     entry={entry}
                     onCallPatient={handleCallPatient}
                     onInputVitalSigns={handleOpenVitalSigns}
-                    calling={callingId === entry.id}
+                    calling={callingId === entry.id || preparingEncounter === entry.id}
                   />
                 ))}
               {stats.waiting === 0 && (
@@ -234,6 +229,34 @@ export default function NurseDashboard() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* ── WALKIN REGISTRATION ── */}
+      {view === "walkin" && (
+        <div className="space-y-6">
+          <PageHeader
+            title="Registrasi Walk-In"
+            description="Pendaftaran pasien offline / di tempat"
+            onRefresh={refresh}
+            isRefreshing={loading}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Form Pendaftaran</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WalkinRegistrationForm onSuccess={() => {
+                refresh()
+                setView("queue") // Switch to queue view to see the new patient
+              }} />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── ADMISSION REQUESTS ── */}
+      {view === "admissions" && (
+        <AdmissionRequestsView />
       )}
 
       {/* ── Vital Signs Dialog ── */}

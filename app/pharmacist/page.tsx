@@ -7,7 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, CheckCircle, Clock, Eye, LayoutDashboard, Lock, Package, PackageOpen, Pill } from "lucide-react"
+import {
+  AlertCircle, CheckCircle, Clock, Eye, LayoutDashboard,
+  Lock, Package, PackageOpen, Pill, ShoppingCart,
+} from "lucide-react"
 import { usePrescriptions } from "@/hooks/outpatient/use-prescriptions"
 import { useMedications } from "@/hooks/outpatient/use-medications"
 import { getInvoices } from "@/lib/api/client"
@@ -19,23 +22,26 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { Badge } from "@/components/ui/badge"
 import type { Invoice, Prescription } from "@/lib/types/outpatient"
 
-const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",        active: active === "dashboard",     onClick: () => set("dashboard") },
-  { icon: Pill,            label: "Resep Obat",       active: active === "prescriptions", onClick: () => set("prescriptions") },
-  { icon: Package,         label: "Stok Obat",        active: active === "inventory",     onClick: () => set("inventory") },
-  { icon: PackageOpen,     label: "Riwayat",          active: active === "history",       onClick: () => set("history") },
+type View = 'dashboard' | 'prescriptions' | 'inventory' | 'history'
+
+const SIDEBAR = (active: View, set: (v: View) => void) => [
+  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: Pill, label: "Resep Obat", active: active === "prescriptions", onClick: () => set("prescriptions") },
+  { icon: Package, label: "Stok Obat", active: active === "inventory", onClick: () => set("inventory") },
+  { icon: PackageOpen, label: "Riwayat", active: active === "history", onClick: () => set("history") },
+  { icon: ShoppingCart, label: "Purchase Order", href: "/pharmacist/po" },
 ]
 
 export default function PharmacistDashboard() {
-  const [view, setView] = useState("dashboard")
+  const [view, setView] = useState<View>("dashboard")
   const [selected, setSelected] = useState<Prescription | null>(null)
-  const [invoice,  setInvoice]  = useState<Invoice | null>(null)
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [invLoading, setInvLoading] = useState(false)
 
-  const { data: prescriptions, loading, refresh, stats, dispense, actionLoading: dispensing, error: rxError } = usePrescriptions({ today: true })
+  const { data: prescriptions, loading, refresh, stats, dispense, actionLoading: dispensing, error: rxError } =
+    usePrescriptions({ today: true })
   const { data: medications, loading: medLoading, search, setSearch } = useMedications()
 
-  // Fetch invoice when opening prescription detail
   useEffect(() => {
     if (!selected) { setInvoice(null); return }
     setInvLoading(true)
@@ -56,19 +62,20 @@ export default function PharmacistDashboard() {
 
   return (
     <DashboardLayout title="Apoteker" role="pharmacist" sidebarItems={SIDEBAR(view, setView)}>
-      {/* DASHBOARD */}
+
+      {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">
           <PageHeader title="Dashboard Apoteker" description="Kelola resep dan stok obat" onRefresh={refresh} isRefreshing={loading} />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard label="Resep Menunggu"     value={stats.active}    icon={Clock}       colorClass="text-orange-600" />
+            <StatCard label="Resep Menunggu" value={stats.active} icon={Clock} colorClass="text-orange-600" />
             <StatCard label="Diserahkan Hari Ini" value={stats.completed} icon={CheckCircle} colorClass="text-green-600" />
-            <StatCard label="Stok Rendah"        value={medications.filter((m) => m.stock_available < 10).length} icon={AlertCircle} colorClass="text-red-600" />
+            <StatCard label="Stok Rendah" value={medications.filter(m => m.stock_available < 10).length} icon={AlertCircle} colorClass="text-red-600" />
           </div>
           <Card>
             <CardHeader><CardTitle>Resep Menunggu Diproses</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {prescriptions.filter((p) => p.status === "active").slice(0, 5).map((rx) => (
+              {prescriptions.filter(p => p.status === "active").slice(0, 5).map(rx => (
                 <div key={rx.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/40">
                   <div>
                     <p className="font-medium">{rx.patients.full_name}</p>
@@ -76,7 +83,9 @@ export default function PharmacistDashboard() {
                   </div>
                   <div className="flex gap-2">
                     <StatusBadge status={rx.status} />
-                    <Button size="sm" variant="outline" onClick={() => setSelected(rx)}><Eye className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="outline" onClick={() => setSelected(rx)}>
+                      <Eye className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -86,7 +95,7 @@ export default function PharmacistDashboard() {
         </div>
       )}
 
-      {/* PRESCRIPTIONS */}
+      {/* ── PRESCRIPTIONS ── */}
       {view === "prescriptions" && (
         <div className="space-y-6">
           <PageHeader title="Resep Obat" description="Semua resep hari ini" onRefresh={refresh} isRefreshing={loading} />
@@ -103,7 +112,7 @@ export default function PharmacistDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {prescriptions.map((rx) => (
+                  {prescriptions.map(rx => (
                     <TableRow key={rx.id}>
                       <TableCell className="font-medium">{rx.patients.full_name}</TableCell>
                       <TableCell>{rx.practitioners.full_name ?? "—"}</TableCell>
@@ -124,12 +133,12 @@ export default function PharmacistDashboard() {
         </div>
       )}
 
-      {/* INVENTORY */}
+      {/* ── INVENTORY ── */}
       {view === "inventory" && (
         <div className="space-y-6">
           <PageHeader title="Stok Obat" description="Stok obat saat ini" />
           <div className="max-w-sm">
-            <Input placeholder="Cari obat..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="Cari obat..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <Card>
             <CardContent className="pt-4">
@@ -143,7 +152,7 @@ export default function PharmacistDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {medications.map((med) => (
+                  {medications.map(med => (
                     <TableRow key={med.id}>
                       <TableCell className="font-medium">{med.name}</TableCell>
                       <TableCell className="text-foreground/60">{med.generic_name ?? "—"}</TableCell>
@@ -163,7 +172,7 @@ export default function PharmacistDashboard() {
         </div>
       )}
 
-      {/* HISTORY */}
+      {/* ── HISTORY ── */}
       {view === "history" && (
         <div className="space-y-6">
           <PageHeader title="Riwayat Penyerahan" description="Resep yang sudah diserahkan" onRefresh={refresh} isRefreshing={loading} />
@@ -178,7 +187,7 @@ export default function PharmacistDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {prescriptions.filter((p) => p.status === "completed").map((rx) => (
+                  {prescriptions.filter(p => p.status === "completed").map(rx => (
                     <TableRow key={rx.id}>
                       <TableCell className="font-medium">{rx.patients.full_name}</TableCell>
                       <TableCell>{rx.prescription_items.length} obat</TableCell>
@@ -191,7 +200,7 @@ export default function PharmacistDashboard() {
                   ))}
                 </TableBody>
               </Table>
-              {prescriptions.filter((p) => p.status === "completed").length === 0 && (
+              {prescriptions.filter(p => p.status === "completed").length === 0 && (
                 <EmptyState message="Belum ada obat yang diserahkan hari ini." />
               )}
             </CardContent>
@@ -199,13 +208,12 @@ export default function PharmacistDashboard() {
         </div>
       )}
 
-      {/* Prescription Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
+      {/* ── Prescription Detail Dialog ── */}
+      <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null) }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Detail Resep</DialogTitle>
           {selected && (
             <div className="space-y-4">
-              {/* Payment gate banner */}
               {invLoading ? (
                 <Alert><AlertDescription>Memeriksa status pembayaran...</AlertDescription></Alert>
               ) : isPaid ? (
@@ -222,16 +230,11 @@ export default function PharmacistDashboard() {
                   <AlertDescription>
                     <strong>Belum Dibayar</strong> — Pasien harus menyelesaikan pembayaran di kasir
                     sebelum obat dapat diserahkan.
-                    {invoice && (
-                      <span className="ml-1">
-                        Status: <StatusBadge status={invoice.status} className="ml-1" />
-                      </span>
-                    )}
+                    {invoice && <span className="ml-1">Status: <StatusBadge status={invoice.status} className="ml-1" /></span>}
                     {!invoice && " Invoice belum dibuat."}
                   </AlertDescription>
                 </Alert>
               )}
-
               <PrescriptionDetail
                 prescription={selected}
                 onDispense={handleDispense}

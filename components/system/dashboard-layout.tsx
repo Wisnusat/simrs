@@ -4,7 +4,7 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -34,9 +34,11 @@ interface DashboardLayoutProps {
     onClick?: () => void
     active?: boolean
   }>
+  hideSidebar?: boolean
 }
 
 export default function DashboardLayout({ children, title, role, sidebarItems }: DashboardLayoutProps) {
+  const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -81,6 +83,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleColor = (role: string) => {
     switch (role) {
+      case "owner":        return "bg-amber-600"
       case "admin":        return "bg-blue-600"
       case "doctor":       return "bg-green-600"
       case "nurse":        return "bg-pink-600"
@@ -94,6 +97,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleInitials = (role: string) => {
     switch (role) {
+      case "owner":        return "OW"
       case "admin":        return "AD"
       case "doctor":       return "DR"
       case "nurse":        return "NR"
@@ -107,6 +111,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleLabel = (role: string) => {
     switch (role) {
+      case "owner":        return "Owner"
       case "admin":        return "Administrator"
       case "doctor":       return "Dokter"
       case "nurse":        return "Perawat"
@@ -202,10 +207,11 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
             <div className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
               {sidebarItems.map((item, index) => {
                 const IconComponent = item.icon
-                return (
+                const isActive = item.active ?? (item.href ? pathname === item.href : false)
+                const btn = (
                   <Button
                     key={index}
-                    variant={item.active ? "default" : "ghost"}
+                    variant={isActive ? "default" : "ghost"}
                     className="w-full justify-start"
                     onClick={item.onClick}
                   >
@@ -213,6 +219,9 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
                     {item.label}
                   </Button>
                 )
+                return item.href
+                  ? <Link key={index} href={item.href}>{btn}</Link>
+                  : btn
               })}
             </div>
 

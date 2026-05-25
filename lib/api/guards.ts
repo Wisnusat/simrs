@@ -60,8 +60,38 @@ export async function requireAdmin(
         .eq('is_active', true)
         .single()
 
-    if (error || !practitioner || practitioner.role !== 'admin') {
+    // Owner is a superset of admin — accept both
+    if (error || !practitioner || !['admin', 'owner'].includes(practitioner.role)) {
         return apiResponse.forbidden('Forbidden — admin only')
+    }
+
+    return { user, practitioner }
+}
+
+/**
+ * Verifies the request has a valid session AND the user is an owner.
+ * Use for owner-only endpoints (reports, PO approval).
+ */
+export async function requireOwner(
+    supabase: SupabaseClient,
+): Promise<AdminGuardResult | ReturnType<typeof apiResponse.forbidden>> {
+    const authResult = await requireAuth(supabase)
+
+    if (isGuardError(authResult)) {
+        return authResult
+    }
+
+    const { user } = authResult
+
+    const { data: practitioner, error } = await supabase
+        .from('practitioners')
+        .select('id, role, organization_id, full_name')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single()
+
+    if (error || !practitioner || practitioner.role !== 'owner') {
+        return apiResponse.forbidden('Forbidden — owner only')
     }
 
     return { user, practitioner }

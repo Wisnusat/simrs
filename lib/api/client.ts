@@ -40,6 +40,8 @@ import type {
   InpatientDailyRecord, InpatientDailyRecordInput,
   AllergyIntolerance, AllergyInput,
   NutritionOrder, NutritionOrderInput,
+  Referral, ReferralInput,
+  LabService
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,10 @@ export async function getEncounters(opts?: {
   return fetchJson(`/api/encounters${qs({ ...rest, today: today ? '1' : undefined })}`)
 }
 
+export async function getPatientHistory(patientId: string, limit = 10): Promise<Encounter[]> {
+  return fetchJson(`/api/encounters${qs({ patient_id: patientId, limit: String(limit) })}`)
+}
+
 export async function getEncounter(encounterId: string): Promise<Encounter> {
   return fetchJson(`/api/encounters/${encounterId}`)
 }
@@ -205,6 +211,10 @@ export async function getProcedures(encounterId: string): Promise<Procedure[]> {
 // ---------------------------------------------------------------------------
 // Lab Orders  /api/lab-orders
 // ---------------------------------------------------------------------------
+
+export async function getLabServices(): Promise<LabService[]> {
+  return fetchJson<LabService[]>('/api/lab-services')
+}
 
 export async function getLabOrders(opts?: {
   encounter_id?: string
@@ -473,5 +483,107 @@ export async function patchNutritionOrder(
   return fetchJson(`/api/nutrition-orders/${orderId}`, {
     method: 'PATCH',
     body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Emergency Encounters  /api/emergency
+// ---------------------------------------------------------------------------
+
+export async function getEmergencyEncounters(opts?: {
+  status?: string
+  search?: string
+  page?: number
+  limit?: number
+}): Promise<{ data: any[], meta: { total: number, page: number, limit: number } }> {
+  // Returns raw response since it's wrapped in { data, meta }
+  const res = await fetch(`/api/emergency${qs(opts ?? {})}`)
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to fetch emergency encounters')
+  }
+  return res.json()
+}
+
+export async function getEmergencyEncounter(id: string): Promise<any> {
+  return fetchJson(`/api/emergency/${id}`)
+}
+
+export async function postEmergencyEncounter(input: {
+  patient_id: string
+  triage_category?: string
+  triage_complaint?: string
+  is_critical?: boolean
+  needs_ambulance?: boolean
+}): Promise<any> {
+  return fetchJson('/api/emergency', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchEmergencyEncounter(
+  id: string,
+  update: Partial<{
+    status: string
+    triage_category: string
+    triage_complaint: string
+    resuscitation_notes: string
+    outcome: string
+    referred_to: string
+    referral_letter_no: string
+    is_critical: boolean
+    needs_ambulance: boolean
+  }>,
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Walk-in Registration  /api/walkin
+// ---------------------------------------------------------------------------
+
+export async function postWalkinRegistration(input: {
+  patientId: string
+  poliServiceId: string
+  paymentMethod: string
+}): Promise<any> {
+  return fetchJson('/api/walkin', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Referrals  /api/referrals
+// ---------------------------------------------------------------------------
+
+export async function postReferral(input: ReferralInput): Promise<Referral> {
+  return fetchJson('/api/referrals', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Admission Requests /api/admission-requests
+// ---------------------------------------------------------------------------
+
+export async function getAdmissionRequests(): Promise<EpisodeOfCare[]> {
+  return fetchJson<EpisodeOfCare[]>('/api/admission-requests')
+}
+
+export async function postInpatientAssignment(input: {
+  episode_of_care_id: string
+  room_location_id: string
+  bed_number: string
+  room_class: string
+}): Promise<InpatientAdmission> {
+  return fetchJson('/api/admission-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
   })
 }
