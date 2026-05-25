@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 // Which role is allowed on which route prefix
 const ROLE_ROUTE_MAP: Record<string, string | string[]> = {
+    '/cms': ['owner', 'admin'],
     '/admin': 'admin',
     '/doctor': 'doctor',
     '/nurse': 'nurse',

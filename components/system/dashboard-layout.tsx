@@ -81,6 +81,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleColor = (role: string) => {
     switch (role) {
+      case "owner":        return "bg-amber-600"
       case "admin":        return "bg-blue-600"
       case "doctor":       return "bg-green-600"
       case "nurse":        return "bg-pink-600"
@@ -94,6 +95,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleInitials = (role: string) => {
     switch (role) {
+      case "owner":        return "OW"
       case "admin":        return "AD"
       case "doctor":       return "DR"
       case "nurse":        return "NR"
@@ -107,6 +109,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleLabel = (role: string) => {
     switch (role) {
+      case "owner":        return "Owner"
       case "admin":        return "Administrator"
       case "doctor":       return "Dokter"
       case "nurse":        return "Perawat"
