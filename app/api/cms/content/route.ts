@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest) {
             return apiResponse.badRequest('section_key and content are required')
         }
 
-        const validKeys = ['hero', 'about', 'services', 'faq', 'contact', 'stats']
+        const validKeys = ['hero', 'about', 'services', 'faq', 'contact', 'stats', 'gallery']
         if (!validKeys.includes(section_key)) {
             return apiResponse.badRequest(`Invalid section_key. Must be one of: ${validKeys.join(', ')}`)
         }
