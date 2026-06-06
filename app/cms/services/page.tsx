@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Stethoscope, Plus, Loader2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Stethoscope, Plus, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ServicesPage() {
@@ -18,6 +19,8 @@ export default function ServicesPage() {
     const [loading, setLoading] = useState(true)
     const [showDialog, setShowDialog] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [editingPoli, setEditingPoli] = useState<any | null>(null)
+    const [togglingIds, setTogglingIds] = useState<Record<string, boolean>>({})
     const [form, setForm] = useState({
         name: '',
         code: '',
@@ -49,6 +52,24 @@ export default function ServicesPage() {
 
     useEffect(() => { fetchData() }, [fetchData])
 
+    const openAddDialog = () => {
+        setEditingPoli(null)
+        setForm({ name: '', code: '', location_id: '', speciality_code: '', quota_per_day: 30 })
+        setShowDialog(true)
+    }
+
+    const openEditDialog = (svc: any) => {
+        setEditingPoli(svc)
+        setForm({
+            name: svc.name,
+            code: svc.code,
+            location_id: svc.location_id || '',
+            speciality_code: svc.speciality_code || '',
+            quota_per_day: svc.quota_per_day || 30,
+        })
+        setShowDialog(true)
+    }
+
     const handleCreate = async () => {
         if (!form.name || !form.code || !form.location_id) {
             toast.error('Nama, kode, dan lokasi wajib diisi')
@@ -77,6 +98,76 @@ export default function ServicesPage() {
         }
     }
 
+    const handleUpdate = async () => {
+        if (!editingPoli) return
+        if (!form.name || !form.code || !form.location_id) {
+            toast.error('Nama, kode, dan lokasi wajib diisi')
+            return
+        }
+        setSaving(true)
+        try {
+            const res = await fetch(`/api/cms/poli/${editingPoli.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form),
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success('Poli berhasil diperbarui')
+                setShowDialog(false)
+                setForm({ name: '', code: '', location_id: '', speciality_code: '', quota_per_day: 30 })
+                setEditingPoli(null)
+                fetchData()
+            } else {
+                toast.error(data.error ?? 'Gagal memperbarui poli')
+            }
+        } catch {
+            toast.error('Terjadi kesalahan')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleToggleActive = async (id: string, currentStatus: boolean) => {
+        setTogglingIds(prev => ({ ...prev, [id]: true }))
+        try {
+            const res = await fetch(`/api/cms/poli/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: !currentStatus }),
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success(`Poli berhasil ${!currentStatus ? 'diaktifkan' : 'dinonaktifkan'}`)
+                fetchData()
+            } else {
+                toast.error(data.error ?? 'Gagal mengubah status')
+            }
+        } catch {
+            toast.error('Terjadi kesalahan saat mengubah status')
+        } finally {
+            setTogglingIds(prev => ({ ...prev, [id]: false }))
+        }
+    }
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Apakah Anda yakin ingin menghapus poli ini?')) return
+        try {
+            const res = await fetch(`/api/cms/poli/${id}`, {
+                method: 'DELETE',
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success('Poli berhasil dihapus')
+                fetchData()
+            } else {
+                toast.error(data.error ?? 'Gagal menghapus poli')
+            }
+        } catch {
+            toast.error('Terjadi kesalahan saat menghapus')
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -95,7 +186,7 @@ export default function ServicesPage() {
                     </h1>
                     <p className="text-foreground/60 mt-1">Kelola layanan poli rumah sakit</p>
                 </div>
-                <Button onClick={() => setShowDialog(true)} className="gap-2">
+                <Button onClick={openAddDialog} className="gap-2">
                     <Plus className="w-4 h-4" /> Tambah Poli
                 </Button>
             </div>
@@ -110,9 +201,9 @@ export default function ServicesPage() {
                             <TableRow>
                                 <TableHead>Nama</TableHead>
                                 <TableHead>Kode</TableHead>
-                                <TableHead>Kuota/Hari</TableHead>
                                 <TableHead>Lokasi</TableHead>
-                                <TableHead>Status</TableHead>
+                                <TableHead className="w-[120px]">Status</TableHead>
+                                <TableHead className="text-right w-[150px]">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -122,12 +213,42 @@ export default function ServicesPage() {
                                     <TableCell>
                                         <Badge variant="outline">{svc.code}</Badge>
                                     </TableCell>
-                                    <TableCell>{svc.quota_per_day}</TableCell>
                                     <TableCell>{svc.locations?.name ?? '-'}</TableCell>
                                     <TableCell>
-                                        <Badge variant={svc.is_active ? 'default' : 'secondary'}>
-                                            {svc.is_active ? 'Aktif' : 'Nonaktif'}
-                                        </Badge>
+                                        <div className="flex items-center gap-2">
+                                            <Switch
+                                                checked={!!svc.is_active}
+                                                disabled={togglingIds[svc.id]}
+                                                onCheckedChange={() => handleToggleActive(svc.id, !!svc.is_active)}
+                                            />
+                                            {togglingIds[svc.id] ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                            ) : (
+                                                <Badge variant={svc.is_active ? 'default' : 'secondary'}>
+                                                    {svc.is_active ? 'Aktif' : 'Nonaktif'}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(svc)}
+                                                title="Edit Poli"
+                                            >
+                                                <Pencil className="w-4 h-4 text-foreground/70" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDelete(svc.id)}
+                                                title="Hapus Poli"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-destructive/80" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -143,11 +264,11 @@ export default function ServicesPage() {
                 </CardContent>
             </Card>
 
-            {/* Add Poli Dialog */}
+            {/* Poli Dialog (Add / Edit) */}
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Tambah Poli Baru</DialogTitle>
+                        <DialogTitle>{editingPoli ? 'Edit Poli' : 'Tambah Poli Baru'}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
@@ -158,23 +279,13 @@ export default function ServicesPage() {
                                 placeholder="Poli Umum"
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Kode</Label>
-                                <Input
-                                    value={form.code}
-                                    onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                                    placeholder="UMUM"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Kuota / Hari</Label>
-                                <Input
-                                    type="number"
-                                    value={form.quota_per_day}
-                                    onChange={e => setForm(f => ({ ...f, quota_per_day: parseInt(e.target.value) || 30 }))}
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label>Kode</Label>
+                            <Input
+                                value={form.code}
+                                onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                                placeholder="UMUM"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label>Lokasi</Label>
@@ -200,9 +311,9 @@ export default function ServicesPage() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowDialog(false)}>Batal</Button>
-                        <Button onClick={handleCreate} disabled={saving} className="gap-2">
+                        <Button onClick={editingPoli ? handleUpdate : handleCreate} disabled={saving} className="gap-2">
                             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                            Simpan
+                            {editingPoli ? 'Perbarui' : 'Simpan'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

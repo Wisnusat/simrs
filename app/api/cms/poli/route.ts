@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
                     floor
                 )
             `)
-            .eq('is_active', true)
             .order('name', { ascending: true })
 
         if (error) {
