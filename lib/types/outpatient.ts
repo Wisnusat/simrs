@@ -620,3 +620,62 @@ export interface ReferralInput {
   referral_reason: string
   urgency?: ReferralUrgency
 }
+
+// ---------------------------------------------------------------------------
+// Surgery / OK (Operating Room)
+// ---------------------------------------------------------------------------
+
+export type SurgeryStatus =
+  | "surgery_requested"
+  | "surgery_scheduled"
+  | "ready_for_surgery"
+  | "intra_operative"
+  | "surgery_completed"
+  | "post_operative"
+
+export interface SurgeryRequest {
+  id: string
+  patient_id: string
+  encounter_id: string
+  episode_of_care_id?: string
+  requested_by: string
+  surgery_type: string
+  indication: string
+  anesthesia_type?: string
+  status: SurgeryStatus
+  scheduled_date?: string
+  ok_location_id?: string
+  surgeon_id?: string
+  anesthesiologist_id?: string
+  pre_op_assessment?: string
+  clearance_status?: string
+  surgery_start_at?: string
+  surgery_end_at?: string
+  intra_op_notes?: string
+  post_op_notes?: string
+  pacu_notes?: string
+  pacu_discharge_at?: string
+  needs_inpatient_after: boolean
+  ss_procedure_id?: string
+  ss_sync_status: string
+  created_at: string
+  updated_at: string
+
+  // Joined shapes for UI
+  patients?: Pick<Patient, "id" | "full_name" | "medical_record_no" | "gender" | "date_of_birth" | "phone">
+  doctor?: Pick<Practitioner, "id" | "full_name" | "role">
+  surgeon?: Pick<Practitioner, "id" | "full_name" | "role">
+  anesthesiologist?: Pick<Practitioner, "id" | "full_name" | "role">
+  locations?: Pick<Location, "id" | "name" | "type" | "floor">
+}
+
+export interface SurgeryRequestInput {
+  patient_id: string
+  encounter_id: string
+  episode_of_care_id?: string
+  surgery_type: string
+  indication: string
+  anesthesia_type?: string
+  needs_inpatient_after?: boolean
+}
+

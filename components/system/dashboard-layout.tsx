@@ -83,43 +83,43 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case "owner":        return "bg-amber-600"
-      case "admin":        return "bg-blue-600"
-      case "doctor":       return "bg-green-600"
-      case "nurse":        return "bg-pink-600"
-      case "pharmacist":   return "bg-purple-600"
-      case "cashier":      return "bg-orange-600"
-      case "lab_nurse":    return "bg-cyan-600"
+      case "owner": return "bg-amber-600"
+      case "admin": return "bg-blue-600"
+      case "doctor": return "bg-green-600"
+      case "nurse": return "bg-pink-600"
+      case "pharmacist": return "bg-purple-600"
+      case "cashier": return "bg-orange-600"
+      case "lab_nurse": return "bg-cyan-600"
       case "nutritionist": return "bg-lime-600"
-      default:             return "bg-gray-600"
+      default: return "bg-gray-600"
     }
   }
 
   const getRoleInitials = (role: string) => {
     switch (role) {
-      case "owner":        return "OW"
-      case "admin":        return "AD"
-      case "doctor":       return "DR"
-      case "nurse":        return "NR"
-      case "pharmacist":   return "AP"
-      case "cashier":      return "KS"
-      case "lab_nurse":    return "LB"
+      case "owner": return "OW"
+      case "admin": return "AD"
+      case "doctor": return "DR"
+      case "nurse": return "NR"
+      case "pharmacist": return "AP"
+      case "cashier": return "KS"
+      case "lab_nurse": return "LB"
       case "nutritionist": return "GZ"
-      default:             return "US"
+      default: return "US"
     }
   }
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case "owner":        return "Owner"
-      case "admin":        return "Administrator"
-      case "doctor":       return "Dokter"
-      case "nurse":        return "Perawat"
-      case "pharmacist":   return "Apoteker"
-      case "cashier":      return "Kasir"
-      case "lab_nurse":    return "Perawat Lab"
+      case "owner": return "Owner"
+      case "admin": return "Administrator"
+      case "doctor": return "Dokter"
+      case "nurse": return "Perawat"
+      case "pharmacist": return "Apoteker"
+      case "cashier": return "Kasir"
+      case "lab_nurse": return "Perawat Lab"
       case "nutritionist": return "Ahli Gizi"
-      default:             return role
+      default: return role
     }
   }
 
@@ -139,10 +139,7 @@ export default function DashboardLayout({ children, title, role, sidebarItems }:
             </Button>
             <div className="min-w-0">
               <Link href="/" className="inline-flex items-center gap-2">
-                <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                  ♥
-                </div>
-                <span className="text-lg font-bold text-foreground">CareWell</span>
+                <span className="text-lg font-bold text-foreground">Klinik Harapan Bunda</span>
               </Link>
               <h1 className="text-sm font-medium text-foreground/60 truncate mt-2">{title}</h1>
             </div>

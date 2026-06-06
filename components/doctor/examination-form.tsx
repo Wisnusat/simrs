@@ -3,7 +3,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, getPatientHistory } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, getPatientHistory, postSurgeryRequest } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -69,6 +69,12 @@ export default function ExaminationForm({
   const [referralSpecialty, setReferralSpecialty] = useState("")
   const [referralUrgency, setReferralUrgency] = useState<"routine" | "urgent" | "emergency">("routine")
   const [referralReason, setReferralReason] = useState("")
+
+  // ── Surgery Request (OK) ──
+  const [surgeryType, setSurgeryType] = useState("")
+  const [surgeryIndication, setSurgeryIndication] = useState("")
+  const [surgeryAnesthesia, setSurgeryAnesthesia] = useState("umum")
+  const [surgeryNeedsInpatient, setSurgeryNeedsInpatient] = useState(false)
 
   // ── Inpatient Room Selection (Handled by Nurse Dashboard) ──
 
@@ -161,6 +167,12 @@ export default function ExaminationForm({
         if (!referralReason.trim()) throw new Error("Alasan klinis rujukan wajib diisi")
       }
 
+      // Validate surgery fields
+      if (careStatus === "operasi") {
+        if (!surgeryType.trim()) throw new Error("Jenis operasi wajib diisi")
+        if (!surgeryIndication.trim()) throw new Error("Indikasi operasi wajib diisi")
+      }
+
       // 1. SOAP note
       await postClinicalNote({
         encounter_id: encounterId,
@@ -226,6 +238,21 @@ export default function ExaminationForm({
         })
 
         // 5. Encounter → finished
+        await patchEncounter(encounterId, { status: "finished" } as any)
+        if (queueId) await patchQueueStatus(queueId, "done")
+
+      } else if (careStatus === "operasi") {
+        // 4. Create Surgery Request
+        await postSurgeryRequest({
+          patient_id: patient.id,
+          encounter_id: encounterId,
+          surgery_type: surgeryType,
+          indication: surgeryIndication,
+          anesthesia_type: surgeryAnesthesia,
+          needs_inpatient_after: surgeryNeedsInpatient,
+        })
+
+        // 5. Outpatient encounter completes normally after requesting surgery
         await patchEncounter(encounterId, { status: "finished" } as any)
         if (queueId) await patchQueueStatus(queueId, "done")
 
@@ -569,7 +596,7 @@ export default function ExaminationForm({
               <div className="space-y-3">
                 <h4 className="font-semibold">Status Perawatan</h4>
                 <RadioGroup value={careStatus} onValueChange={setCareStatus} className="flex gap-6">
-                  {[["rawat_jalan", "Rawat Jalan"], ["rawat_inap", "Rawat Inap"], ["rujukan", "Rujukan"]].map(([v, l]) => (
+                  {[["rawat_jalan", "Rawat Jalan"], ["rawat_inap", "Rawat Inap"], ["operasi", "Operasi (OK)"], ["rujukan", "Rujukan"]].map(([v, l]) => (
                     <div key={v} className="flex items-center space-x-2">
                       <RadioGroupItem value={v} id={v} />
                       <Label htmlFor={v}>{l}</Label>
@@ -579,6 +606,61 @@ export default function ExaminationForm({
               </div>
 
 
+
+              {careStatus === "operasi" && (
+                <div className="space-y-4 p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+                  <h4 className="font-semibold flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                    <Activity className="w-4 h-4" /> Pengaturan Permintaan Operasi (OK)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Jenis Operasi *</Label>
+                      <Input
+                        value={surgeryType}
+                        onChange={(e) => setSurgeryType(e.target.value)}
+                        placeholder="Ex: Appendectomy, Sectio Caesarea, debridement"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Indikasi Klinis *</Label>
+                      <Input
+                        value={surgeryIndication}
+                        onChange={(e) => setSurgeryIndication(e.target.value)}
+                        placeholder="Ex: Appendicitis Akut, Fetal Distress"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Jenis Anestesi</Label>
+                      <Select value={surgeryAnesthesia} onValueChange={setSurgeryAnesthesia}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="umum">Umum (General)</SelectItem>
+                          <SelectItem value="spinal">Spinal (Regional)</SelectItem>
+                          <SelectItem value="lokal">Lokal</SelectItem>
+                          <SelectItem value="regional">Regional Block</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 flex flex-col justify-end">
+                      <Label className="mb-2">Perawatan Pasca Operasi</Label>
+                      <div className="flex items-center space-x-2 h-10">
+                        <input
+                          type="checkbox"
+                          id="needsInpatient"
+                          checked={surgeryNeedsInpatient}
+                          onChange={(e) => setSurgeryNeedsInpatient(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <Label htmlFor="needsInpatient" className="font-normal cursor-pointer select-none">
+                          Butuh Rawat Inap Setelah Operasi
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {careStatus === "rujukan" && (
                 <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
@@ -737,7 +819,9 @@ export default function ExaminationForm({
           <p className="text-xs text-foreground/50">
             {careStatus === "rawat_inap"
               ? "Setelah menyimpan, pasien akan dipindahkan ke rawat inap dan invoice akan dibuat."
-              : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
+              : careStatus === "operasi"
+                ? "Setelah menyimpan, permintaan operasi akan dibuat dan pasien dapat diarahkan ke OK."
+                : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
           </p>
 
           <div className="flex gap-3 pt-2">
@@ -747,13 +831,15 @@ export default function ExaminationForm({
             <Button
               type="submit"
               disabled={loading}
-              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
+              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : careStatus === "operasi" ? "bg-red-600 hover:bg-red-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
             >
               {loading
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
                 : careStatus === "rawat_inap"
                   ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
-                  : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
+                  : careStatus === "operasi"
+                    ? <><Activity className="w-4 h-4 mr-2" />Kirim Permintaan Operasi</>
+                    : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>

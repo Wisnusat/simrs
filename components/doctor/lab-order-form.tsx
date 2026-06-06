@@ -36,7 +36,7 @@ export function LabOrderForm({
   loading,
   error,
 }: LabOrderFormProps) {
-  const [items, setItems] = useState<LabItem[]>([{ test_name: "", loinc_code: "" }])
+  const [items, setItems] = useState<LabItem[]>([{ test_name: "Darah Lengkap (Complete Blood Count)", loinc_code: "58410-2" }])
   const [localError, setLocalError] = useState("")
 
   const [services, setServices] = useState<LabService[]>([])
@@ -45,7 +45,7 @@ export function LabOrderForm({
   useEffect(() => {
     getLabServices()
       .then(setServices)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingServices(false))
   }, [])
 

@@ -41,7 +41,10 @@ import type {
   AllergyIntolerance, AllergyInput,
   NutritionOrder, NutritionOrderInput,
   Referral, ReferralInput,
-  LabService
+  LabService,
+  Practitioner,
+  SurgeryRequest,
+  SurgeryRequestInput
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -586,4 +589,44 @@ export async function postInpatientAssignment(input: {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+// ---------------------------------------------------------------------------
+// Surgery / OK (Operating Room)  /api/surgery-requests
+// ---------------------------------------------------------------------------
+
+export async function getSurgeryRequests(opts?: {
+  status?: string
+  patient_id?: string
+}): Promise<SurgeryRequest[]> {
+  return fetchJson(`/api/surgery-requests${qs(opts ?? {})}`)
+}
+
+export async function postSurgeryRequest(
+  input: SurgeryRequestInput,
+): Promise<SurgeryRequest> {
+  return fetchJson('/api/surgery-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchSurgeryRequest(
+  id: string,
+  update: Partial<SurgeryRequest>,
+): Promise<SurgeryRequest> {
+  return fetchJson(`/api/surgery-requests/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Practitioners  /api/practitioners
+// ---------------------------------------------------------------------------
+
+export async function getPractitioners(opts?: {
+  role?: string
+}): Promise<Practitioner[]> {
+  return fetchJson(`/api/practitioners${qs(opts ?? {})}`)
 }

@@ -20,6 +20,7 @@ import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
 import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
 import { announcePatient } from "@/lib/utils"
+import { SurgeryDashboard } from "@/components/nurse/surgery-dashboard"
 
 // ---------------------------------------------------------------------------
 // Sidebar
@@ -29,7 +30,8 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: Users,           label: "Antrian Pasien",   active: active === "queue",    onClick: () => set("queue") },
   { icon: UserPlus,        label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
   { icon: BedDouble,       label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
-  { icon: Activity,        label: "Riwayat",          active: active === "history",  onClick: () => set("history") },
+  { icon: Activity,        label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: Clock,           label: "Riwayat",          active: active === "history",  onClick: () => set("history") },
 ]
 
 // ---------------------------------------------------------------------------
@@ -257,6 +259,11 @@ export default function NurseDashboard() {
       {/* ── ADMISSION REQUESTS ── */}
       {view === "admissions" && (
         <AdmissionRequestsView />
+      )}
+
+      {/* ── SURGERY DASHBOARD ── */}
+      {view === "surgery" && (
+        <SurgeryDashboard />
       )}
 
       {/* ── Vital Signs Dialog ── */}

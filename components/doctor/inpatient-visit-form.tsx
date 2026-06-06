@@ -19,7 +19,7 @@ import {
   postClinicalNote, postDiagnosis, postPrescription,
   getClinicalNotesByEpisode, getVitalSigns, getMedications,
   patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
-  createEncounter, postInpatientDailyRecord,
+  createEncounter, postInpatientDailyRecord, postSurgeryRequest,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
@@ -46,6 +46,13 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   // SOAP for visit note
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
 
+  // Surgery state
+  const [surgeryType, setSurgeryType] = useState("")
+  const [surgeryIndication, setSurgeryIndication] = useState("")
+  const [surgeryAnesthesia, setSurgeryAnesthesia] = useState("umum")
+  const [surgerySuccess, setSurgerySuccess] = useState(false)
+  const [surgeryLoading, setSurgeryLoading] = useState(false)
+
   // Current encounter for today's visit
   const {
     todayRecords, createDailyRecord, actionLoading: drAction, refresh: refreshDr,
@@ -57,6 +64,40 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   })
 
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
+
+  const handleSubmitSurgery = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentEncounterId) {
+      setError("Mulai kunjungan hari ini terlebih dahulu sebelum memesan tindakan operasi.")
+      return
+    }
+    if (!surgeryType.trim() || !surgeryIndication.trim()) {
+      setError("Jenis operasi dan indikasi klinis wajib diisi")
+      return
+    }
+    setSurgeryLoading(true)
+    setError("")
+    setSurgerySuccess(false)
+    try {
+      await postSurgeryRequest({
+        patient_id: admission.patient_id,
+        encounter_id: currentEncounterId,
+        episode_of_care_id: admission.episode_of_care_id,
+        surgery_type: surgeryType,
+        indication: surgeryIndication,
+        anesthesia_type: surgeryAnesthesia,
+        needs_inpatient_after: true,
+      })
+      setSurgeryType("")
+      setSurgeryIndication("")
+      setSurgerySuccess(true)
+      setTimeout(() => setSurgerySuccess(false), 5000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSurgeryLoading(false)
+    }
+  }
 
   // Lab orders for current encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
@@ -204,9 +245,10 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
       {/* Main tabs */}
       {currentEncounterId && (
         <Tabs defaultValue="notes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="notes"><FileText className="w-4 h-4 mr-1" /> Catatan Visite</TabsTrigger>
             <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
+            <TabsTrigger value="surgery"><Activity className="w-4 h-4 mr-1" /> Operasi (OK)</TabsTrigger>
             <TabsTrigger value="discharge"><BedDouble className="w-4 h-4 mr-1" /> Pulang</TabsTrigger>
           </TabsList>
 
@@ -311,6 +353,70 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Pulangkan Pasien"}
               </Button>
             </div>
+          </TabsContent>
+
+          {/* Surgery Tab */}
+          <TabsContent value="surgery" className="space-y-4 mt-4">
+            <form onSubmit={handleSubmitSurgery} className="space-y-4 p-4 rounded-lg border bg-muted/10">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400">
+                <Activity className="w-4 h-4" /> Form Permintaan Tindakan Operasi (OK)
+              </div>
+              <p className="text-xs text-foreground/60">
+                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK. 
+                Secara default, pasien ini akan kembali dirawat di bangsal rawat inap pasca-operasi.
+              </p>
+
+              {surgerySuccess && (
+                <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300">
+                  <AlertDescription>Permintaan tindakan operasi berhasil dikirim ke antrian OK!</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Jenis Operasi *</Label>
+                  <Input
+                    value={surgeryType}
+                    onChange={(e) => setSurgeryType(e.target.value)}
+                    placeholder="Ex: Appendectomy, Sectio Caesarea, debridement"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Indikasi Klinis *</Label>
+                  <Input
+                    value={surgeryIndication}
+                    onChange={(e) => setSurgeryIndication(e.target.value)}
+                    placeholder="Ex: Appendicitis Akut, Fetal Distress"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Jenis Anestesi</Label>
+                  <Select value={surgeryAnesthesia} onValueChange={setSurgeryAnesthesia}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="umum">Umum (General)</SelectItem>
+                      <SelectItem value="spinal">Spinal (Regional)</SelectItem>
+                      <SelectItem value="lokal">Lokal</SelectItem>
+                      <SelectItem value="regional">Regional Block</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={surgeryLoading || !surgeryType.trim() || !surgeryIndication.trim()}
+                className="w-full bg-red-600 hover:bg-red-700"
+              >
+                {surgeryLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Mengirim...</>
+                ) : (
+                  <><Activity className="w-4 h-4 mr-2" />Kirim Permintaan Operasi</>
+                )}
+              </Button>
+            </form>
           </TabsContent>
         </Tabs>
       )}
