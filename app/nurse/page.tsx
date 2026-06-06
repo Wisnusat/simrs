@@ -26,19 +26,19 @@ import { SurgeryDashboard } from "@/components/nurse/surgery-dashboard"
 // Sidebar
 // ---------------------------------------------------------------------------
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",        active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: Users,           label: "Antrian Pasien",   active: active === "queue",    onClick: () => set("queue") },
-  { icon: UserPlus,        label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
-  { icon: BedDouble,       label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
-  { icon: Activity,        label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
-  { icon: Clock,           label: "Riwayat",          active: active === "history",  onClick: () => set("history") },
+  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: Users, label: "Antrian Pasien", active: active === "queue", onClick: () => set("queue") },
+  // { icon: UserPlus, label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
+  { icon: BedDouble, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
+  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: Clock, label: "Riwayat", active: active === "history", onClick: () => set("history") },
 ]
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function NurseDashboard() {
-  const [view, setView]       = useState("dashboard")
+  const [view, setView] = useState("dashboard")
   /** Entry selected for vital signs input (status: "called", encounter exists) */
   const [selected, setSelected] = useState<QueueEntry | null>(null)
   /** ID of entry currently being "called" (disables button during async ops) */
@@ -60,7 +60,7 @@ export default function NurseDashboard() {
       }
       // Announce via TTS
       announcePatient(entry.patients.full_name, entry.queue_number)
-      
+
       if (entry.status === "waiting") {
         await refresh()
       }
@@ -78,11 +78,11 @@ export default function NurseDashboard() {
       setPreparingEncounter(entry.id)
       try {
         const enc = await createEncounter({
-          patient_id:      entry.patient_id,
+          patient_id: entry.patient_id,
           poli_service_id: entry.poli_service_id,
-          appointment_id:  entry.appointment_id,
-          queue_id:        entry.id,
-          payment_type:    entry.appointments?.payment_type,
+          appointment_id: entry.appointment_id,
+          queue_id: entry.id,
+          payment_type: entry.appointments?.payment_type,
           encounter_class: "outpatient",
         })
         setSelected({ ...entry, encounter: { id: enc.id, status: "planned" } })
@@ -130,10 +130,10 @@ export default function NurseDashboard() {
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Total Pasien"         value={stats.total}              icon={Users}        colorClass="text-blue-600" />
-            <StatCard label="Menunggu"              value={stats.waiting}            icon={Clock}        colorClass="text-orange-600" />
-            <StatCard label="Tanda Vital Dicatat"  value={stats.vitalSignsRecorded} icon={CheckCircle}  colorClass="text-green-600" />
-            <StatCard label="Selesai"               value={stats.done}               icon={Activity}     colorClass="text-pink-600" />
+            <StatCard label="Total Pasien" value={stats.total} icon={Users} colorClass="text-blue-600" />
+            <StatCard label="Menunggu" value={stats.waiting} icon={Clock} colorClass="text-orange-600" />
+            <StatCard label="Tanda Vital Dicatat" value={stats.vitalSignsRecorded} icon={CheckCircle} colorClass="text-green-600" />
+            <StatCard label="Selesai" value={stats.done} icon={Activity} colorClass="text-pink-600" />
           </div>
 
           <Card>
@@ -154,6 +154,17 @@ export default function NurseDashboard() {
               {stats.waiting === 0 && (
                 <EmptyState message="Tidak ada pasien yang menunggu." icon={Users} />
               )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Form Pendaftaran</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WalkinRegistrationForm onSuccess={() => {
+                refresh()
+                // setView("queue") // Switch to queue view to see the new patient
+              }} />
             </CardContent>
           </Card>
         </div>
@@ -234,7 +245,7 @@ export default function NurseDashboard() {
       )}
 
       {/* ── WALKIN REGISTRATION ── */}
-      {view === "walkin" && (
+      {/* {view === "walkin" && (
         <div className="space-y-6">
           <PageHeader
             title="Registrasi Walk-In"
@@ -254,7 +265,7 @@ export default function NurseDashboard() {
             </CardContent>
           </Card>
         </div>
-      )}
+      )} */}
 
       {/* ── ADMISSION REQUESTS ── */}
       {view === "admissions" && (
