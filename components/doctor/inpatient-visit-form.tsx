@@ -20,6 +20,7 @@ import {
   getClinicalNotesByEpisode, getVitalSigns, getMedications,
   patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
   createEncounter, postInpatientDailyRecord, postSurgeryRequest,
+  postMedicalResume, getMedicalResume,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
@@ -27,7 +28,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { CpptForm } from "@/components/inpatient/cppt-form"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication, MedicalResume } from "@/lib/types/outpatient"
 
 interface InpatientVisitFormProps {
   admission: InpatientAdmission
@@ -42,6 +43,14 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
   const [discharging, setDischarging] = useState(false)
   const [dischargeSummary, setDischargeSummary] = useState("")
+  const [resumeSaved, setResumeSaved] = useState(false)
+  const [resume, setResume] = useState({
+    chief_complaint: "",
+    history_of_illness: "",
+    physical_examination: "",
+    summary: "",
+    follow_up_plan: "",
+  })
 
   // SOAP for visit note
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
@@ -112,13 +121,27 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
       .catch(() => setPreviousNotes([]))
   }, [admission.episode_of_care_id])
 
-  // Load vitals
+  // Load vitals + existing resume
   useEffect(() => {
-    if (currentEncounterId) {
-      getVitalSigns(currentEncounterId)
-        .then((vs) => setLatestVitals(vs[0] ?? null))
-        .catch(() => {})
-    }
+    if (!currentEncounterId) return
+    getVitalSigns(currentEncounterId)
+      .then((vs) => setLatestVitals(vs[0] ?? null))
+      .catch(() => {})
+    getMedicalResume({ encounter_id: currentEncounterId })
+      .then((data) => {
+        const r = data[0]
+        if (r) {
+          setResume({
+            chief_complaint: r.chief_complaint ?? "",
+            history_of_illness: r.history_of_illness ?? "",
+            physical_examination: r.physical_examination ?? "",
+            summary: r.summary ?? "",
+            follow_up_plan: r.follow_up_plan ?? "",
+          })
+          setResumeSaved(true)
+        }
+      })
+      .catch(() => {})
   }, [currentEncounterId])
 
   const daysSince = Math.floor(
@@ -329,20 +352,75 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             )}
           </TabsContent>
 
-          {/* Discharge Tab */}
-          <TabsContent value="discharge" className="space-y-4 mt-4">
+          {/* Discharge / Resume Tab */}
+          <TabsContent value="discharge" className="space-y-5 mt-4">
+            {/* Resume Medis */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> Resume Medis Rawat Inap
+                </h4>
+                {resumeSaved && <Badge variant="outline" className="text-xs text-green-600 border-green-400">Tersimpan</Badge>}
+              </div>
+
+              {[
+                { key: "chief_complaint",    label: "Keluhan Utama Masuk",         rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
+                { key: "history_of_illness", label: "Riwayat Penyakit",            rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
+                { key: "physical_examination", label: "Pemeriksaan Fisik",         rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
+                { key: "summary",            label: "Ringkasan Perawatan",         rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
+                { key: "follow_up_plan",     label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
+              ].map(({ key, label, rows, placeholder }) => (
+                <div key={key} className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">{label}</Label>
+                  <Textarea
+                    rows={rows}
+                    value={resume[key as keyof typeof resume]}
+                    onChange={(e) => setResume((p) => ({ ...p, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                disabled={loading}
+                variant="outline"
+                className="w-full"
+                onClick={async () => {
+                  if (!currentEncounterId) return
+                  setLoading(true)
+                  setError("")
+                  try {
+                    await postMedicalResume({
+                      encounter_id: currentEncounterId,
+                      patient_id: admission.patient_id,
+                      ...resume,
+                    })
+                    setResumeSaved(true)
+                  } catch (err: any) {
+                    setError(err.message)
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan Resume Medis"}
+              </Button>
+            </div>
+
+            <Separator />
+
+            {/* Discharge action */}
             <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 space-y-3">
-              <h4 className="font-semibold text-sm">Proses Kepulangan Pasien</h4>
-              <p className="text-xs text-foreground/60">
-                Isi ringkasan pulang untuk memproses discharge pasien. Invoice akan difinalisasi otomatis.
-              </p>
+              <h4 className="font-semibold text-sm">Proses Kepulangan</h4>
+              <p className="text-xs text-foreground/60">Isi kondisi pulang lalu pulangkan pasien. Pastikan resume medis sudah disimpan.</p>
               <div className="space-y-2">
-                <Label>Ringkasan Pulang *</Label>
+                <Label>Kondisi Saat Pulang *</Label>
                 <Textarea
-                  rows={4}
+                  rows={2}
                   value={dischargeSummary}
                   onChange={(e) => setDischargeSummary(e.target.value)}
-                  placeholder="Ringkasan perawatan, kondisi pulang, dan instruksi kontrol..."
+                  placeholder="Contoh: Sembuh / Membaik / Pulang atas permintaan sendiri / Dirujuk..."
                 />
               </div>
               <Button
