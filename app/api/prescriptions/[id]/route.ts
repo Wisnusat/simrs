@@ -102,12 +102,12 @@ export async function PATCH(
 
   // ── Dispense — FEFO stock deduction ────────────────────────────────────
   if (body.dispense) {
-    await supabase
+    const { error: statusErr } = await supabase
       .from('prescriptions')
       .update({ status: 'completed' })
       .eq('id', id)
-      .select()
-      .single()
+
+    if (statusErr) return apiResponse.serverError(`Gagal mengubah status resep: ${statusErr.message}`)
 
     const { data: rx, error: rxErr } = await supabase
       .from('prescriptions')
@@ -172,11 +172,6 @@ export async function PATCH(
         .update({ is_dispensed: true })
         .eq('id', item.id)
     }
-
-    await supabase
-      .from('prescriptions')
-      .update({ status: 'completed' })
-      .eq('id', id)
 
     return apiResponse.ok({ dispensed: dispensedCount, errors })
   }

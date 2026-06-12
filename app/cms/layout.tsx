@@ -80,6 +80,13 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
             onClick: () => navigateTo('/cms/landing-page'),
             active: pathname === '/cms/landing-page',
         },
+        {
+            icon: FlaskConical,
+            label: 'Layanan Lab',
+            href: '/cms/lab-services',
+            onClick: () => navigateTo('/cms/lab-services'),
+            active: pathname === '/cms/lab-services',
+        },
         // Owner-only items
         ...(isOwner ? [
             {

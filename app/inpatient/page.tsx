@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
-  LayoutDashboard, BedDouble, ClipboardList, FlaskConical,
-  Activity, Heart, Thermometer, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText,
+  LayoutDashboard, BedDouble, ClipboardList,
+  Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
@@ -45,7 +45,7 @@ export default function InpatientNurseDashboard() {
   const [labAdm, setLabAdm] = useState<InpatientAdmission | null>(null)
   const [allergyAdm, setAllergyAdm] = useState<InpatientAdmission | null>(null)
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
-  const [patientVitals, setPatientVitals] = useState<VitalSignsType | null>(null)
+  const [patientVitals, setPatientVitals] = useState<VitalSignsType[]>([])
 
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
 
@@ -77,8 +77,8 @@ export default function InpatientNurseDashboard() {
   useEffect(() => {
     if (!currentEncounterId) return
     getVitalSigns(currentEncounterId)
-      .then((vs) => setPatientVitals(vs[0] ?? null))
-      .catch(() => setPatientVitals(null))
+      .then((vs) => setPatientVitals(vs))
+      .catch(() => setPatientVitals([]))
   }, [currentEncounterId])
 
   // Handle opening CPPT for a patient
@@ -196,40 +196,6 @@ export default function InpatientNurseDashboard() {
             <StatusBadge status={cpptAdm.status} className="ml-auto" />
           </div>
 
-          {/* Vitals strip */}
-          {patientVitals && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-              {patientVitals.systolic_bp && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Heart className="w-4 h-4 text-red-500 shrink-0" />
-                  <span className="text-foreground/60">TD:</span>
-                  <span className="font-medium">{patientVitals.systolic_bp}/{patientVitals.diastolic_bp} mmHg</span>
-                </div>
-              )}
-              {patientVitals.heart_rate && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Activity className="w-4 h-4 text-pink-500 shrink-0" />
-                  <span className="text-foreground/60">Nadi:</span>
-                  <span className="font-medium">{patientVitals.heart_rate} bpm</span>
-                </div>
-              )}
-              {patientVitals.temperature && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Thermometer className="w-4 h-4 text-orange-500 shrink-0" />
-                  <span className="text-foreground/60">Suhu:</span>
-                  <span className="font-medium">{patientVitals.temperature}°C</span>
-                </div>
-              )}
-              {patientVitals.oxygen_saturation && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Activity className="w-4 h-4 text-blue-500 shrink-0" />
-                  <span className="text-foreground/60">SpO₂:</span>
-                  <span className="font-medium">{patientVitals.oxygen_saturation}%</span>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Action buttons */}
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -240,14 +206,14 @@ export default function InpatientNurseDashboard() {
             >
               <Activity className="w-4 h-4 mr-1" /> Input Tanda Vital
             </Button>
-            <Button
+            {/* <Button
               size="sm"
               variant="outline"
               onClick={() => setLabAdm(cpptAdm)}
               disabled={!currentEncounterId}
             >
               <FlaskConical className="w-4 h-4 mr-1" /> Permintaan Lab
-            </Button>
+            </Button> */}
             <Button
               size="sm"
               variant="outline"
@@ -355,13 +321,14 @@ export default function InpatientNurseDashboard() {
             error={null}
             previousNotes={previousNotes}
             todayShiftExists={todayRecords.length > 0}
+            vitalSigns={patientVitals}
           />
         </div>
       )}
 
       {/* ── Vital Signs Dialog ── */}
       <Dialog open={!!vitalsAdm} onOpenChange={(o) => { if (!o) setVitalsAdm(null) }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Input Tanda Vital</DialogTitle>
           {vitalsAdm && currentEncounterId && (
             <VitalSignsForm
@@ -378,7 +345,7 @@ export default function InpatientNurseDashboard() {
       </Dialog>
 
       {/* ── Lab Order Dialog ── */}
-      <Dialog open={!!labAdm} onOpenChange={(o) => { if (!o) setLabAdm(null) }}>
+      {/* <Dialog open={!!labAdm} onOpenChange={(o) => { if (!o) setLabAdm(null) }}>
         <DialogContent className="max-w-2xl">
           <DialogTitle>Permintaan Pemeriksaan Lab</DialogTitle>
           {labAdm && currentEncounterId && (
@@ -392,7 +359,7 @@ export default function InpatientNurseDashboard() {
             />
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
 
       {/* ── Allergy Dialog ── */}
       <Dialog open={!!allergyAdm} onOpenChange={(o) => { if (!o) setAllergyAdm(null) }}>

@@ -10,8 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Clock, User } from "lucide-react"
-import type { ClinicalNote, InpatientShift } from "@/lib/types/outpatient"
+import { Loader2, Clock, User, Heart, Activity, Thermometer } from "lucide-react"
+import type { ClinicalNote, InpatientShift, VitalSigns as VitalSignsType } from "@/lib/types/outpatient"
 
 interface CpptFormProps {
   encounterId: string | null
@@ -29,6 +29,7 @@ interface CpptFormProps {
   error: string | null
   previousNotes: ClinicalNote[]
   todayShiftExists: boolean
+  vitalSigns?: VitalSignsType[]
 }
 
 const SHIFT_LABELS: Record<InpatientShift, string> = {
@@ -77,6 +78,7 @@ export function CpptForm({
   error,
   previousNotes,
   todayShiftExists,
+  vitalSigns = [],
 }: CpptFormProps) {
   const [soap, setSoap] = useState({
     subjective: "",
@@ -172,6 +174,60 @@ export function CpptForm({
             {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan CPPT Keperawatan"}
           </Button>
         </form>
+      )}
+
+      {/* Vital Signs History */}
+      {vitalSigns.length > 0 && (
+        <div className="space-y-3">
+          <Separator />
+          <h4 className="font-semibold text-sm">Riwayat Tanda Vital (Shift Ini)</h4>
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {vitalSigns.map((vs) => (
+              <div key={vs.id} className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3 rounded-lg border bg-blue-50/40 dark:bg-blue-950/20 text-sm">
+                <div className="col-span-2 md:col-span-4 flex items-center gap-1 text-xs text-foreground/50 mb-1">
+                  <Clock className="w-3 h-3" />
+                  {new Date(vs.recorded_at).toLocaleString("id-ID", {
+                    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                  })}
+                </div>
+                {vs.systolic_bp && (
+                  <div className="flex items-center gap-1.5">
+                    <Heart className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <span className="text-foreground/60 text-xs">TD:</span>
+                    <span className="font-medium text-xs">{vs.systolic_bp}/{vs.diastolic_bp}</span>
+                  </div>
+                )}
+                {vs.heart_rate && (
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                    <span className="text-foreground/60 text-xs">Nadi:</span>
+                    <span className="font-medium text-xs">{vs.heart_rate} bpm</span>
+                  </div>
+                )}
+                {vs.temperature && (
+                  <div className="flex items-center gap-1.5">
+                    <Thermometer className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                    <span className="text-foreground/60 text-xs">Suhu:</span>
+                    <span className="font-medium text-xs">{vs.temperature}°C</span>
+                  </div>
+                )}
+                {vs.oxygen_saturation && (
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span className="text-foreground/60 text-xs">SpO₂:</span>
+                    <span className="font-medium text-xs">{vs.oxygen_saturation}%</span>
+                  </div>
+                )}
+                {vs.pain_scale != null && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-foreground/60 text-xs">Nyeri:</span>
+                    <span className="font-medium text-xs">{vs.pain_scale}/10</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Previous CPPT Timeline */}

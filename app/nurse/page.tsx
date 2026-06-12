@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
-import { createEncounter, patchQueueStatus } from "@/lib/api/client"
+import { createEncounter, patchQueueStatus, postAllergy } from "@/lib/api/client"
 import { QueueCard } from "@/components/nurse/queue-card"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
 import { StatCard } from "@/components/shared/stat-card"
@@ -20,7 +20,7 @@ import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
 import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
 import { announcePatient } from "@/lib/utils"
-import { SurgeryDashboard } from "@/components/nurse/surgery-dashboard"
+import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
 
 // ---------------------------------------------------------------------------
 // Sidebar
@@ -99,9 +99,19 @@ export default function NurseDashboard() {
 
   // ── Vital signs submitted ─────────────────────────────────────────────────
   const handleVitalSignsSubmit = useCallback(
-    async (input: Parameters<typeof submit>[0]) => {
+    async (input: Parameters<typeof submit>[0], allergyInput?: any) => {
       const ok = await submit(input)
-      if (ok) { setSelected(null); refresh() }
+      if (ok) {
+        if (allergyInput) {
+          try {
+            await postAllergy(allergyInput)
+          } catch (err) {
+            console.error("Gagal menyimpan data alergi:", err)
+          }
+        }
+        setSelected(null)
+        refresh()
+      }
       return ok
     },
     [submit, refresh],
@@ -274,12 +284,12 @@ export default function NurseDashboard() {
 
       {/* ── SURGERY DASHBOARD ── */}
       {view === "surgery" && (
-        <SurgeryDashboard />
+        <SurgeryDashboard role="nurse" />
       )}
 
       {/* ── Vital Signs Dialog ── */}
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Input Tanda Vital</DialogTitle>
           {selected && encounterId ? (
             <VitalSignsForm

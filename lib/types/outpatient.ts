@@ -679,3 +679,18 @@ export interface SurgeryRequestInput {
   needs_inpatient_after?: boolean
 }
 
+// ---------------------------------------------------------------------------
+// CMS — Lab Services
+// ---------------------------------------------------------------------------
+
+export interface MasterLabService {
+  id: string
+  name: string
+  category: string | null
+  loinc_code: string
+  loinc_display: string | null
+  specimen_type: string | null
+  unit_local: string | null
+  result_type: string | null
+}
+

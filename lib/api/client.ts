@@ -42,6 +42,7 @@ import type {
   NutritionOrder, NutritionOrderInput,
   Referral, ReferralInput,
   LabService,
+  MasterLabService,
   Practitioner,
   SurgeryRequest,
   SurgeryRequestInput
@@ -132,6 +133,7 @@ export async function getEncounters(opts?: {
   status?: string
   today?: boolean
   date?: string
+  episode_of_care_id?: string
 }): Promise<Encounter[]> {
   const { today, ...rest } = opts ?? {}
   return fetchJson(`/api/encounters${qs({ ...rest, today: today ? '1' : undefined })}`)
@@ -188,6 +190,17 @@ export async function postDiagnosis(input: DiagnosisInput): Promise<Diagnosis> {
 export async function getDiagnoses(encounterId: string): Promise<Diagnosis[]> {
   return fetchJson(`/api/diagnoses${qs({ encounter_id: encounterId })}`)
 }
+
+export interface ICD10Record {
+  code: string
+  name_en: string
+  name_id?: string
+}
+
+export async function searchICD10(search: string): Promise<ICD10Record[]> {
+  return fetchJson(`/api/icd10${qs({ search })}`)
+}
+
 
 // ---------------------------------------------------------------------------
 // Procedures  /api/procedures
@@ -629,4 +642,51 @@ export async function getPractitioners(opts?: {
   role?: string
 }): Promise<Practitioner[]> {
   return fetchJson(`/api/practitioners${qs(opts ?? {})}`)
+}
+
+// ---------------------------------------------------------------------------
+// CMS — Lab Services  /api/cms/lab-services
+// ---------------------------------------------------------------------------
+
+export async function getCmsLabServices(): Promise<LabService[]> {
+  return fetchJson('/api/cms/lab-services')
+}
+
+export async function postCmsLabService(masterId: string): Promise<LabService> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'POST',
+    body: JSON.stringify({ master_id: masterId }),
+  })
+}
+
+export async function deleteCmsLabService(id: string): Promise<{ deleted: boolean }> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// CMS — Master Lab Services  /api/cms/master-lab-services
+// ---------------------------------------------------------------------------
+
+export interface MasterLabServiceListResult {
+  data: MasterLabService[]
+  total: number
+  page: number
+  limit: number
+}
+
+export async function getMasterLabServices(opts?: {
+  q?: string
+  category?: string
+  page?: number
+  limit?: number
+}): Promise<MasterLabServiceListResult> {
+  const res = await fetch(`/api/cms/master-lab-services${qs(opts ?? {})}`, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error ?? `Request failed: ${res.status}`)
+  return { data: json.data, total: json.meta?.total ?? 0, page: json.meta?.page ?? 1, limit: json.meta?.limit ?? 20 }
 }

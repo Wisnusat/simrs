@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       vital_signs ( id, systolic_bp, diastolic_bp, heart_rate, temperature, oxygen_saturation, weight_kg, recorded_at ),
       lab_orders ( id, status, order_date, lab_order_items(*) ),
       clinical_notes ( id, subjective, objective, assessment, plan, note_date, writer_role, practitioners:written_by(full_name, role) ),
-      diagnoses ( id, icd10_code, icd10_display, diagnosis_type, noted_at )
+      diagnoses ( id, icd10_code, icd10_display, diagnosis_type, created_at )
     `)
     .eq('organization_id', practitioner.organization_id)
     .order('started_at', { ascending: false })

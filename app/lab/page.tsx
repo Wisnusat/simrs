@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Activity, CheckCircle, Clock, FlaskConical, LayoutDashboard, MapPin, TestTube, Mic } from "lucide-react"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { getEncounters, patchEncounter } from "@/lib/api/client"
-import { ResultEntryForm } from "@/components/lab/result-entry-form"
+import { ResultEntryForm, type LabParam } from "@/components/lab/result-entry-form"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -294,25 +294,55 @@ export default function LabDashboard() {
                   </div>
                   <StatusBadge status={lo.status} />
                 </div>
-                {lo.lab_order_items.map((item) => (
-                  <div key={item.id} className="grid grid-cols-4 gap-2 text-sm p-2 rounded bg-muted/30">
-                    <p className="font-medium">{item.test_name}</p>
-                    <p className="text-center">{item.result_value ?? "—"} {item.result_unit ?? ""}</p>
-                    <p className="text-center text-foreground/60">{item.reference_range ?? "—"}</p>
-                    <div className="text-right">
-                      <Badge variant={
-                        item.result_status === "critical"       ? "destructive"
-                        : item.result_status?.startsWith("abnormal") ? "secondary"
-                        : "default"
-                      }>
-                        {item.result_status === "normal"         ? "Normal"
-                          : item.result_status === "abnormal_low"  ? "Di Bawah Normal"
-                          : item.result_status === "abnormal_high" ? "Di Atas Normal"
-                          : item.result_status === "critical"      ? "Kritis" : "—"}
-                      </Badge>
+                {lo.lab_order_items.map((item) => {
+                  let parsed: LabParam[] | null = null
+                  if (item.result_value) {
+                    try {
+                      const p = JSON.parse(item.result_value)
+                      if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
+                    } catch {}
+                  }
+                  return (
+                    <div key={item.id} className="p-2 rounded bg-muted/30 space-y-1.5">
+                      <p className="text-sm font-semibold">{item.test_name}</p>
+                      {parsed ? (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-foreground/50">
+                              <th className="text-left font-normal pb-1">Parameter</th>
+                              <th className="text-left font-normal pb-1">Nilai</th>
+                              <th className="text-left font-normal pb-1">Rujukan</th>
+                              <th className="text-right font-normal pb-1">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsed.map((p, i) => (
+                              <tr key={i} className="border-t border-border/30">
+                                <td className="py-0.5 font-medium">{p.label || "—"}</td>
+                                <td className="py-0.5">{p.value || "—"} {p.unit}</td>
+                                <td className="py-0.5 text-foreground/60">{p.reference_range || "—"}</td>
+                                <td className="py-0.5 text-right">
+                                  <Badge variant={
+                                    p.result_status === "critical" ? "destructive"
+                                    : p.result_status?.startsWith("abnormal") ? "secondary"
+                                    : "default"
+                                  } className="text-xs">
+                                    {p.result_status === "normal" ? "Normal"
+                                      : p.result_status === "abnormal_low" ? "↓ Rendah"
+                                      : p.result_status === "abnormal_high" ? "↑ Tinggi"
+                                      : p.result_status === "critical" ? "Kritis" : "—"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="text-sm text-foreground/60">{item.result_value ?? "—"}</p>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </CardContent>
             </Card>
           ))}

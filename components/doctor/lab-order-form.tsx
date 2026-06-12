@@ -80,9 +80,9 @@ export function LabOrderForm({
 
       <div className="space-y-3">
         {items.map((item, idx) => (
-          <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
-            <div className="space-y-1.5">
-              {idx === 0 && <Label>Pilih Pemeriksaan</Label>}
+          <div key={idx} className="flex flex-row items-end">
+            <div className="flex-1">
+              {idx === 0 && <Label className="mb-2">Pilih Pemeriksaan</Label>}
               {loadingServices ? (
                 <div className="h-10 flex items-center gap-2 text-sm text-foreground/50 border rounded-md px-3 bg-muted/50">
                   <Loader2 className="w-4 h-4 animate-spin" /> Memuat...
@@ -99,7 +99,7 @@ export function LabOrderForm({
                   <SelectTrigger className="w-full h-10">
                     <SelectValue placeholder="Pilih layanan lab" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="w-full">
                     {services.map((svc) => (
                       <SelectItem key={svc.id} value={`${svc.name}|${svc.loinc_code || ""}`}>
                         {svc.name} {svc.loinc_code ? `(${svc.loinc_code})` : ""}
@@ -109,7 +109,7 @@ export function LabOrderForm({
                 </Select>
               )}
             </div>
-            <div className="space-y-1.5">
+            {/* <div className="space-y-1.5">
               {idx === 0 && <Label>Kode LOINC</Label>}
               <Input
                 value={item.loinc_code}
@@ -117,7 +117,7 @@ export function LabOrderForm({
                 className="bg-muted text-foreground/70"
                 placeholder="Otomatis"
               />
-            </div>
+            </div> */}
             <Button
               type="button"
               variant="ghost"

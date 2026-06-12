@@ -22,23 +22,25 @@ import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { InpatientPatientList } from "@/components/inpatient/patient-list"
 import { InpatientVisitForm } from "@/components/doctor/inpatient-visit-form"
 import type { QueueEntry, InpatientAdmission } from "@/lib/types/outpatient"
+import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",              active: active === "dashboard",     onClick: () => set("dashboard") },
-  { icon: Users,           label: "Pasien Hari Ini",        active: active === "patients",      onClick: () => set("patients") },
-  { icon: History,         label: "Riwayat Pemeriksaan",    active: active === "history",       onClick: () => set("history") },
+  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: Users, label: "Pasien Hari Ini", active: active === "patients", onClick: () => set("patients") },
   // { icon: FlaskConical,    label: "Permintaan Lab",         active: active === "lab",           onClick: () => set("lab") },
-  { icon: Pill,            label: "Resep Obat",             active: active === "prescriptions", onClick: () => set("prescriptions") },
-  { icon: BedDouble,       label: "Rawat Inap",             active: active === "inpatient",     onClick: () => set("inpatient") },
+  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: BedDouble, label: "Rawat Inap", active: active === "inpatient", onClick: () => set("inpatient") },
+  { icon: Pill, label: "Resep Obat", active: active === "prescriptions", onClick: () => set("prescriptions") },
+  { icon: History, label: "Riwayat Pemeriksaan", active: active === "history", onClick: () => set("history") },
 ]
 
 export default function DoctorDashboard() {
   const [view, setView] = useState("dashboard")
   const [examEntry, setExamEntry] = useState<QueueEntry | null>(null)
-  const [labEntry,  setLabEntry]  = useState<QueueEntry | null>(null)
+  const [labEntry, setLabEntry] = useState<QueueEntry | null>(null)
   const [inpatientVisit, setInpatientVisit] = useState<InpatientAdmission | null>(null)
 
-  const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({  poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b" })
+  const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({ poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b" })
   const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ today: true })
   const { data: prescriptions, loading: rxLoading, refresh: refreshRx, stats: rxStats } = usePrescriptions({ today: true })
   const { data: inpatientAdmissions, loading: ipLoading, refresh: refreshIp, stats: ipStats } = useAdmissions()
@@ -96,9 +98,9 @@ export default function DoctorDashboard() {
           <PageHeader title="Dashboard Dokter" description="Kelola pemeriksaan pasien rawat jalan"
             onRefresh={() => { refreshQueue(); refreshRx() }} isRefreshing={qLoading} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <StatCard label="Pasien Siap Diperiksa" value={readyPatients.length}    icon={Users}         colorClass="text-blue-600" />
+            <StatCard label="Pasien Siap Diperiksa" value={readyPatients.length} icon={Users} colorClass="text-blue-600" />
             {/* <StatCard label="Sedang Diperiksa"      value={qStats.inService}        icon={ClipboardList} colorClass="text-orange-600" /> */}
-            <StatCard label="Resep Menunggu"        value={rxStats.active}           icon={Pill}          colorClass="text-purple-600" />
+            <StatCard label="Resep Menunggu" value={rxStats.active} icon={Pill} colorClass="text-purple-600" />
           </div>
           <div className="grid md:grid-cols-2 gap-6">
             <Card>
@@ -110,7 +112,7 @@ export default function DoctorDashboard() {
                       <p className="font-medium">{q.patients.full_name}</p>
                       <p className="text-sm text-foreground/60">{q.appointments?.chief_complaint ?? "—"}</p>
                       {q.encounter?.status === "waiting_lab" && (
-                        <Badge variant="secondary" className="mt-1 text-xs">🔬 Kembali dari Lab</Badge>
+                        <Badge variant="secondary" className="mt-1 text-xs">🔬 Sedang di Lab</Badge>
                       )}
                     </div>
                     <StatusBadge status={q.encounter?.status ?? q.status} />
@@ -152,9 +154,8 @@ export default function DoctorDashboard() {
                     <p className="text-sm text-foreground/60">No. MR: {entry.patients.medical_record_no ?? "—"}</p>
                     <p className="text-sm text-foreground/60">Keluhan: {entry.appointments?.chief_complaint ?? "—"}</p>
                     <VitalChip entry={entry} />
-                    {/* Lab done badge when returning from lab */}
                     {entry.encounter?.status === "waiting_lab" && (
-                      <Badge variant="outline" className="mt-1 text-xs border-green-500 text-green-600">🔬 Lab Selesai</Badge>
+                      <Badge variant="outline" className="mt-1 text-xs border-orange-400 text-orange-600">🔬 Menunggu Hasil Lab</Badge>
                     )}
                   </div>
                 </div>
@@ -162,9 +163,15 @@ export default function DoctorDashboard() {
                   <StatusBadge status={entry.encounter?.status ?? entry.status} />
                   {entry.encounter?.id && (
                     <>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => {setExamEntry(entry); setView("examination")}}>
-                        {entry.encounter?.status === "waiting_lab" ? "Lihat Hasil Lab" : "Mulai Periksa"}
-                      </Button>
+                      {entry.encounter?.status === "waiting_lab" ? (
+                        <Button size="sm" variant="outline" disabled className="text-orange-600 border-orange-400">
+                          🔬 Sedang di Lab
+                        </Button>
+                      ) : (
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setExamEntry(entry); setView("examination") }}>
+                          Mulai Periksa
+                        </Button>
+                      )}
                       {entry.encounter?.status !== "waiting_lab" && (
                         <Button size="sm" variant="outline" onClick={() => setLabEntry(entry)}>
                           <FlaskConical className="w-4 h-4 mr-1" />Lab
@@ -178,6 +185,11 @@ export default function DoctorDashboard() {
             {readyPatients.length === 0 && !qLoading && <EmptyState message="Belum ada pasien siap diperiksa." icon={Users} />}
           </div>
         </div>
+      )}
+
+      {/* ── SURGERY DASHBOARD ── */}
+      {view === "surgery" && (
+        <SurgeryDashboard role="doctor" />
       )}
 
       {/* HISTORY */}
@@ -266,15 +278,15 @@ export default function DoctorDashboard() {
       )}
 
       {view === "examination" && examEntry?.encounter?.id && (
-          <ExaminationForm
-            patient={{ id: examEntry.patients.id, full_name: examEntry.patients.full_name, medical_record_no: examEntry.patients.medical_record_no }}
-            encounterId={examEntry.encounter.id}
-            queueId={examEntry.id}
-            chiefComplaint={examEntry.appointments?.chief_complaint}
-            queueNumber={examEntry.queue_number}
-            onSave={handleExamSave}
-            onCancel={() => setExamEntry(null)}
-          />
+        <ExaminationForm
+          patient={{ id: examEntry.patients.id, full_name: examEntry.patients.full_name, medical_record_no: examEntry.patients.medical_record_no }}
+          encounterId={examEntry.encounter.id}
+          queueId={examEntry.id}
+          chiefComplaint={examEntry.appointments?.chief_complaint}
+          queueNumber={examEntry.queue_number}
+          onSave={handleExamSave}
+          onCancel={() => { setExamEntry(null); setView("patients") }}
+        />
       )}
 
       {/* INPATIENT */}
