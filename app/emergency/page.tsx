@@ -173,6 +173,50 @@ export default function EmergencyDashboard() {
         </div>
       )}
 
+      {/* ── PATIENT LIST ── */}
+      {view === "patients" && (
+        <div className="space-y-6">
+          <PageHeader
+            title="Daftar Pasien IGD"
+            description="Semua pasien — aktif dan selesai"
+            onRefresh={refreshEnc}
+            isRefreshing={encLoading}
+          />
+          {encLoading ? (
+            <p className="text-sm text-center py-8 text-muted-foreground">Memuat pasien...</p>
+          ) : encounters.length === 0 ? (
+            <p className="text-sm text-center py-8 text-muted-foreground">Belum ada pasien IGD.</p>
+          ) : (
+            <div className="grid gap-3">
+              {encounters.map((enc) => (
+                <button
+                  key={enc.id}
+                  className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between text-left hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/10 transition-colors"
+                  onClick={() => handleSelectPatient(enc)}
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold">{enc.patients.full_name}</h4>
+                      {enc.is_critical && <Badge variant="destructive" className="h-5 text-[10px]">KRITIS</Badge>}
+                    </div>
+                    <p className="text-xs text-foreground/60 mb-1">MR: {enc.patients.medical_record_no} · Masuk: {new Date(enc.created_at).toLocaleString("id-ID")}</p>
+                    {enc.triage_complaint && (
+                      <p className="text-sm text-foreground/80 line-clamp-1">Keluhan: {enc.triage_complaint}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-2 mt-2 md:mt-0 min-w-[120px]">
+                    {getTriageBadge(enc.triage_category as string)}
+                    <Badge variant="outline" className="text-[10px] capitalize">
+                      {enc.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── PATIENT DETAIL ── */}
       {view === "detail" && selectedAdm && (
         <div className="space-y-6 max-w-5xl mx-auto">
