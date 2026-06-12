@@ -22,6 +22,8 @@ export function EmergencyTriageForm({ encounter, onSuccess }: EmergencyTriageFor
   const [triageComplaint, setTriageComplaint] = useState(encounter.triage_complaint || "")
   const [isCritical, setIsCritical] = useState(encounter.is_critical)
 
+  const [vitals, setVitals] = useState({ systolic_bp: "", heart_rate: "", temperature: "", oxygen_saturation: "" })
+
   const [hasAllergy, setHasAllergy] = useState(false)
   const [allergyForm, setAllergyForm] = useState({
     substance_display: "",
@@ -41,6 +43,10 @@ export function EmergencyTriageForm({ encounter, onSuccess }: EmergencyTriageFor
       triage_category: triageCategory,
       triage_complaint: triageComplaint,
       is_critical: isCritical,
+      systolic_bp: vitals.systolic_bp ? Number(vitals.systolic_bp) : undefined,
+      heart_rate: vitals.heart_rate ? Number(vitals.heart_rate) : undefined,
+      temperature: vitals.temperature ? Number(vitals.temperature) : undefined,
+      oxygen_saturation: vitals.oxygen_saturation ? Number(vitals.oxygen_saturation) : undefined,
     })
     if (!result) return
 
@@ -138,6 +144,29 @@ export function EmergencyTriageForm({ encounter, onSuccess }: EmergencyTriageFor
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </div>
+
+      {/* Vital Signs */}
+      <div className="border-t border-muted/50 pt-4">
+        <Label className="text-sm font-semibold mb-3 block">Tanda Vital (opsional)</Label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { key: "systolic_bp",       label: "TD Sistolik",  unit: "mmHg", placeholder: "120" },
+            { key: "heart_rate",        label: "Nadi",         unit: "x/mnt", placeholder: "80" },
+            { key: "temperature",       label: "Suhu",         unit: "°C",   placeholder: "36.5" },
+            { key: "oxygen_saturation", label: "SpO₂",         unit: "%",    placeholder: "98" },
+          ].map((f) => (
+            <div key={f.key} className="space-y-1">
+              <Label className="text-xs text-foreground/60">{f.label} <span className="text-foreground/40">({f.unit})</span></Label>
+              <Input
+                type="number"
+                value={vitals[f.key as keyof typeof vitals]}
+                onChange={(e) => setVitals((p) => ({ ...p, [f.key]: e.target.value }))}
+                placeholder={f.placeholder}
+              />
+            </div>
+          ))}
         </div>
       </div>
 

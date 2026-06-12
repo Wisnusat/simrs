@@ -121,6 +121,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
       is_critical?: boolean
       resuscitation_notes?: string
       needs_ambulance?: boolean
+      systolic_bp?: number
+      heart_rate?: number
+      temperature?: number
+      oxygen_saturation?: number
     }
   ) => {
     setActionLoading(true)

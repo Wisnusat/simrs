@@ -17,6 +17,7 @@ import { useEmergency } from "@/hooks/emergency/use-emergency"
 import { EmergencyIntakeForm } from "@/components/emergency/emergency-intake-form"
 import { EmergencyTriageForm } from "@/components/emergency/emergency-triage-form"
 import { EmergencyDispositionForm } from "@/components/emergency/emergency-disposition-form"
+import { EmergencyDoctorForm } from "@/components/emergency/emergency-doctor-form"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { StatCard } from "@/components/shared/stat-card"
@@ -38,6 +39,13 @@ export default function EmergencyDashboard() {
   const [view, setView] = useState("dashboard")
   const [selectedAdm, setSelectedAdm] = useState<EmergencyEncounter | null>(null)
   const [showIntake, setShowIntake] = useState(false)
+  const [currentRole, setCurrentRole] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => {
+      if (d.success) setCurrentRole(d.data.role)
+    }).catch(() => {})
+  }, [])
 
   // CPPT state
   const [cpptNotes, setCpptNotes] = useState<ClinicalNote[]>([])
@@ -241,10 +249,13 @@ export default function EmergencyDashboard() {
           </div>
 
           <Tabs defaultValue="triage" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className={`grid w-full ${currentRole === "doctor" ? "grid-cols-5" : "grid-cols-4"}`}>
               <TabsTrigger value="triage"><Stethoscope className="w-4 h-4 mr-1" /> Triage</TabsTrigger>
               <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
               <TabsTrigger value="cppt"><Activity className="w-4 h-4 mr-1" /> Catatan</TabsTrigger>
+              {currentRole === "doctor" && (
+                <TabsTrigger value="dokter"><Stethoscope className="w-4 h-4 mr-1" /> Pemeriksaan</TabsTrigger>
+              )}
               <TabsTrigger value="disposition"><ArrowLeft className="w-4 h-4 mr-1 rotate-[135deg]" /> Disposisi</TabsTrigger>
             </TabsList>
 
@@ -345,6 +356,16 @@ export default function EmergencyDashboard() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {currentRole === "doctor" && (
+              <TabsContent value="dokter" className="mt-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <EmergencyDoctorForm encounter={selectedAdm} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
 
             <TabsContent value="disposition" className="mt-4">
               <Card>

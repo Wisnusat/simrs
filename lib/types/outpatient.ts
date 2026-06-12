@@ -395,6 +395,7 @@ export interface Invoice {
   patients: Pick<Patient, "full_name" | "medical_record_no" | "phone">
   encounters?: {
     poli_service_id: string
+    encounter_class?: string
     poli_services: Pick<PoliService, "name">
     appointment_id?: string
     appointments?: Pick<AppointmentRef, "booking_code" | "chief_complaint">
@@ -692,5 +693,30 @@ export interface MasterLabService {
   specimen_type: string | null
   unit_local: string | null
   result_type: string | null
+}
+
+export interface MedicalResume {
+  id: string
+  encounter_id: string
+  patient_id: string
+  authored_by: string
+  resume_date: string
+  chief_complaint: string | null
+  history_of_illness: string | null
+  physical_examination: string | null
+  summary: string | null
+  follow_up_plan: string | null
+  created_at: string
+  practitioners?: Pick<Practitioner, "full_name" | "role">
+}
+
+export interface MedicalResumeInput {
+  encounter_id: string
+  patient_id: string
+  chief_complaint?: string
+  history_of_illness?: string
+  physical_examination?: string
+  summary?: string
+  follow_up_plan?: string
 }
 

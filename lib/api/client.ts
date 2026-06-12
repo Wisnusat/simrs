@@ -568,6 +568,10 @@ export async function patchEmergencyTriage(
     is_critical?: boolean
     resuscitation_notes?: string
     needs_ambulance?: boolean
+    systolic_bp?: number
+    heart_rate?: number
+    temperature?: number
+    oxygen_saturation?: number
   },
 ): Promise<any> {
   return fetchJson(`/api/emergency/${id}/triage`, {
