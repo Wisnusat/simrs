@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,8 +9,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
-  LayoutDashboard, AlertTriangle, Activity, Pill, UserPlus,
-  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope
+  LayoutDashboard, AlertTriangle, Activity, UserPlus,
+  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope, Loader2
 } from "lucide-react"
 
 import { useEmergency } from "@/hooks/emergency/use-emergency"
@@ -23,8 +23,11 @@ import { StatCard } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
-import type { EmergencyEncounter } from "@/lib/types/outpatient"
-import { CpptForm } from "@/components/inpatient/cppt-form" // Reuse CPPT or make another text notes element
+import type { EmergencyEncounter, ClinicalNote } from "@/lib/types/outpatient"
+import { postClinicalNote, getClinicalNotes } from "@/lib/api/client"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard IGD", active: active === "dashboard", onClick: () => set("dashboard") },
@@ -35,6 +38,13 @@ export default function EmergencyDashboard() {
   const [view, setView] = useState("dashboard")
   const [selectedAdm, setSelectedAdm] = useState<EmergencyEncounter | null>(null)
   const [showIntake, setShowIntake] = useState(false)
+
+  // CPPT state
+  const [cpptNotes, setCpptNotes] = useState<ClinicalNote[]>([])
+  const [cpptLoading, setCpptLoading] = useState(false)
+  const [cpptSubmitting, setCpptSubmitting] = useState(false)
+  const [cpptError, setCpptError] = useState<string | null>(null)
+  const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
 
   // Fetch only active ones for main dashboard
   const { data: encounters, loading: encLoading, refresh: refreshEnc } = useEmergency({ limit: 50 })
@@ -63,9 +73,37 @@ export default function EmergencyDashboard() {
     }
   }
 
-  const handleSelectPatient = (enc: EmergencyEncounter) => {
+  const handleSelectPatient = async (enc: EmergencyEncounter) => {
     setSelectedAdm(enc)
     setView("detail")
+    setCpptNotes([])
+    setCpptLoading(true)
+    try {
+      const notes = await getClinicalNotes(enc.encounter_id)
+      setCpptNotes(notes)
+    } catch { setCpptNotes([]) }
+    finally { setCpptLoading(false) }
+  }
+
+  const handleCpptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedAdm) return
+    setCpptSubmitting(true)
+    setCpptError(null)
+    try {
+      await postClinicalNote({
+        encounter_id: selectedAdm.encounter_id,
+        patient_id: selectedAdm.patient_id,
+        ...soap,
+      })
+      setSoap({ subjective: "", objective: "", assessment: "", plan: "" })
+      const notes = await getClinicalNotes(selectedAdm.encounter_id)
+      setCpptNotes(notes)
+    } catch (err: any) {
+      setCpptError(err.message ?? "Gagal menyimpan catatan")
+    } finally {
+      setCpptSubmitting(false)
+    }
   }
 
   return (
@@ -162,7 +200,7 @@ export default function EmergencyDashboard() {
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="triage"><Stethoscope className="w-4 h-4 mr-1" /> Triage</TabsTrigger>
               <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
-              {/* <TabsTrigger value="cppt" disabled><Activity className="w-4 h-4 mr-1" /> CPPT</TabsTrigger> */}
+              <TabsTrigger value="cppt"><Activity className="w-4 h-4 mr-1" /> Catatan</TabsTrigger>
               <TabsTrigger value="disposition"><ArrowLeft className="w-4 h-4 mr-1 rotate-[135deg]" /> Disposisi</TabsTrigger>
             </TabsList>
 
@@ -206,10 +244,68 @@ export default function EmergencyDashboard() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="cppt" className="mt-4">
+              <Card>
+                <CardContent className="pt-6 space-y-6">
+                  <form onSubmit={handleCpptSubmit} className="space-y-4">
+                    <h3 className="font-semibold text-base">Catatan SOAP IGD</h3>
+                    {cpptError && <Alert variant="destructive"><AlertDescription>{cpptError}</AlertDescription></Alert>}
+                    {[
+                      { key: "subjective", label: "S — Subjektif", placeholder: "Keluhan pasien..." },
+                      { key: "objective", label: "O — Objektif", placeholder: "Pemeriksaan fisik, vital signs..." },
+                      { key: "assessment", label: "A — Asesmen", placeholder: "Diagnosis sementara / kerja..." },
+                      { key: "plan", label: "P — Plan", placeholder: "Tindakan, observasi, rencana lanjut..." },
+                    ].map((f) => (
+                      <div key={f.key} className="space-y-1.5">
+                        <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/70">{f.label}</Label>
+                        <Textarea
+                          rows={2}
+                          value={soap[f.key as keyof typeof soap]}
+                          onChange={(e) => setSoap((p) => ({ ...p, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                        />
+                      </div>
+                    ))}
+                    <Button
+                      type="submit"
+                      disabled={cpptSubmitting || (!soap.subjective && !soap.objective)}
+                      className="w-full"
+                    >
+                      {cpptSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</> : "Simpan Catatan"}
+                    </Button>
+                  </form>
+
+                  {cpptNotes.length > 0 && (
+                    <div className="space-y-2">
+                      <Separator />
+                      <h4 className="font-semibold text-sm">Riwayat Catatan</h4>
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {cpptNotes.map((note) => (
+                          <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">{note.practitioners?.full_name ?? "—"}</span>
+                              <span className="text-xs text-foreground/40">
+                                {new Date(note.note_date).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            {note.subjective  && <p><span className="font-semibold text-xs text-foreground/60">S:</span> {note.subjective}</p>}
+                            {note.objective   && <p><span className="font-semibold text-xs text-foreground/60">O:</span> {note.objective}</p>}
+                            {note.assessment  && <p><span className="font-semibold text-xs text-foreground/60">A:</span> {note.assessment}</p>}
+                            {note.plan        && <p><span className="font-semibold text-xs text-foreground/60">P:</span> {note.plan}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {cpptLoading && <p className="text-sm text-foreground/50 text-center py-4">Memuat catatan...</p>}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="disposition" className="mt-4">
               <Card>
                 <CardContent className="pt-6">
-                  <EmergencyDispositionForm 
+                  <EmergencyDispositionForm
                      encounter={selectedAdm}
                      onSuccess={() => { refreshEnc(); setView("dashboard"); }}
                   />

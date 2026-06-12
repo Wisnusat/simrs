@@ -45,7 +45,9 @@ import type {
   MasterLabService,
   Practitioner,
   SurgeryRequest,
-  SurgeryRequestInput
+  SurgeryRequestInput,
+  MedicalResume,
+  MedicalResumeInput,
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -558,6 +560,42 @@ export async function patchEmergencyEncounter(
   })
 }
 
+export async function patchEmergencyTriage(
+  id: string,
+  input: {
+    triage_category: string
+    triage_complaint: string
+    is_critical?: boolean
+    resuscitation_notes?: string
+    needs_ambulance?: boolean
+  },
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}/triage`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchEmergencyOutcome(
+  id: string,
+  input: {
+    outcome: 'discharged' | 'referred' | 'admitted_inpatient'
+    referred_to?: string
+    referral_letter_no?: string
+    admission_data?: {
+      room_location_id: string
+      bed_number: string
+      room_class: string
+      dpjp_id: string
+    }
+  },
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}/outcome`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Walk-in Registration  /api/walkin
 // ---------------------------------------------------------------------------
@@ -689,4 +727,22 @@ export async function getMasterLabServices(opts?: {
   const json = await res.json()
   if (!json.success) throw new Error(json.error ?? `Request failed: ${res.status}`)
   return { data: json.data, total: json.meta?.total ?? 0, page: json.meta?.page ?? 1, limit: json.meta?.limit ?? 20 }
+}
+
+// ---------------------------------------------------------------------------
+// Medical Resumes  /api/medical-resumes
+// ---------------------------------------------------------------------------
+
+export async function getMedicalResume(opts: {
+  encounter_id?: string
+  patient_id?: string
+}): Promise<MedicalResume[]> {
+  return fetchJson(`/api/medical-resumes${qs(opts)}`)
+}
+
+export async function postMedicalResume(input: MedicalResumeInput): Promise<MedicalResume> {
+  return fetchJson('/api/medical-resumes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }

@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
-  Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText,
+  Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"

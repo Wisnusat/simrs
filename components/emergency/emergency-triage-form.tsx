@@ -19,24 +19,16 @@ export function EmergencyTriageForm({ encounter, onSuccess }: EmergencyTriageFor
   const [triageComplaint, setTriageComplaint] = useState(encounter.triage_complaint || "")
   const [isCritical, setIsCritical] = useState(encounter.is_critical)
   
-  const { update, actionLoading } = useEmergency()
+  const { triage, actionLoading } = useEmergency()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Status should be "in_treatment" once triage is done
-    const success = await update(encounter.id, {
+    const result = await triage(encounter.id, {
       triage_category: triageCategory,
       triage_complaint: triageComplaint,
       is_critical: isCritical,
-      status: encounter.status === "emergency_admitted" ? "in_triage" : encounter.status // optionally move to in_triage or keep it
     })
-    
-    // Auto move to in_treatment? Let's just keep the status update logic simple.
-    // The API might align it.
-    if (success) {
-      onSuccess()
-    }
+    if (result) onSuccess()
   }
 
   const getTriageColor = (cat: string) => {
