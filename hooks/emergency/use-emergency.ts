@@ -5,6 +5,8 @@ import {
   getEmergencyEncounter,
   postEmergencyEncounter,
   patchEmergencyEncounter,
+  patchEmergencyTriage,
+  patchEmergencyOutcome,
 } from "@/lib/api/client"
 import type { EmergencyEncounter } from "@/lib/types/outpatient"
 
@@ -111,6 +113,62 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     }
   }
 
+  const triage = async (
+    id: string,
+    input: {
+      triage_category: string
+      triage_complaint: string
+      is_critical?: boolean
+      resuscitation_notes?: string
+      needs_ambulance?: boolean
+      systolic_bp?: number
+      heart_rate?: number
+      temperature?: number
+      oxygen_saturation?: number
+    }
+  ) => {
+    setActionLoading(true)
+    try {
+      const result = await patchEmergencyTriage(id, input)
+      await fetchEncounters(meta.page)
+      toast({ title: "Berhasil", description: "Data triage berhasil disimpan." })
+      return result
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" })
+      return false
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const resolveOutcome = async (
+    id: string,
+    input: {
+      outcome: 'discharged' | 'referred' | 'admitted_inpatient'
+      referred_to?: string
+      referral_letter_no?: string
+      admission_data?: {
+        room_location_id: string
+        bed_number: string
+        room_class: string
+        dpjp_id: string
+      }
+    }
+  ) => {
+    setActionLoading(true)
+    try {
+      const result = await patchEmergencyOutcome(id, input)
+      await fetchEncounters(meta.page)
+      toast({ title: "Berhasil", description: "Disposisi IGD berhasil disimpan." })
+      return result
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" })
+      return false
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   return {
     data,
     meta,
@@ -120,6 +178,8 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     refresh: fetchEncounters,
     create,
     update,
+    triage,
+    resolveOutcome,
     getDetail,
   }
 }

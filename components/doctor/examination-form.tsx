@@ -3,8 +3,10 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, getPatientHistory } from "@/lib/api/client"
+import { postClinicalNote, postDiagnosis, postPrescription, patchEncounter, patchQueueStatus, getMedications, getVitalSigns, postEpisodeOfCare, postReferral, postSurgeryRequest, searchICD10 } from "@/lib/api/client"
+import type { ICD10Record } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
+import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,8 +17,9 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon, ChevronDown, ChevronRight, Calendar, Stethoscope } from "lucide-react"
-import type { Medication, VitalSigns, Location, InpatientRoomClass, Encounter } from "@/lib/types/outpatient"
+import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon, AlertTriangle } from "lucide-react"
+import PatientHistoryPanel from "@/components/doctor/patient-history-panel"
+import type { Medication, VitalSigns } from "@/lib/types/outpatient"
 import { createClient } from "@/lib/supabase/client"
 
 interface ExaminationFormProps {
@@ -64,11 +67,49 @@ export default function ExaminationForm({
   const [icd10Display, setIcd10Display] = useState("")
   const [careStatus, setCareStatus] = useState("rawat_jalan")
 
+  // ── ICD-10 Autocomplete ──
+  const [icdSearch, setIcdSearch] = useState("")
+  const [icdResults, setIcdResults] = useState<ICD10Record[]>([])
+  const [icdSearching, setIcdSearching] = useState(false)
+  const [icdDropdownOpen, setIcdDropdownOpen] = useState(false)
+  const icdSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const query = icdSearch.trim()
+    if (query.length < 3) {
+      setIcdResults([])
+      setIcdDropdownOpen(false)
+      return
+    }
+    if (icdSearchTimer.current) clearTimeout(icdSearchTimer.current)
+    icdSearchTimer.current = setTimeout(async () => {
+      setIcdSearching(true)
+      try {
+        const results = await searchICD10(query)
+        setIcdResults(results)
+        setIcdDropdownOpen(true)
+      } catch {
+        setIcdResults([])
+      } finally {
+        setIcdSearching(false)
+      }
+    }, 300)
+    return () => {
+      if (icdSearchTimer.current) clearTimeout(icdSearchTimer.current)
+    }
+  }, [icdSearch])
+
   // ── Rujukan ──
   const [referralDestination, setReferralDestination] = useState("")
   const [referralSpecialty, setReferralSpecialty] = useState("")
   const [referralUrgency, setReferralUrgency] = useState<"routine" | "urgent" | "emergency">("routine")
   const [referralReason, setReferralReason] = useState("")
+
+  // ── Surgery Request (OK) ──
+  const [surgeryType, setSurgeryType] = useState("")
+  const [surgeryIndication, setSurgeryIndication] = useState("")
+  const [surgeryAnesthesia, setSurgeryAnesthesia] = useState("umum")
+  const [surgeryNeedsInpatient, setSurgeryNeedsInpatient] = useState(false)
 
   // ── Inpatient Room Selection (Handled by Nurse Dashboard) ──
 
@@ -79,6 +120,7 @@ export default function ExaminationForm({
   const [rxItems, setRxItems] = useState<RxItem[]>([])
   const [adding, setAdding] = useState<Medication | null>(null)
   const [addForm, setAddForm] = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+  const [isCustomFrequency, setIsCustomFrequency] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Vital signs (prefetch for display) ──
@@ -90,23 +132,10 @@ export default function ExaminationForm({
   // ── Lab Orders ──
   const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
 
-  // ── Patient history (past encounters, collapsed by default) ──
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [history, setHistory] = useState<Encounter[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyExpanded, setHistoryExpanded] = useState<string | null>(null)
+  // ── Patient Allergies ──
+  const { data: allergies } = useAllergies(patient.id)
 
-  useEffect(() => {
-    if (!historyOpen || history.length > 0) return
-    setHistoryLoading(true)
-    getPatientHistory(patient.id, 10)
-      .then((enc) => {
-        // Exclude the current encounter from history
-        setHistory(enc.filter((e) => e.id !== encounterId))
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false))
-  }, [historyOpen, patient.id, encounterId, history.length])
+  // ── Patient history is handled by <PatientHistoryPanel /> ──
 
   // ── Medicine search (debounced 300ms) ──
   useEffect(() => {
@@ -124,6 +153,7 @@ export default function ExaminationForm({
   const selectMedicine = (med: Medication) => {
     setAdding(med)
     setAddForm({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+    setIsCustomFrequency(false)
     setRxSearch("")
     setRxResults([])
   }
@@ -159,6 +189,12 @@ export default function ExaminationForm({
       if (careStatus === "rujukan") {
         if (!referralDestination.trim()) throw new Error("Faskes tujuan rujukan wajib diisi")
         if (!referralReason.trim()) throw new Error("Alasan klinis rujukan wajib diisi")
+      }
+
+      // Validate surgery fields
+      if (careStatus === "operasi") {
+        if (!surgeryType.trim()) throw new Error("Jenis operasi wajib diisi")
+        if (!surgeryIndication.trim()) throw new Error("Indikasi operasi wajib diisi")
       }
 
       // 1. SOAP note
@@ -229,6 +265,21 @@ export default function ExaminationForm({
         await patchEncounter(encounterId, { status: "finished" } as any)
         if (queueId) await patchQueueStatus(queueId, "done")
 
+      } else if (careStatus === "operasi") {
+        // 4. Create Surgery Request
+        await postSurgeryRequest({
+          patient_id: patient.id,
+          encounter_id: encounterId,
+          surgery_type: surgeryType,
+          indication: surgeryIndication,
+          anesthesia_type: surgeryAnesthesia,
+          needs_inpatient_after: surgeryNeedsInpatient,
+        })
+
+        // 5. Outpatient encounter completes normally after requesting surgery
+        await patchEncounter(encounterId, { status: "finished" } as any)
+        if (queueId) await patchQueueStatus(queueId, "done")
+
       } else {
         // ── Rawat Jalan: finish encounter normally ──
         // 4. Encounter → finished (triggers auto-invoice update on API side)
@@ -289,6 +340,28 @@ export default function ExaminationForm({
           <div className="col-span-2 md:col-span-4 mt-1 pt-2 border-t border-blue-200/50 dark:border-blue-800/50 text-sm flex gap-2">
             <span className="text-foreground/60 shrink-0">Catatan Perawat:</span>
             <span className="font-medium italic">{vitals.notes}</span>
+          </div>
+        )}
+        {allergies && allergies.length > 0 && (
+          <div className="col-span-2 md:col-span-4 mt-1 pt-2 border-t border-blue-200/50 dark:border-blue-800/50 text-sm flex gap-2 flex-wrap items-center animate-in fade-in duration-200">
+            <span className="text-foreground/60 shrink-0 flex items-center text-red-500 font-semibold gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" /> Alergi:
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {allergies.map((al) => (
+                <Badge
+                  key={al.id}
+                  variant="outline"
+                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${al.criticality === "high"
+                      ? "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900"
+                      : "bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-900"
+                    }`}
+                >
+                  {al.substance_display}
+                  {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
+                </Badge>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -381,125 +454,8 @@ export default function ExaminationForm({
           <VitalStrip />
           <LabStrip />
 
-          {/* ── PATIENT HISTORY (collapsible) ── */}
-          <div className="rounded-lg border bg-muted/20">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
-            >
-              <div className="flex items-center gap-2 text-foreground/70">
-                <Stethoscope className="w-4 h-4" />
-                Riwayat Kunjungan Sebelumnya
-                {history.length > 0 && !historyOpen && (
-                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-medium">
-                    {history.length} kunjungan
-                  </span>
-                )}
-              </div>
-              {historyOpen
-                ? <ChevronDown className="w-4 h-4 text-foreground/50" />
-                : <ChevronRight className="w-4 h-4 text-foreground/50" />}
-            </button>
-
-            {historyOpen && (
-              <div className="px-4 pb-4 space-y-2 border-t">
-                {historyLoading && (
-                  <div className="flex items-center gap-2 py-4 text-sm text-foreground/50">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Memuat riwayat...
-                  </div>
-                )}
-                {!historyLoading && history.length === 0 && (
-                  <p className="py-4 text-sm text-foreground/50 text-center">Belum ada riwayat kunjungan sebelumnya.</p>
-                )}
-                {!historyLoading && history.map((enc) => {
-                  const isOpen = historyExpanded === enc.id
-                  const diagnosis = (enc as any).diagnoses?.[0]
-                  const soap = (enc as any).clinical_notes?.[0]
-                  const date = enc.started_at
-                    ? new Date(enc.started_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
-                    : "—"
-
-                  return (
-                    <div key={enc.id} className="rounded-md border overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setHistoryExpanded(isOpen ? null : enc.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 bg-background hover:bg-muted/30 transition-colors text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Calendar className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium">{date}</p>
-                            <p className="text-xs text-foreground/50">
-                              {(enc as any).poli_services?.name ?? "—"}
-                              {diagnosis ? ` · ${diagnosis.icd10_code} ${diagnosis.icd10_display}` : ""}
-                            </p>
-                          </div>
-                        </div>
-                        {isOpen
-                          ? <ChevronDown className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
-                          : <ChevronRight className="w-3.5 h-3.5 text-foreground/40 shrink-0" />}
-                      </button>
-
-                      {isOpen && (
-                        <div className="px-3 py-3 bg-muted/10 space-y-2 text-xs border-t">
-                          {soap?.subjective && (
-                            <div>
-                              <span className="font-semibold text-foreground/60">S: </span>
-                              <span>{soap.subjective}</span>
-                            </div>
-                          )}
-                          {soap?.objective && (
-                            <div>
-                              <span className="font-semibold text-foreground/60">O: </span>
-                              <span>{soap.objective}</span>
-                            </div>
-                          )}
-                          {soap?.assessment && (
-                            <div>
-                              <span className="font-semibold text-foreground/60">A: </span>
-                              <span>{soap.assessment}</span>
-                            </div>
-                          )}
-                          {soap?.plan && (
-                            <div>
-                              <span className="font-semibold text-foreground/60">P: </span>
-                              <span>{soap.plan}</span>
-                            </div>
-                          )}
-                          {(enc as any).diagnoses?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 pt-1 border-t">
-                              {(enc as any).diagnoses.map((d: any) => (
-                                <span key={d.id} className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
-                                  {d.icd10_code} {d.icd10_display}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {(enc as any).lab_orders?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 pt-1 border-t">
-                              <span className="text-foreground/50 mr-1">Lab:</span>
-                              {(enc as any).lab_orders.flatMap((lo: any) =>
-                                lo.lab_order_items?.map((item: any) => (
-                                  <span key={item.id} className="px-1.5 py-0.5 rounded bg-muted border text-foreground/70">
-                                    {item.test_name}
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                          )}
-                          {!soap && !diagnosis && (
-                            <p className="text-foreground/40 italic">Tidak ada catatan pada kunjungan ini.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+          {/* ── PATIENT HISTORY ── */}
+          <PatientHistoryPanel patientId={patient.id} currentEncounterId={encounterId} />
 
           <Tabs defaultValue="soap" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
@@ -541,27 +497,89 @@ export default function ExaminationForm({
 
             {/* ── DIAGNOSIS ── */}
             <TabsContent value="diagnosis" className="space-y-6 mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="icd10Code">Kode ICD-10 *</Label>
-                  <Input
-                    id="icd10Code"
-                    value={icd10Code}
-                    onChange={(e) => setIcd10Code(e.target.value.toUpperCase())}
-                    placeholder="Contoh: J11, A09, K29.7"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="icd10Display">Nama Diagnosis *</Label>
-                  <Input
-                    id="icd10Display"
-                    value={icd10Display}
-                    onChange={(e) => setIcd10Display(e.target.value)}
-                    placeholder="Nama penyakit sesuai ICD-10"
-                    required
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="icd10Search">Cari & Pilih Diagnosis ICD-10 *</Label>
+                {icd10Code ? (
+                  <div className="flex items-center justify-between p-3 border rounded-md bg-muted/40 border-muted-foreground/20 shadow-sm animate-in fade-in duration-200">
+                    <div className="flex items-center space-x-3">
+                      <Badge variant="outline" className="font-mono bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900 px-2.5 py-1 text-xs font-bold rounded-md">
+                        {icd10Code}
+                      </Badge>
+                      <span className="text-sm font-medium text-foreground">{icd10Display}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIcd10Code("")
+                        setIcd10Display("")
+                        setIcdSearch("")
+                        setIcdResults([])
+                      }}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Input
+                        id="icd10Search"
+                        value={icdSearch}
+                        onChange={(e) => setIcdSearch(e.target.value)}
+                        placeholder="Ketik kode (mis. A91) atau nama diagnosis (mis. Dengue)..."
+                        className="pr-10"
+                        required={!icd10Code}
+                      />
+                      <div className="absolute right-3 top-2.5 text-muted-foreground">
+                        {icdSearching ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Search className="h-4 w-4" />
+                        )}
+                      </div>
+                    </div>
+
+                    {icdDropdownOpen && icdResults.length > 0 && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIcdDropdownOpen(false)} />
+                        <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground border border-muted-foreground/20 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          {icdResults.map((item) => (
+                            <button
+                              key={item.code}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-muted/20 last:border-b-0 transition-colors"
+                              onClick={() => {
+                                setIcd10Code(item.code)
+                                setIcd10Display(item.name_en)
+                                setIcdDropdownOpen(false)
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded text-xs">
+                                  {item.code}
+                                </span>
+                              </div>
+                              <div className="mt-1 font-medium">{item.name_en}</div>
+                              {item.name_id && (
+                                <div className="text-xs text-muted-foreground italic">
+                                  {item.name_id}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {icdSearch.trim().length >= 3 && icdResults.length === 0 && !icdSearching && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground border border-muted-foreground/20 rounded-md shadow-lg p-3 text-xs text-muted-foreground text-center">
+                        Tidak ditemukan diagnosis dengan kata kunci &quot;{icdSearch}&quot;
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Separator />
@@ -569,7 +587,7 @@ export default function ExaminationForm({
               <div className="space-y-3">
                 <h4 className="font-semibold">Status Perawatan</h4>
                 <RadioGroup value={careStatus} onValueChange={setCareStatus} className="flex gap-6">
-                  {[["rawat_jalan", "Rawat Jalan"], ["rawat_inap", "Rawat Inap"], ["rujukan", "Rujukan"]].map(([v, l]) => (
+                  {[["rawat_jalan", "Rawat Jalan"], ["rawat_inap", "Rawat Inap"], ["operasi", "Operasi (OK)"], ["rujukan", "Rujukan"]].map(([v, l]) => (
                     <div key={v} className="flex items-center space-x-2">
                       <RadioGroupItem value={v} id={v} />
                       <Label htmlFor={v}>{l}</Label>
@@ -579,6 +597,61 @@ export default function ExaminationForm({
               </div>
 
 
+
+              {careStatus === "operasi" && (
+                <div className="space-y-4 p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+                  <h4 className="font-semibold flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                    <Activity className="w-4 h-4" /> Pengaturan Permintaan Operasi (OK)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Jenis Operasi *</Label>
+                      <Input
+                        value={surgeryType}
+                        onChange={(e) => setSurgeryType(e.target.value)}
+                        placeholder="Ex: Appendectomy, Sectio Caesarea, debridement"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Indikasi Klinis *</Label>
+                      <Input
+                        value={surgeryIndication}
+                        onChange={(e) => setSurgeryIndication(e.target.value)}
+                        placeholder="Ex: Appendicitis Akut, Fetal Distress"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Jenis Anestesi</Label>
+                      <Select value={surgeryAnesthesia} onValueChange={setSurgeryAnesthesia}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="umum">Umum (General)</SelectItem>
+                          <SelectItem value="spinal">Spinal (Regional)</SelectItem>
+                          <SelectItem value="lokal">Lokal</SelectItem>
+                          <SelectItem value="regional">Regional Block</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 flex flex-col justify-end">
+                      <Label className="mb-2">Perawatan Pasca Operasi</Label>
+                      <div className="flex items-center space-x-2 h-10">
+                        <input
+                          type="checkbox"
+                          id="needsInpatient"
+                          checked={surgeryNeedsInpatient}
+                          onChange={(e) => setSurgeryNeedsInpatient(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <Label htmlFor="needsInpatient" className="font-normal cursor-pointer select-none">
+                          Butuh Rawat Inap Setelah Operasi
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {careStatus === "rujukan" && (
                 <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
@@ -651,7 +724,7 @@ export default function ExaminationForm({
                       >
                         <p className="font-medium text-sm">{med.name}</p>
                         <p className="text-xs text-foreground/50">
-                          {med.form} {med.strength} · Stok: {med.stock_available}
+                          {med.form} · Stok: {med.stock_available}
                         </p>
                       </button>
                     ))}
@@ -673,15 +746,50 @@ export default function ExaminationForm({
                         onChange={(e) => setAddForm((p) => ({ ...p, dosage: e.target.value }))} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Frekuensi</Label>
-                      <Select value={addForm.frequency} onValueChange={(v) => setAddForm((p) => ({ ...p, frequency: v }))}>
-                        <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["1x1", "2x1", "3x1", "4x1", "3x1/2", "Jika perlu"].map((f) => (
-                            <SelectItem key={f} value={f}>{f}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {isCustomFrequency ? (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <Label className="text-xs">Frekuensi *</Label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomFrequency(false)
+                                setAddForm((p) => ({ ...p, frequency: "3x1" }))
+                              }}
+                              className="text-[10px] text-blue-600 hover:underline hover:text-blue-800"
+                            >
+                              Pilih Preset
+                            </button>
+                          </div>
+                          <Input
+                            placeholder="mis. 3x1 atau Sesuai kebutuhan"
+                            value={addForm.frequency}
+                            onChange={(e) => setAddForm((p) => ({ ...p, frequency: e.target.value }))}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Label className="text-xs">Frekuensi</Label>
+                          <Select
+                            value={addForm.frequency}
+                            onValueChange={(v) => {
+                              if (v === "Lain - lain") {
+                                setIsCustomFrequency(true)
+                                setAddForm((p) => ({ ...p, frequency: "" }))
+                              } else {
+                                setAddForm((p) => ({ ...p, frequency: v }))
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {["1x1", "2x1", "3x1", "4x1", "3x1/2", "Lain - lain"].map((f) => (
+                                <SelectItem key={f} value={f}>{f}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Durasi (hari)</Label>
@@ -737,7 +845,9 @@ export default function ExaminationForm({
           <p className="text-xs text-foreground/50">
             {careStatus === "rawat_inap"
               ? "Setelah menyimpan, pasien akan dipindahkan ke rawat inap dan invoice akan dibuat."
-              : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
+              : careStatus === "operasi"
+                ? "Setelah menyimpan, permintaan operasi akan dibuat dan pasien dapat diarahkan ke OK."
+                : "Setelah menyimpan, encounter akan selesai dan invoice pasien akan otomatis diperbarui."}
           </p>
 
           <div className="flex gap-3 pt-2">
@@ -747,13 +857,15 @@ export default function ExaminationForm({
             <Button
               type="submit"
               disabled={loading}
-              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
+              className={`flex-1 ${careStatus === "rawat_inap" ? "bg-blue-600 hover:bg-blue-700" : careStatus === "operasi" ? "bg-red-600 hover:bg-red-700" : "bg-[#2E8B57] hover:bg-[#2E8B57]/90"}`}
             >
               {loading
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</>
                 : careStatus === "rawat_inap"
                   ? <><BedDouble className="w-4 h-4 mr-2" />Proses Rawat Inap</>
-                  : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
+                  : careStatus === "operasi"
+                    ? <><Activity className="w-4 h-4 mr-2" />Kirim Permintaan Operasi</>
+                    : `Selesai Periksa${rxItems.length > 0 ? ` (${rxItems.length} Obat)` : ""}`}
             </Button>
           </div>
         </form>

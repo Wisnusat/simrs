@@ -41,7 +41,13 @@ import type {
   AllergyIntolerance, AllergyInput,
   NutritionOrder, NutritionOrderInput,
   Referral, ReferralInput,
-  LabService
+  LabService,
+  MasterLabService,
+  Practitioner,
+  SurgeryRequest,
+  SurgeryRequestInput,
+  MedicalResume,
+  MedicalResumeInput,
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -129,6 +135,7 @@ export async function getEncounters(opts?: {
   status?: string
   today?: boolean
   date?: string
+  episode_of_care_id?: string
 }): Promise<Encounter[]> {
   const { today, ...rest } = opts ?? {}
   return fetchJson(`/api/encounters${qs({ ...rest, today: today ? '1' : undefined })}`)
@@ -185,6 +192,17 @@ export async function postDiagnosis(input: DiagnosisInput): Promise<Diagnosis> {
 export async function getDiagnoses(encounterId: string): Promise<Diagnosis[]> {
   return fetchJson(`/api/diagnoses${qs({ encounter_id: encounterId })}`)
 }
+
+export interface ICD10Record {
+  code: string
+  name_en: string
+  name_id?: string
+}
+
+export async function searchICD10(search: string): Promise<ICD10Record[]> {
+  return fetchJson(`/api/icd10${qs({ search })}`)
+}
+
 
 // ---------------------------------------------------------------------------
 // Procedures  /api/procedures
@@ -542,6 +560,46 @@ export async function patchEmergencyEncounter(
   })
 }
 
+export async function patchEmergencyTriage(
+  id: string,
+  input: {
+    triage_category: string
+    triage_complaint: string
+    is_critical?: boolean
+    resuscitation_notes?: string
+    needs_ambulance?: boolean
+    systolic_bp?: number
+    heart_rate?: number
+    temperature?: number
+    oxygen_saturation?: number
+  },
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}/triage`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchEmergencyOutcome(
+  id: string,
+  input: {
+    outcome: 'discharged' | 'referred' | 'admitted_inpatient'
+    referred_to?: string
+    referral_letter_no?: string
+    admission_data?: {
+      room_location_id: string
+      bed_number: string
+      room_class: string
+      dpjp_id: string
+    }
+  },
+): Promise<any> {
+  return fetchJson(`/api/emergency/${id}/outcome`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Walk-in Registration  /api/walkin
 // ---------------------------------------------------------------------------
@@ -583,6 +641,111 @@ export async function postInpatientAssignment(input: {
   room_class: string
 }): Promise<InpatientAdmission> {
   return fetchJson('/api/admission-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Surgery / OK (Operating Room)  /api/surgery-requests
+// ---------------------------------------------------------------------------
+
+export async function getSurgeryRequests(opts?: {
+  status?: string
+  patient_id?: string
+}): Promise<SurgeryRequest[]> {
+  return fetchJson(`/api/surgery-requests${qs(opts ?? {})}`)
+}
+
+export async function postSurgeryRequest(
+  input: SurgeryRequestInput,
+): Promise<SurgeryRequest> {
+  return fetchJson('/api/surgery-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function patchSurgeryRequest(
+  id: string,
+  update: Partial<SurgeryRequest>,
+): Promise<SurgeryRequest> {
+  return fetchJson(`/api/surgery-requests/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Practitioners  /api/practitioners
+// ---------------------------------------------------------------------------
+
+export async function getPractitioners(opts?: {
+  role?: string
+}): Promise<Practitioner[]> {
+  return fetchJson(`/api/practitioners${qs(opts ?? {})}`)
+}
+
+// ---------------------------------------------------------------------------
+// CMS — Lab Services  /api/cms/lab-services
+// ---------------------------------------------------------------------------
+
+export async function getCmsLabServices(): Promise<LabService[]> {
+  return fetchJson('/api/cms/lab-services')
+}
+
+export async function postCmsLabService(masterId: string): Promise<LabService> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'POST',
+    body: JSON.stringify({ master_id: masterId }),
+  })
+}
+
+export async function deleteCmsLabService(id: string): Promise<{ deleted: boolean }> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// CMS — Master Lab Services  /api/cms/master-lab-services
+// ---------------------------------------------------------------------------
+
+export interface MasterLabServiceListResult {
+  data: MasterLabService[]
+  total: number
+  page: number
+  limit: number
+}
+
+export async function getMasterLabServices(opts?: {
+  q?: string
+  category?: string
+  page?: number
+  limit?: number
+}): Promise<MasterLabServiceListResult> {
+  const res = await fetch(`/api/cms/master-lab-services${qs(opts ?? {})}`, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error ?? `Request failed: ${res.status}`)
+  return { data: json.data, total: json.meta?.total ?? 0, page: json.meta?.page ?? 1, limit: json.meta?.limit ?? 20 }
+}
+
+// ---------------------------------------------------------------------------
+// Medical Resumes  /api/medical-resumes
+// ---------------------------------------------------------------------------
+
+export async function getMedicalResume(opts: {
+  encounter_id?: string
+  patient_id?: string
+}): Promise<MedicalResume[]> {
+  return fetchJson(`/api/medical-resumes${qs(opts)}`)
+}
+
+export async function postMedicalResume(input: MedicalResumeInput): Promise<MedicalResume> {
+  return fetchJson('/api/medical-resumes', {
     method: 'POST',
     body: JSON.stringify(input),
   })

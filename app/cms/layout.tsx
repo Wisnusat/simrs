@@ -80,11 +80,18 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
             onClick: () => navigateTo('/cms/landing-page'),
             active: pathname === '/cms/landing-page',
         },
+        {
+            icon: FlaskConical,
+            label: 'Layanan Lab',
+            href: '/cms/lab-services',
+            onClick: () => navigateTo('/cms/lab-services'),
+            active: pathname === '/cms/lab-services',
+        },
         // Owner-only items
         ...(isOwner ? [
             {
                 icon: BarChart3,
-                label: '── Laporan ──',
+                label: 'Laporan',
                 href: '/cms/reports',
                 onClick: () => navigateTo('/cms/reports'),
                 active: pathname === '/cms/reports',
@@ -117,13 +124,13 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
                 onClick: () => navigateTo('/cms/reports/lab'),
                 active: pathname === '/cms/reports/lab',
             },
-            {
-                icon: Activity,
-                label: 'Diagnosis',
-                href: '/cms/reports/diagnosis',
-                onClick: () => navigateTo('/cms/reports/diagnosis'),
-                active: pathname === '/cms/reports/diagnosis',
-            },
+            // {
+            //     icon: Activity,
+            //     label: 'Diagnosis',
+            //     href: '/cms/reports/diagnosis',
+            //     onClick: () => navigateTo('/cms/reports/diagnosis'),
+            //     active: pathname === '/cms/reports/diagnosis',
+            // },
             {
                 icon: ClipboardCheck,
                 label: 'Approval PO',

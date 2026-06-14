@@ -37,14 +37,14 @@ const reports = [
         color: 'text-amber-500',
         bgColor: 'bg-amber-500/10',
     },
-    {
-        title: 'Diagnosis',
-        description: 'Frekuensi diagnosis ICD-10, top 10 diagnosis, primer vs sekunder.',
-        icon: Activity,
-        href: '/cms/reports/diagnosis',
-        color: 'text-rose-500',
-        bgColor: 'bg-rose-500/10',
-    },
+    // {
+    //     title: 'Diagnosis',
+    //     description: 'Frekuensi diagnosis ICD-10, top 10 diagnosis, primer vs sekunder.',
+    //     icon: Activity,
+    //     href: '/cms/reports/diagnosis',
+    //     color: 'text-rose-500',
+    //     bgColor: 'bg-rose-500/10',
+    // },
 ]
 
 export default function ReportsHubPage() {

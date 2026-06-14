@@ -395,6 +395,7 @@ export interface Invoice {
   patients: Pick<Patient, "full_name" | "medical_record_no" | "phone">
   encounters?: {
     poli_service_id: string
+    encounter_class?: string
     poli_services: Pick<PoliService, "name">
     appointment_id?: string
     appointments?: Pick<AppointmentRef, "booking_code" | "chief_complaint">
@@ -620,3 +621,102 @@ export interface ReferralInput {
   referral_reason: string
   urgency?: ReferralUrgency
 }
+
+// ---------------------------------------------------------------------------
+// Surgery / OK (Operating Room)
+// ---------------------------------------------------------------------------
+
+export type SurgeryStatus =
+  | "surgery_requested"
+  | "surgery_scheduled"
+  | "ready_for_surgery"
+  | "intra_operative"
+  | "surgery_completed"
+  | "post_operative"
+
+export interface SurgeryRequest {
+  id: string
+  patient_id: string
+  encounter_id: string
+  episode_of_care_id?: string
+  requested_by: string
+  surgery_type: string
+  indication: string
+  anesthesia_type?: string
+  status: SurgeryStatus
+  scheduled_date?: string
+  ok_location_id?: string
+  surgeon_id?: string
+  anesthesiologist_id?: string
+  pre_op_assessment?: string
+  clearance_status?: string
+  surgery_start_at?: string
+  surgery_end_at?: string
+  intra_op_notes?: string
+  post_op_notes?: string
+  pacu_notes?: string
+  pacu_discharge_at?: string
+  needs_inpatient_after: boolean
+  ss_procedure_id?: string
+  ss_sync_status: string
+  created_at: string
+  updated_at: string
+
+  // Joined shapes for UI
+  patients?: Pick<Patient, "id" | "full_name" | "medical_record_no" | "gender" | "date_of_birth" | "phone">
+  doctor?: Pick<Practitioner, "id" | "full_name" | "role">
+  surgeon?: Pick<Practitioner, "id" | "full_name" | "role">
+  anesthesiologist?: Pick<Practitioner, "id" | "full_name" | "role">
+  locations?: Pick<Location, "id" | "name" | "type" | "floor">
+}
+
+export interface SurgeryRequestInput {
+  patient_id: string
+  encounter_id: string
+  episode_of_care_id?: string
+  surgery_type: string
+  indication: string
+  anesthesia_type?: string
+  needs_inpatient_after?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// CMS — Lab Services
+// ---------------------------------------------------------------------------
+
+export interface MasterLabService {
+  id: string
+  name: string
+  category: string | null
+  loinc_code: string
+  loinc_display: string | null
+  specimen_type: string | null
+  unit_local: string | null
+  result_type: string | null
+}
+
+export interface MedicalResume {
+  id: string
+  encounter_id: string
+  patient_id: string
+  authored_by: string
+  resume_date: string
+  chief_complaint: string | null
+  history_of_illness: string | null
+  physical_examination: string | null
+  summary: string | null
+  follow_up_plan: string | null
+  created_at: string
+  practitioners?: Pick<Practitioner, "full_name" | "role">
+}
+
+export interface MedicalResumeInput {
+  encounter_id: string
+  patient_id: string
+  chief_complaint?: string
+  history_of_illness?: string
+  physical_examination?: string
+  summary?: string
+  follow_up_plan?: string
+}
+

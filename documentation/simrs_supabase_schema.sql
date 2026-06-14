@@ -677,6 +677,19 @@ CREATE TABLE lab_order_items (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE public.lab_services (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  organization_id uuid NOT NULL,
+  name text NOT NULL,
+  loinc_code text,
+  category text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lab_services_pkey PRIMARY KEY (id),
+  CONSTRAINT lab_services_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+);
+
 
 -- =============================================================================
 -- SECTION 11: NUTRITION (Gizi)
@@ -1178,6 +1191,41 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Referrals Patient
+CREATE TABLE public.referrals (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  encounter_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  referred_by uuid NOT NULL,
+  destination_facility_name text NOT NULL,
+  destination_specialty text,
+  referral_reason text NOT NULL,
+  referral_date timestamp with time zone NOT NULL DEFAULT now(),
+  urgency text NOT NULL DEFAULT 'routine'::text,
+  ss_service_request_id text UNIQUE,
+  ss_sync_status USER-DEFINED NOT NULL DEFAULT 'pending'::satu_sehat_sync_status,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT referrals_pkey PRIMARY KEY (id),
+  CONSTRAINT referrals_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
+  CONSTRAINT referrals_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT referrals_referred_by_fkey FOREIGN KEY (referred_by) REFERENCES public.practitioners(id)
+);
+
+-- CMS Content for owner and admin
+CREATE TABLE public.cms_content (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  organization_id uuid NOT NULL,
+  section_key text NOT NULL,
+  content jsonb NOT NULL DEFAULT '{}'::jsonb,
+  is_active boolean NOT NULL DEFAULT true,
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT cms_content_pkey PRIMARY KEY (id),
+  CONSTRAINT cms_content_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT cms_content_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.practitioners(id)
+);
 
 -- =============================================================================
 -- SECTION 19: ROW LEVEL SECURITY (RLS)

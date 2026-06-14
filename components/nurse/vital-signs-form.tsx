@@ -13,8 +13,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
-import { Activity, Heart, Ruler, Thermometer, Weight, MessageSquare } from "lucide-react"
-import type { VitalSignsInput } from "@/lib/types/outpatient"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Activity, Heart, Ruler, Thermometer, Weight, MessageSquare, ShieldAlert } from "lucide-react"
+import type { VitalSignsInput, AllergyCategory, AllergyCriticality } from "@/lib/types/outpatient"
 
 interface VitalSignsFormProps {
   encounterId: string
@@ -22,7 +24,17 @@ interface VitalSignsFormProps {
   queueId?: string
   patientName: string
   queueNumber?: string
-  onSubmit: (input: VitalSignsInput) => Promise<boolean>
+  onSubmit: (
+    input: VitalSignsInput,
+    allergyInput?: {
+      patient_id: string
+      substance_display: string
+      substance_code?: string
+      category: AllergyCategory
+      criticality: AllergyCriticality
+      reaction_description?: string
+    }
+  ) => Promise<boolean>
   onCancel: () => void
   loading: boolean
   error: string | null
@@ -62,6 +74,15 @@ export function VitalSignsForm({
   const [form, setForm] = useState<FormState>(EMPTY)
   const [localError, setLocalError] = useState("")
 
+  const [hasAllergy, setHasAllergy] = useState(false)
+  const [allergyForm, setAllergyForm] = useState({
+    substance_display: "",
+    substance_code: "",
+    category: "medication" as AllergyCategory,
+    criticality: "low" as AllergyCriticality,
+    reaction_description: "",
+  })
+
   const set = (field: keyof FormState) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((p) => ({ ...p, [field]: e.target.value }))
@@ -73,6 +94,11 @@ export function VitalSignsForm({
       setLocalError("Tekanan sistolik, detak jantung, dan suhu wajib diisi")
       return
     }
+    if (hasAllergy && !allergyForm.substance_display.trim()) {
+      setLocalError("Nama bahan alergen wajib diisi jika mencatat alergi")
+      return
+    }
+
     const ok = await onSubmit({
       encounter_id: encounterId,
       patient_id: patientId,
@@ -86,8 +112,26 @@ export function VitalSignsForm({
       weight_kg: num(form.weight_kg),
       height_cm: num(form.height_cm),
       notes: form.notes || undefined,
-    })
-    if (ok) setForm(EMPTY)
+    }, hasAllergy && allergyForm.substance_display.trim() ? {
+      patient_id: patientId,
+      substance_display: allergyForm.substance_display,
+      substance_code: allergyForm.substance_code || undefined,
+      category: allergyForm.category,
+      criticality: allergyForm.criticality,
+      reaction_description: allergyForm.reaction_description || undefined,
+    } : undefined)
+
+    if (ok) {
+      setForm(EMPTY)
+      setHasAllergy(false)
+      setAllergyForm({
+        substance_display: "",
+        substance_code: "",
+        category: "medication",
+        criticality: "low",
+        reaction_description: "",
+      })
+    }
   }
 
   const displayError = localError || error
@@ -169,6 +213,88 @@ export function VitalSignsForm({
             rows={2}
           />
         </div>
+      </div>
+
+      <div className="border-t border-muted/50 pt-4 mt-2">
+        <div className="flex items-center space-x-2">
+          <Checkbox 
+            id="hasAllergy" 
+            checked={hasAllergy} 
+            onCheckedChange={(checked) => setHasAllergy(!!checked)} 
+          />
+          <Label htmlFor="hasAllergy" className="text-sm font-semibold text-foreground cursor-pointer flex items-center gap-1.5">
+            <ShieldAlert className="w-4 h-4 text-red-500" />
+            Catat Alergi Pasien Baru
+          </Label>
+        </div>
+
+        {hasAllergy && (
+          <div className="mt-4 p-4 border rounded-lg bg-red-50/20 dark:bg-red-950/5 border-red-200/50 space-y-4 animate-in fade-in duration-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="allergy_substance">Substansi Alergen *</Label>
+                <Input
+                  id="allergy_substance"
+                  value={allergyForm.substance_display}
+                  onChange={(e) => setAllergyForm((p) => ({ ...p, substance_display: e.target.value }))}
+                  placeholder="mis. Amoxicillin, Udang, Debu"
+                  required={hasAllergy}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="allergy_code">Kode (opsional)</Label>
+                <Input
+                  id="allergy_code"
+                  value={allergyForm.substance_code}
+                  onChange={(e) => setAllergyForm((p) => ({ ...p, substance_code: e.target.value }))}
+                  placeholder="Kode SNOMED/ICD"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Kategori</Label>
+                <Select 
+                  value={allergyForm.category} 
+                  onValueChange={(v) => setAllergyForm((p) => ({ ...p, category: v as AllergyCategory }))}
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="medication">Obat</SelectItem>
+                    <SelectItem value="food">Makanan</SelectItem>
+                    <SelectItem value="environment">Lingkungan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tingkat Keparahan</Label>
+                <Select 
+                  value={allergyForm.criticality} 
+                  onValueChange={(v) => setAllergyForm((p) => ({ ...p, criticality: v as AllergyCriticality }))}
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Rendah</SelectItem>
+                    <SelectItem value="high">Tinggi</SelectItem>
+                    <SelectItem value="unable-to-assess">Tidak Dapat Dinilai</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="allergy_reaction">Deskripsi Reaksi</Label>
+              <Textarea
+                id="allergy_reaction"
+                rows={2}
+                value={allergyForm.reaction_description}
+                onChange={(e) => setAllergyForm((p) => ({ ...p, reaction_description: e.target.value }))}
+                placeholder="Deskripsi reaksi alergi yang terjadi..."
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3 pt-2">

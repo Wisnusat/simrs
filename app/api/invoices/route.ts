@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
       *,
       invoice_items (*),
       patients ( full_name, medical_record_no, phone ),
-      encounters ( poli_service_id, poli_services(name) )
+      encounters ( poli_service_id, encounter_class, poli_services(name) )
     `)
     .eq('organization_id', practitioner.organization_id)
     .order('invoice_date', { ascending: false })

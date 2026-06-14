@@ -7,22 +7,25 @@ import { useRouter } from 'next/navigation'
 
 // Route map per role — matches middleware
 const ROLE_ROUTES: Record<string, string> = {
-  admin:        '/admin',
-  doctor:       '/doctor',
-  nurse:        '/nurse',
-  pharmacist:   '/pharmacist',
-  cashier:      '/cashier',
-  lab_nurse:    '/lab',
+  admin: '/cms',
+  doctor: '/doctor',
+  nurse: '/nurse',
+  pharmacist: '/pharmacist',
+  cashier: '/cashier',
+  lab_nurse: '/lab',
   nutritionist: '/nutritionist',
+  owner: '/cms',
 }
 
 // Demo credentials shown at bottom of form
 const DEMO_CREDENTIALS = [
-  { role: 'Admin',       email: 'admin@carewell.id',       password: 'admin123' },
-  { role: 'Dokter',      email: 'dokter@carewell.id',       password: 'dokter123' },
-  { role: 'Perawat',     email: 'perawat@carewell.id',      password: 'perawat123' },
-  { role: 'Apoteker',    email: 'apoteker@carewell.id',     password: 'apoteker123' },
-  { role: 'Kasir',       email: 'kasir@carewell.id',        password: 'kasir123' },
+  { role: 'Admin', email: 'admin@carewell.id', password: 'admin123' },
+  { role: 'Dokter', email: 'dokter@carewell.id', password: 'dokter123' },
+  { role: 'Perawat', email: 'perawat@carewell.id', password: 'perawat123' },
+  { role: 'Apoteker', email: 'apoteker@carewell.id', password: 'apoteker123' },
+  { role: 'Kasir', email: 'kasir@carewell.id', password: 'kasir123' },
+  { role: 'Owner', email: 'owner@carewell.id', password: 'owner123' },
+  { role: 'Gizi', email: 'gizi@carewell.id', password: 'gizi123' }
 ]
 
 export default function LoginForm() {

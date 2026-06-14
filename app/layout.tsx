@@ -6,22 +6,17 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'CareWell Medical Clinic - Quality Healthcare Services',
-  description: 'Your trusted healthcare partner providing professional medical services with modern facilities and caring staff.',
-  generator: 'v0.app',
+  title: 'Klinik Utama Harapan Bunda — Melayani dengan Sepenuh Hati',
+  description: 'Klinik Utama Harapan Bunda menyediakan layanan kesehatan berkualitas dengan dokter spesialis dan tenaga medis profesional di Dharmasraya, Sumatera Barat.',
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
+        url: '/favicon.ico',
       },
       {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: '/android-icon-36x36.png',
+        sizes: '36x36',
+        type: 'image/png',
       },
     ],
     apple: '/apple-icon.png',
@@ -34,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="id">
       <body className="font-sans antialiased">
         {children}
       </body>

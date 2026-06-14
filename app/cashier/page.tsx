@@ -83,6 +83,7 @@ export default function CashierDashboard() {
                   <TableRow>
                     <TableHead>No. Invoice</TableHead>
                     <TableHead>Pasien</TableHead>
+                    <TableHead>Layanan</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Tipe</TableHead>
                     <TableHead>Status</TableHead>
@@ -94,6 +95,14 @@ export default function CashierDashboard() {
                     <TableRow key={inv.id}>
                       <TableCell className="font-medium font-mono">{inv.invoice_number}</TableCell>
                       <TableCell>{inv.patients.full_name}</TableCell>
+                      <TableCell>
+                        {inv.encounters?.encounter_class === "emergency"
+                          ? <Badge className="bg-orange-500 hover:bg-orange-600 text-white">IGD</Badge>
+                          : inv.encounters?.encounter_class === "inpatient"
+                          ? <Badge className="bg-blue-500 hover:bg-blue-600 text-white">Rawat Inap</Badge>
+                          : <Badge variant="outline">{inv.encounters?.poli_services?.name ?? "Rawat Jalan"}</Badge>
+                        }
+                      </TableCell>
                       <TableCell>{fmt(inv.total_amount)}</TableCell>
                       <TableCell><Badge variant="outline">{inv.payment_type}</Badge></TableCell>
                       <TableCell><StatusBadge status={inv.status} /></TableCell>

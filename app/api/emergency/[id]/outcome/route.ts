@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -190,6 +191,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             }
 
             admissionId = admission.id
+        }
+
+        // Generate invoice for non-inpatient outcomes (discharged/referred)
+        if (outcome !== 'admitted_inpatient') {
+            syncInvoiceForEncounter(supabase, existing.encounter_id).catch(err => {
+                console.error('Invoice sync error on emergency outcome:', err)
+            })
         }
 
         return apiResponse.ok({

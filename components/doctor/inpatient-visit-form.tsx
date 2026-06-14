@@ -19,7 +19,8 @@ import {
   postClinicalNote, postDiagnosis, postPrescription,
   getClinicalNotesByEpisode, getVitalSigns, getMedications,
   patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
-  createEncounter, postInpatientDailyRecord,
+  createEncounter, postInpatientDailyRecord, postSurgeryRequest,
+  postMedicalResume, getMedicalResume,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
@@ -27,7 +28,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { CpptForm } from "@/components/inpatient/cppt-form"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication, MedicalResume } from "@/lib/types/outpatient"
 
 interface InpatientVisitFormProps {
   admission: InpatientAdmission
@@ -42,9 +43,24 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
   const [discharging, setDischarging] = useState(false)
   const [dischargeSummary, setDischargeSummary] = useState("")
+  const [resumeSaved, setResumeSaved] = useState(false)
+  const [resume, setResume] = useState({
+    chief_complaint: "",
+    history_of_illness: "",
+    physical_examination: "",
+    summary: "",
+    follow_up_plan: "",
+  })
 
   // SOAP for visit note
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
+
+  // Surgery state
+  const [surgeryType, setSurgeryType] = useState("")
+  const [surgeryIndication, setSurgeryIndication] = useState("")
+  const [surgeryAnesthesia, setSurgeryAnesthesia] = useState("umum")
+  const [surgerySuccess, setSurgerySuccess] = useState(false)
+  const [surgeryLoading, setSurgeryLoading] = useState(false)
 
   // Current encounter for today's visit
   const {
@@ -57,6 +73,40 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   })
 
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
+
+  const handleSubmitSurgery = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentEncounterId) {
+      setError("Mulai kunjungan hari ini terlebih dahulu sebelum memesan tindakan operasi.")
+      return
+    }
+    if (!surgeryType.trim() || !surgeryIndication.trim()) {
+      setError("Jenis operasi dan indikasi klinis wajib diisi")
+      return
+    }
+    setSurgeryLoading(true)
+    setError("")
+    setSurgerySuccess(false)
+    try {
+      await postSurgeryRequest({
+        patient_id: admission.patient_id,
+        encounter_id: currentEncounterId,
+        episode_of_care_id: admission.episode_of_care_id,
+        surgery_type: surgeryType,
+        indication: surgeryIndication,
+        anesthesia_type: surgeryAnesthesia,
+        needs_inpatient_after: true,
+      })
+      setSurgeryType("")
+      setSurgeryIndication("")
+      setSurgerySuccess(true)
+      setTimeout(() => setSurgerySuccess(false), 5000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSurgeryLoading(false)
+    }
+  }
 
   // Lab orders for current encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
@@ -71,13 +121,27 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
       .catch(() => setPreviousNotes([]))
   }, [admission.episode_of_care_id])
 
-  // Load vitals
+  // Load vitals + existing resume
   useEffect(() => {
-    if (currentEncounterId) {
-      getVitalSigns(currentEncounterId)
-        .then((vs) => setLatestVitals(vs[0] ?? null))
-        .catch(() => {})
-    }
+    if (!currentEncounterId) return
+    getVitalSigns(currentEncounterId)
+      .then((vs) => setLatestVitals(vs[0] ?? null))
+      .catch(() => {})
+    getMedicalResume({ encounter_id: currentEncounterId })
+      .then((data) => {
+        const r = data[0]
+        if (r) {
+          setResume({
+            chief_complaint: r.chief_complaint ?? "",
+            history_of_illness: r.history_of_illness ?? "",
+            physical_examination: r.physical_examination ?? "",
+            summary: r.summary ?? "",
+            follow_up_plan: r.follow_up_plan ?? "",
+          })
+          setResumeSaved(true)
+        }
+      })
+      .catch(() => {})
   }, [currentEncounterId])
 
   const daysSince = Math.floor(
@@ -204,9 +268,10 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
       {/* Main tabs */}
       {currentEncounterId && (
         <Tabs defaultValue="notes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="notes"><FileText className="w-4 h-4 mr-1" /> Catatan Visite</TabsTrigger>
             <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
+            <TabsTrigger value="surgery"><Activity className="w-4 h-4 mr-1" /> Operasi (OK)</TabsTrigger>
             <TabsTrigger value="discharge"><BedDouble className="w-4 h-4 mr-1" /> Pulang</TabsTrigger>
           </TabsList>
 
@@ -287,20 +352,75 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             )}
           </TabsContent>
 
-          {/* Discharge Tab */}
-          <TabsContent value="discharge" className="space-y-4 mt-4">
+          {/* Discharge / Resume Tab */}
+          <TabsContent value="discharge" className="space-y-5 mt-4">
+            {/* Resume Medis */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> Resume Medis Rawat Inap
+                </h4>
+                {resumeSaved && <Badge variant="outline" className="text-xs text-green-600 border-green-400">Tersimpan</Badge>}
+              </div>
+
+              {[
+                { key: "chief_complaint",    label: "Keluhan Utama Masuk",         rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
+                { key: "history_of_illness", label: "Riwayat Penyakit",            rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
+                { key: "physical_examination", label: "Pemeriksaan Fisik",         rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
+                { key: "summary",            label: "Ringkasan Perawatan",         rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
+                { key: "follow_up_plan",     label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
+              ].map(({ key, label, rows, placeholder }) => (
+                <div key={key} className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">{label}</Label>
+                  <Textarea
+                    rows={rows}
+                    value={resume[key as keyof typeof resume]}
+                    onChange={(e) => setResume((p) => ({ ...p, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                disabled={loading}
+                variant="outline"
+                className="w-full"
+                onClick={async () => {
+                  if (!currentEncounterId) return
+                  setLoading(true)
+                  setError("")
+                  try {
+                    await postMedicalResume({
+                      encounter_id: currentEncounterId,
+                      patient_id: admission.patient_id,
+                      ...resume,
+                    })
+                    setResumeSaved(true)
+                  } catch (err: any) {
+                    setError(err.message)
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menyimpan...</> : "Simpan Resume Medis"}
+              </Button>
+            </div>
+
+            <Separator />
+
+            {/* Discharge action */}
             <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 space-y-3">
-              <h4 className="font-semibold text-sm">Proses Kepulangan Pasien</h4>
-              <p className="text-xs text-foreground/60">
-                Isi ringkasan pulang untuk memproses discharge pasien. Invoice akan difinalisasi otomatis.
-              </p>
+              <h4 className="font-semibold text-sm">Proses Kepulangan</h4>
+              <p className="text-xs text-foreground/60">Isi kondisi pulang lalu pulangkan pasien. Pastikan resume medis sudah disimpan.</p>
               <div className="space-y-2">
-                <Label>Ringkasan Pulang *</Label>
+                <Label>Kondisi Saat Pulang *</Label>
                 <Textarea
-                  rows={4}
+                  rows={2}
                   value={dischargeSummary}
                   onChange={(e) => setDischargeSummary(e.target.value)}
-                  placeholder="Ringkasan perawatan, kondisi pulang, dan instruksi kontrol..."
+                  placeholder="Contoh: Sembuh / Membaik / Pulang atas permintaan sendiri / Dirujuk..."
                 />
               </div>
               <Button
@@ -311,6 +431,70 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Pulangkan Pasien"}
               </Button>
             </div>
+          </TabsContent>
+
+          {/* Surgery Tab */}
+          <TabsContent value="surgery" className="space-y-4 mt-4">
+            <form onSubmit={handleSubmitSurgery} className="space-y-4 p-4 rounded-lg border bg-muted/10">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400">
+                <Activity className="w-4 h-4" /> Form Permintaan Tindakan Operasi (OK)
+              </div>
+              <p className="text-xs text-foreground/60">
+                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK. 
+                Secara default, pasien ini akan kembali dirawat di bangsal rawat inap pasca-operasi.
+              </p>
+
+              {surgerySuccess && (
+                <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300">
+                  <AlertDescription>Permintaan tindakan operasi berhasil dikirim ke antrian OK!</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Jenis Operasi *</Label>
+                  <Input
+                    value={surgeryType}
+                    onChange={(e) => setSurgeryType(e.target.value)}
+                    placeholder="Ex: Appendectomy, Sectio Caesarea, debridement"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Indikasi Klinis *</Label>
+                  <Input
+                    value={surgeryIndication}
+                    onChange={(e) => setSurgeryIndication(e.target.value)}
+                    placeholder="Ex: Appendicitis Akut, Fetal Distress"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Jenis Anestesi</Label>
+                  <Select value={surgeryAnesthesia} onValueChange={setSurgeryAnesthesia}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="umum">Umum (General)</SelectItem>
+                      <SelectItem value="spinal">Spinal (Regional)</SelectItem>
+                      <SelectItem value="lokal">Lokal</SelectItem>
+                      <SelectItem value="regional">Regional Block</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={surgeryLoading || !surgeryType.trim() || !surgeryIndication.trim()}
+                className="w-full bg-red-600 hover:bg-red-700"
+              >
+                {surgeryLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Mengirim...</>
+                ) : (
+                  <><Activity className="w-4 h-4 mr-2" />Kirim Permintaan Operasi</>
+                )}
+              </Button>
+            </form>
           </TabsContent>
         </Tabs>
       )}

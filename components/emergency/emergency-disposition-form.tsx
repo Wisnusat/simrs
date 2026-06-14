@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Loader2, ArrowRightCircle, BedDouble } from "lucide-react"
 
-import type { EmergencyEncounter, Location, InpatientRoomClass } from "@/lib/types/outpatient"
+import type { EmergencyEncounter, Location, InpatientRoomClass, Practitioner } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
-import { getLocations, postEpisodeOfCare, postInpatientAdmission } from "@/lib/api/client"
+import { getLocations, getPractitioners } from "@/lib/api/client"
 import { useToast } from "@/hooks/use-toast"
 
 interface EmergencyDispositionFormProps {
@@ -21,24 +21,26 @@ interface EmergencyDispositionFormProps {
 
 export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDispositionFormProps) {
   const [outcome, setOutcome] = useState<string>("discharged")
-  
-  // Options for 'referred_out'
+
+  // referred_out fields
   const [referredTo, setReferredTo] = useState("")
   const [referralLetter, setReferralLetter] = useState("")
 
-  // Options for 'admitted_inpatient'
+  // admitted_inpatient fields
   const [rooms, setRooms] = useState<Location[]>([])
   const [roomsLoading, setRoomsLoading] = useState(false)
   const [selectedRoom, setSelectedRoom] = useState<string>("")
   const [bedNumber, setBedNumber] = useState("")
   const [roomClass, setRoomClass] = useState<InpatientRoomClass>("kelas_3")
-  
+  const [doctors, setDoctors] = useState<Practitioner[]>([])
+  const [doctorsLoading, setDoctorsLoading] = useState(false)
+  const [dpjpId, setDpjpId] = useState("")
+
   const [dischargeSummary, setDischargeSummary] = useState("")
-  
-  const { update, actionLoading } = useEmergency()
+
+  const { resolveOutcome, actionLoading } = useEmergency()
   const { toast } = useToast()
 
-  // Fetch rooms if outcome is admitted
   useEffect(() => {
     if (outcome === "admitted_inpatient") {
       setRoomsLoading(true)
@@ -46,54 +48,45 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
         .then(setRooms)
         .catch(() => {})
         .finally(() => setRoomsLoading(false))
+
+      setDoctorsLoading(true)
+      getPractitioners({ role: "doctor" })
+        .then(setDoctors)
+        .catch(() => {})
+        .finally(() => setDoctorsLoading(false))
     }
   }, [outcome])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    try {
-      if (outcome === "admitted_inpatient") {
-        if (!selectedRoom || !bedNumber) {
-          toast({ title: "Error", description: "Kamar dan nomor bed harus diisi", variant: "destructive" })
-          return
-        }
+    if (outcome === "admitted_inpatient" && (!selectedRoom || !bedNumber || !dpjpId)) {
+      toast({ title: "Error", description: "Kamar, nomor bed, dan DPJP harus diisi", variant: "destructive" })
+      return
+    }
+    if (outcome === "referred" && !referredTo) {
+      toast({ title: "Error", description: "Tujuan rujukan harus diisi", variant: "destructive" })
+      return
+    }
 
-        // 1. Create Episode of Care
-        const episode = await postEpisodeOfCare({
-          patient_id: encounter.patient_id,
-          diagnosis_primary: encounter.triage_complaint || "Observasi IGD",
-        })
-
-        // 2. Create Admission
-        await postInpatientAdmission({
-          episode_of_care_id: episode.id,
-          patient_id: encounter.patient_id,
+    const input: Parameters<typeof resolveOutcome>[1] = {
+      outcome: outcome as 'discharged' | 'referred' | 'admitted_inpatient',
+      ...(outcome === "referred" && {
+        referred_to: referredTo,
+        referral_letter_no: referralLetter || undefined,
+      }),
+      ...(outcome === "admitted_inpatient" && {
+        admission_data: {
           room_location_id: selectedRoom,
           bed_number: bedNumber,
           room_class: roomClass,
-        })
-      }
-
-      // 3. Update the Emergency Encounter outcome & status
-      let newStatus = outcome === "admitted_inpatient" ? "admitted_to_inpatient" 
-                    : outcome === "referred" ? "referred_out" 
-                    : "completed"
-
-      const success = await update(encounter.id, {
-        outcome,
-        status: newStatus,
-        referred_to: referredTo,
-        referral_letter_no: referralLetter,
-        resuscitation_notes: dischargeSummary
-      })
-
-      if (success) {
-        onSuccess()
-      }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Gagal menyimpan disposisi", variant: "destructive" })
+          dpjp_id: dpjpId,
+        },
+      }),
     }
+
+    const result = await resolveOutcome(encounter.id, input)
+    if (result) onSuccess()
   }
 
   return (
@@ -122,23 +115,22 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
           </RadioGroup>
         </div>
 
-        {/* Extended options based on outcome */}
         {outcome === "referred" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30">
             <div className="space-y-2">
               <Label>Tujuan Rujukan (Nama RS) *</Label>
-              <Input 
-                value={referredTo} 
-                onChange={(e) => setReferredTo(e.target.value)} 
-                required 
+              <Input
+                value={referredTo}
+                onChange={(e) => setReferredTo(e.target.value)}
+                required
                 placeholder="Mis: RS Pusat..."
               />
             </div>
             <div className="space-y-2">
               <Label>Nomor Surat Rujukan</Label>
-              <Input 
-                value={referralLetter} 
-                onChange={(e) => setReferralLetter(e.target.value)} 
+              <Input
+                value={referralLetter}
+                onChange={(e) => setReferralLetter(e.target.value)}
                 placeholder="Opsional"
               />
             </div>
@@ -151,7 +143,26 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
               <BedDouble className="w-4 h-4 text-blue-500" /> Registrasi Rawat Inap
             </h4>
 
-            {/* Room selection */}
+            <div className="space-y-2">
+              <Label>DPJP (Dokter Penanggung Jawab) *</Label>
+              {doctorsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-foreground/50">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat dokter...
+                </div>
+              ) : (
+                <Select value={dpjpId} onValueChange={setDpjpId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih DPJP..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctors.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>Pilih Kamar *</Label>
               {roomsLoading ? (
@@ -219,7 +230,7 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
 
         <div className="space-y-2">
           <Label>Catatan Pulang / Disposisi</Label>
-          <Textarea 
+          <Textarea
             rows={3}
             value={dischargeSummary}
             onChange={(e) => setDischargeSummary(e.target.value)}
@@ -229,9 +240,9 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
       </div>
 
       <div className="flex justify-end">
-        <Button 
-          type="submit" 
-          disabled={actionLoading} 
+        <Button
+          type="submit"
+          disabled={actionLoading}
           className="bg-blue-600 hover:bg-blue-700"
         >
           {actionLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Memproses...</> : "Selesaikan Kunjungan IGD"}
