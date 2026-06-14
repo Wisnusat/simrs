@@ -720,3 +720,33 @@ export interface MedicalResumeInput {
   follow_up_plan?: string
 }
 
+// ---------------------------------------------------------------------------
+// Running Bill
+// ---------------------------------------------------------------------------
+
+export interface RunningBill {
+  id: string
+  episode_of_care_id: string
+  patient_id: string
+  item_type: string
+  item_name: string
+  item_code?: string
+  quantity: number
+  unit_price: number
+  subtotal: number
+  charge_date: string
+  reference_id?: string
+  created_at: string
+}
+
+export interface RunningBillInput {
+  episode_of_care_id: string
+  patient_id: string
+  item_type: string
+  item_name: string
+  item_code?: string
+  quantity: number
+  unit_price: number
+  charge_date?: string
+}
+

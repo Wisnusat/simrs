@@ -263,7 +263,24 @@ export async function syncInvoiceForEpisode(
     })
   }
 
-  // 2. Aggregate charges from all encounters
+  // 2. Running bill manual charges
+  const { data: runningBills } = await supabase
+    .from('running_bills')
+    .select('item_type, item_name, item_code, quantity, unit_price, reference_id')
+    .eq('episode_of_care_id', episodeOfCareId)
+
+  for (const rb of (runningBills ?? [])) {
+    allItems.push({
+      item_type: rb.item_type as any,
+      item_name: rb.item_name,
+      item_code: rb.item_code ?? undefined,
+      quantity: rb.quantity,
+      unit_price: rb.unit_price,
+      reference_id: rb.reference_id ?? undefined,
+    })
+  }
+
+  // 3. Aggregate charges from all encounters
   for (const encId of encounterIds) {
     const built = await buildInvoiceFromEncounter(
       supabase,

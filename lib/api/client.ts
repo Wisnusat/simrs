@@ -48,6 +48,8 @@ import type {
   SurgeryRequestInput,
   MedicalResume,
   MedicalResumeInput,
+  RunningBill,
+  RunningBillInput,
 } from '@/lib/types/outpatient'
 
 // ---------------------------------------------------------------------------
@@ -749,4 +751,23 @@ export async function postMedicalResume(input: MedicalResumeInput): Promise<Medi
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+// ---------------------------------------------------------------------------
+// Running Bills  /api/running-bills
+// ---------------------------------------------------------------------------
+
+export async function getRunningBills(episodeOfCareId: string): Promise<RunningBill[]> {
+  return fetchJson(`/api/running-bills?episode_of_care_id=${encodeURIComponent(episodeOfCareId)}`)
+}
+
+export async function postRunningBill(input: RunningBillInput): Promise<RunningBill> {
+  return fetchJson('/api/running-bills', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteRunningBill(id: string): Promise<void> {
+  return fetchJson(`/api/running-bills/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
