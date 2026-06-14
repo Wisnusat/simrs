@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useCallback, useEffect } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"

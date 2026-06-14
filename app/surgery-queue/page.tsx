@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useSurgeryRequests } from "@/hooks/outpatient/use-surgery-requests"
 import { getLocations } from "@/lib/api/client"
 import { useState, useEffect } from "react"
