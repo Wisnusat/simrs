@@ -18,13 +18,10 @@ export default function SystemLoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center justify-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-              ♥
-            </div>
-            <span className="text-2xl font-bold text-foreground">CareWell</span>
+            <span className="text-2xl font-bold text-foreground">Klinik Harapan Bunda</span>
           </Link>
           <h1 className="text-3xl font-bold text-foreground mb-2">Staff Portal</h1>
-          <p className="text-foreground/60">Internal Hospital Management System</p>
+          <p className="text-foreground/60">Sistem Manajemen Rumah Sakit</p>
         </div>
 
         <div className="space-y-6">
