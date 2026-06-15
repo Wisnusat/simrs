@@ -10,7 +10,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  * Query: ?role=doctor|nurse|...
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'practitioners:list', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'practitioners:list', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

@@ -10,7 +10,7 @@ import { requireAdmin, isGuardError } from '@/lib/api/guards'
  * Auth: Admin / Owner
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:staff:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:staff:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
  * Auth: Admin / Owner
  */
 export async function POST(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:staff:create', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:staff:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

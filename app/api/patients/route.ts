@@ -10,7 +10,7 @@ import { requireAuth, isGuardError } from '@/lib/api/guards'
  * Auth: Staff
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'patients:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'patients:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
  * Auth: Staff
  */
 export async function POST(request: NextRequest) {
-    const rl = rateLimit(request, 'patients:create', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'patients:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

@@ -15,7 +15,7 @@ interface RouteContext {
  * Auth: Owner only
  */
 export async function PATCH(request: NextRequest, ctx: RouteContext) {
-    const rl = rateLimit(request, 'cms:po:action', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:po:action', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

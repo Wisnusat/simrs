@@ -15,7 +15,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  *   limit     — per page (default 20, max 100)
  */
 export async function GET(req: NextRequest) {
-    const rl = rateLimit(req, 'cms:master-lab-services:list', RATE_LIMITS.read)
+    const rl = await rateLimit(req, 'cms:master-lab-services:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
     const supabase = await createClient()

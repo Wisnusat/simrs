@@ -26,7 +26,7 @@ async function getCurrentPractitioner(supabase: ReturnType<typeof createClient>)
  * Auth: Staff only (any active practitioner in an organization).
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'emergency:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'emergency:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -111,7 +111,7 @@ interface CreateEmergencyBody {
  * Auth: Nurse / Doctor (admin tidak boleh create encounter klinis).
  */
 export async function POST(request: NextRequest) {
-    const rl = rateLimit(request, 'emergency:create', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'emergency:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

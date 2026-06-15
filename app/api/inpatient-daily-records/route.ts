@@ -9,7 +9,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  * POST /api/inpatient-daily-records — create daily record linking admission + encounter
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'daily-records:list', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'daily-records:list', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'daily-records:create', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'daily-records:create', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

@@ -12,7 +12,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const rl = rateLimit(req, 'episodes:get', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'episodes:get', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -40,7 +40,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const rl = rateLimit(req, 'episodes:patch', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'episodes:patch', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

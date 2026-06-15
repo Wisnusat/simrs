@@ -10,7 +10,7 @@ import { requireAdmin, isGuardError } from '@/lib/api/guards'
  * Auth: None (public — used on hospital info page and booking)
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:poli:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:poli:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
  * Auth: Admin role only
  */
 export async function POST(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:poli:create', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:poli:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

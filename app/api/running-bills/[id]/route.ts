@@ -5,7 +5,7 @@ import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const rl = rateLimit(req, 'running-bills:delete', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'running-bills:delete', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

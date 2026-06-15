@@ -12,7 +12,7 @@ interface RouteContext {
  * GET /api/cms/staff/[id]
  */
 export async function GET(request: NextRequest, ctx: RouteContext) {
-    const rl = rateLimit(request, 'cms:staff:get', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:staff:get', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
  * Update staff details or toggle active status.
  */
 export async function PATCH(request: NextRequest, ctx: RouteContext) {
-    const rl = rateLimit(request, 'cms:staff:update', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:staff:update', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
  * Soft-delete: sets is_active = false
  */
 export async function DELETE(request: NextRequest, ctx: RouteContext) {
-    const rl = rateLimit(request, 'cms:staff:delete', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:staff:delete', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

@@ -13,7 +13,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  *   today    "1" — shorthand for current date filter
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'encounters:list', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'encounters:list', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
  * Returns the created encounter row.
  */
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'encounters:create', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'encounters:create', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

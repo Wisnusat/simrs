@@ -19,7 +19,7 @@ export async function PATCH(
 ) {
     try {
         const { id } = await ctx.params
-        const rl = rateLimit(request, `cms:poli:update:${id}`, RATE_LIMITS.write)
+        const rl = await rateLimit(request, `cms:poli:update:${id}`, RATE_LIMITS.write)
         if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
         const supabase = await createClient()
@@ -79,7 +79,7 @@ export async function DELETE(
 ) {
     try {
         const { id } = await ctx.params
-        const rl = rateLimit(request, `cms:poli:delete:${id}`, RATE_LIMITS.write)
+        const rl = await rateLimit(request, `cms:poli:delete:${id}`, RATE_LIMITS.write)
         if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
         const supabase = await createClient()

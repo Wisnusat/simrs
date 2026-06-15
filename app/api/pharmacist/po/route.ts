@@ -10,7 +10,7 @@ import { requireAdmin, isGuardError } from '@/lib/api/guards'
  * List all POs for the pharmacist's organization
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'pharmacist:po:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'pharmacist:po:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
  * Create a new purchase order (draft)
  */
 export async function POST(request: NextRequest) {
-    const rl = rateLimit(request, 'pharmacist:po:create', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'pharmacist:po:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

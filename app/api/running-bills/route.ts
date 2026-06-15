@@ -5,7 +5,7 @@ import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
 
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'running-bills:get', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'running-bills:get', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'running-bills:post', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'running-bills:post', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

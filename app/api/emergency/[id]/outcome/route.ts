@@ -42,7 +42,7 @@ interface OutcomeBody {
  * Auth: Doctor only.
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-    const rl = rateLimit(request, 'emergency:outcome', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'emergency:outcome', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

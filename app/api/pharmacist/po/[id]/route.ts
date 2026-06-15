@@ -17,7 +17,7 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const rl = rateLimit(request, 'pharmacist:po:update', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'pharmacist:po:update', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

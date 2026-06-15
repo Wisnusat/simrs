@@ -25,7 +25,7 @@ async function getCurrentPractitioner(supabase: ReturnType<typeof createClient>)
  * Auth: Patient (self) or any staff in organization (RLS ensures rows).
  */
 export async function GET(request: NextRequest, context: RouteContext) {
-    const rl = rateLimit(request, 'emergency:get', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'emergency:get', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -105,7 +105,7 @@ interface UpdateEmergencyBody {
  * Auth: Nurse / Doctor / Admin.
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-    const rl = rateLimit(request, 'emergency:update', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'emergency:update', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

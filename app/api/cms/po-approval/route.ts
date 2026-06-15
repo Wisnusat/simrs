@@ -11,7 +11,7 @@ import { requireOwner, isGuardError } from '@/lib/api/guards'
  * Auth: Owner only
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:po:list', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:po:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

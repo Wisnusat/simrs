@@ -12,7 +12,7 @@ import { generateExcelResponse } from '@/lib/api/excel-export'
  * Auth: Owner only
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:report:lab', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:report:lab', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

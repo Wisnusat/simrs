@@ -10,7 +10,7 @@ import { requireAuth, requireAdmin, isGuardError } from '@/lib/api/guards'
  * Auth: Required (any authenticated staff)
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:org:get', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'cms:org:get', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
  * Auth: Admin role only
  */
 export async function PUT(request: NextRequest) {
-    const rl = rateLimit(request, 'cms:org:update', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'cms:org:update', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

@@ -21,7 +21,7 @@ import { syncInvoice } from '@/lib/api/satu-sehat'
  */
 
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'invoices:get', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'invoices:get', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

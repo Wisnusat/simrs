@@ -12,7 +12,7 @@ type RouteContext = { params: Promise<{ id: string }> }
  * Auth: Staff / Self
  */
 export async function GET(request: NextRequest, context: RouteContext) {
-    const rl = rateLimit(request, 'patients:get', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'patients:get', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
  * Auth: Staff
  */
 export async function PUT(request: NextRequest, context: RouteContext) {
-    const rl = rateLimit(request, 'patients:update', RATE_LIMITS.write)
+    const rl = await rateLimit(request, 'patients:update', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

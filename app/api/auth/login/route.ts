@@ -9,7 +9,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  */
 export async function POST(request: NextRequest) {
     // Rate limit: strict — brute-force protection
-    const rl = rateLimit(request, 'auth:login', RATE_LIMITS.auth)
+    const rl = await rateLimit(request, 'auth:login', RATE_LIMITS.auth)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

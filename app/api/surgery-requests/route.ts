@@ -10,7 +10,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  * Supports status/patient filtering.
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'surgery:list', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'surgery:list', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
  * Body: { patient_id, encounter_id, episode_of_care_id?, surgery_type, indication, anesthesia_type?, needs_inpatient_after? }
  */
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'surgery:create', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'surgery:create', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

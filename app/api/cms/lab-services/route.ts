@@ -9,7 +9,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  * Returns all lab services for the organization.
  */
 export async function GET(req: NextRequest) {
-    const rl = rateLimit(req, 'cms:lab-services:list', RATE_LIMITS.read)
+    const rl = await rateLimit(req, 'cms:lab-services:list', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
     const supabase = await createClient()
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
  * Body: { master_id: string } — the id from master_lab_services
  */
 export async function POST(req: NextRequest) {
-    const rl = rateLimit(req, 'cms:lab-services:create', RATE_LIMITS.write)
+    const rl = await rateLimit(req, 'cms:lab-services:create', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
     const supabase = await createClient()
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
  * Body: { id: string } — the id from lab_services
  */
 export async function DELETE(req: NextRequest) {
-    const rl = rateLimit(req, 'cms:lab-services:delete', RATE_LIMITS.write)
+    const rl = await rateLimit(req, 'cms:lab-services:delete', RATE_LIMITS.write)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
     const supabase = await createClient()

@@ -9,7 +9,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
  * POST /api/admission-requests — fulfill request by assigning room/bed and creating inpatient_admissions
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'admission-requests:list', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'admission-requests:list', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'admission-requests:create', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'admission-requests:create', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

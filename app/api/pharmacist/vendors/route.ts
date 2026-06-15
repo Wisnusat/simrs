@@ -9,7 +9,7 @@ import { requireAdmin, isGuardError } from '@/lib/api/guards'
  * Lists active vendors for the organization
  */
 export async function GET(request: NextRequest) {
-    const rl = rateLimit(request, 'pharmacist:vendors', RATE_LIMITS.read)
+    const rl = await rateLimit(request, 'pharmacist:vendors', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
 
     try {

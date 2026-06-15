@@ -10,7 +10,7 @@ import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
  * Query: ?search=... (minimum 3 characters, filters by code or name_id)
  */
 export async function GET(req: NextRequest) {
-    const rl = rateLimit(req, 'icd10:get', RATE_LIMITS.read)
+    const rl = await rateLimit(req, 'icd10:get', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
     const supabase = await createClient()

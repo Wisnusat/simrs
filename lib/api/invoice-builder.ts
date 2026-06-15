@@ -148,17 +148,11 @@ export async function syncInvoiceForEncounter(
   const orgId = (enc as any).organization_id
   const built = await buildInvoiceFromEncounter(supabase, encounterId, orgId)
 
-  let { data: invoice } = await supabase
+  const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
+  const { data: invoice } = await supabase
     .from('invoices')
-    .select('id')
-    .eq('encounter_id', encounterId)
-    .maybeSingle()
-
-  if (!invoice) {
-    const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-    const { data: newInvoice } = await supabase
-      .from('invoices')
-      .insert({
+    .upsert(
+      {
         encounter_id: encounterId,
         patient_id: (enc as any).patient_id,
         organization_id: orgId,
@@ -169,23 +163,14 @@ export async function syncInvoiceForEncounter(
         tax_amount: built.tax_amount,
         total_amount: built.total_amount,
         status: 'unpaid',
-      })
-      .select('id')
-      .single()
-
-    if (newInvoice) invoice = newInvoice
-  } else {
-    // Update existing invoice totals
-    await supabase
-      .from('invoices')
-      .update({
-        subtotal: built.subtotal,
-        discount_amount: built.discount_amount,
-        tax_amount: built.tax_amount,
-        total_amount: built.total_amount,
-      })
-      .eq('id', invoice.id)
-  }
+      },
+      {
+        onConflict: 'encounter_id',
+        ignoreDuplicates: false,
+      }
+    )
+    .select('id')
+    .single()
 
   // Rewrite line items
   if (invoice) {
@@ -201,6 +186,7 @@ export async function syncInvoiceForEncounter(
 
 // ---------------------------------------------------------------------------
 // Inpatient episode-level invoice sync
+
 // ---------------------------------------------------------------------------
 
 const ROOM_RATES: Record<string, number> = {
@@ -293,20 +279,13 @@ export async function syncInvoiceForEpisode(
   const subtotal = allItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
   const total_amount = subtotal
 
-  // Upsert episode-level invoice (use episode_of_care_id as reference)
-  let { data: invoice } = await supabase
+  // Upsert episode-level invoice — onConflict on episode_of_care_id prevents duplicates
+  const firstEncounterId = encounterIds[0] ?? null
+  const invoiceNumber = `INV-IP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
+  const { data: invoice } = await supabase
     .from('invoices')
-    .select('id')
-    .eq('episode_of_care_id', episodeOfCareId)
-    .maybeSingle()
-
-  if (!invoice) {
-    // Try linking to first encounter
-    const firstEncounterId = encounterIds[0] ?? null
-    const invoiceNumber = `INV-IP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-    const { data: newInvoice } = await supabase
-      .from('invoices')
-      .insert({
+    .upsert(
+      {
         encounter_id: firstEncounterId,
         episode_of_care_id: episodeOfCareId,
         patient_id: (episode as any).patient_id,
@@ -318,17 +297,14 @@ export async function syncInvoiceForEpisode(
         tax_amount: 0,
         total_amount,
         status: 'unpaid',
-      })
-      .select('id')
-      .single()
-
-    if (newInvoice) invoice = newInvoice
-  } else {
-    await supabase
-      .from('invoices')
-      .update({ subtotal, total_amount, discount_amount: 0, tax_amount: 0 })
-      .eq('id', invoice.id)
-  }
+      },
+      {
+        onConflict: 'episode_of_care_id',
+        ignoreDuplicates: false,
+      }
+    )
+    .select('id')
+    .single()
 
   // Rewrite line items
   if (invoice) {

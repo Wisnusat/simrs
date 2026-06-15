@@ -20,7 +20,7 @@ import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
  */
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 'lab-orders:post', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'lab-orders:post', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 'lab-orders:get', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'lab-orders:get', RATE_LIMITS.read)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()

@@ -48,7 +48,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const rl = rateLimit(req, 'lab-orders:patch', RATE_LIMITS.write)
+  const rl = await rateLimit(req, 'lab-orders:patch', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
