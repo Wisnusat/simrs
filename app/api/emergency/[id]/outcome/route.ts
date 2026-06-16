@@ -62,25 +62,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
         const { id } = await context.params
 
-        // Ambil emergency encounter beserta encounter untuk org/patient context
+        // Ambil emergency encounter
         const { data: existing, error: findError } = await supabase
             .from('emergency_encounters')
-            .select(`
-                id,
-                patient_id,
-                encounter_id,
-                outcome,
-                encounters:encounter_id (
-                    id,
-                    organization_id
-                )
-            `)
+            .select('id, patient_id, encounter_id, outcome')
             .eq('id', id)
             .single()
 
         if (findError || !existing) {
             return apiResponse.notFound('IGD encounter not found')
         }
+
+        // Fetch organization_id dari encounters (join terpisah untuk hindari ambiguitas FK)
+        const { data: encounterCtx } = await supabase
+            .from('encounters')
+            .select('organization_id')
+            .eq('id', existing.encounter_id)
+            .single()
 
         const body = (await request.json()) as OutcomeBody
         const { outcome, referred_to, referral_letter_no, admission_data } = body
@@ -104,9 +102,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const now = new Date()
 
         // Update emergency_encounters outcome & status
+        const emergencyStatus =
+            outcome === 'admitted_inpatient' ? 'admitted_to_inpatient' :
+            outcome === 'referred' ? 'referred_out' :
+            'completed'
+
         const emergencyUpdates: Record<string, unknown> = {
             outcome,
-            status: 'completed',
+            status: emergencyStatus,
             updated_at: now.toISOString(),
         }
 
@@ -138,7 +141,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         let admissionId: string | null = null
 
         if (outcome === 'admitted_inpatient') {
-            const orgId: string | undefined = (existing as any).encounters?.organization_id
+            const orgId: string | undefined = encounterCtx?.organization_id
             if (!orgId) {
                 console.error('Missing organization_id for inpatient admission')
                 return apiResponse.serverError('Organization context not found for inpatient admission')
