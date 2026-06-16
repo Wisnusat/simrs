@@ -298,7 +298,7 @@ export function SurgeryDashboard({ role }: { role: string }) {
                               }}
                               className="bg-zinc-800 hover:bg-zinc-900 text-white dark:bg-zinc-200 dark:hover:bg-zinc-100 dark:text-zinc-950 rounded-lg shadow-sm"
                             >
-                              <LogOut className="w-3.5 h-3.5 mr-1" /> Proses Pemulangan
+                              <BedDouble className="w-3.5 h-3.5 mr-1" /> Pindahkan ke Rawat Inap
                             </Button>
                           )}
                         </TableCell>

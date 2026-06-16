@@ -280,7 +280,8 @@ export function useSurgeryDashboard() {
         } as any)
       }
 
-      toast?.({ title: "Proses Selesai", description: "Pasien telah berhasil dipindahkan atau dipulangkan!" })
+      await updateSurgeryStatus(dischargeItem.id, "surgery_completed")
+      toast?.({ title: "Proses Selesai", description: "Pasien telah berhasil dipindahkan ke rawat inap!" })
       setDischargeItem(null)
       setActiveTab("history")
       refresh()
@@ -295,10 +296,11 @@ export function useSurgeryDashboard() {
       r.status === "surgery_scheduled" ||
       r.status === "ready_for_surgery" ||
       r.status === "intra_operative" ||
-      r.status === "surgery_completed" ||
       r.status === "post_operative"
   )
-  const historicalRequests = surgeryRequests.filter((r) => r.pacu_discharge_at !== null || r.status === "post_operative")
+  const historicalRequests = surgeryRequests.filter(
+    (r) => r.pacu_discharge_at !== null || r.status === "post_operative" || r.status === "surgery_completed"
+  )
 
   return {
     activeTab,
