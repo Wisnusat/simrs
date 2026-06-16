@@ -19,18 +19,10 @@ async function getCurrentPractitioner(supabase: ReturnType<typeof createClient>)
     return practitioner as { id: string; role: string; organization_id: string }
 }
 
-interface AdmissionData {
-    room_location_id: string
-    bed_number: string
-    room_class: string
-    dpjp_id: string
-}
-
 interface OutcomeBody {
     outcome: 'discharged' | 'referred' | 'admitted_inpatient'
     referred_to?: string
     referral_letter_no?: string
-    admission_data?: AdmissionData
 }
 
 /**
@@ -81,22 +73,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             .single()
 
         const body = (await request.json()) as OutcomeBody
-        const { outcome, referred_to, referral_letter_no, admission_data } = body
+        const { outcome, referred_to, referral_letter_no } = body
 
         const allowedOutcomes: OutcomeBody['outcome'][] = ['discharged', 'referred', 'admitted_inpatient']
         if (!outcome || !allowedOutcomes.includes(outcome)) {
             return apiResponse.badRequest(`outcome must be one of: ${allowedOutcomes.join(', ')}`)
-        }
-
-        // Jika masuk rawat inap, admission_data wajib lengkap
-        if (outcome === 'admitted_inpatient') {
-            if (!admission_data) {
-                return apiResponse.badRequest('admission_data is required when outcome is admitted_inpatient')
-            }
-            const { room_location_id, bed_number, room_class, dpjp_id } = admission_data
-            if (!room_location_id || !bed_number || !room_class || !dpjp_id) {
-                return apiResponse.badRequest('admission_data must include room_location_id, bed_number, room_class, and dpjp_id')
-            }
         }
 
         const now = new Date()
@@ -138,7 +119,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             console.warn('Encounter close error (outcome):', encounterUpdateError)
         }
 
-        let admissionId: string | null = null
+        let episodeId: string | null = null
 
         if (outcome === 'admitted_inpatient') {
             const orgId: string | undefined = encounterCtx?.organization_id
@@ -147,11 +128,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                 return apiResponse.serverError('Organization context not found for inpatient admission')
             }
 
-            const { room_location_id, bed_number, room_class, dpjp_id } = admission_data as AdmissionData
-
             const startDate = now.toISOString().slice(0, 10) // YYYY-MM-DD
 
-            // Buat episode_of_care
+            // Buat episode_of_care tanpa kamar — perawat akan assign kamar via /api/admission-requests
             const { data: episode, error: episodeError } = await supabase
                 .from('episodes_of_care')
                 .insert({
@@ -159,9 +138,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                     organization_id: orgId,
                     start_date: startDate,
                     status: 'admitted',
-                    dpjp_id,
-                    room_location_id,
-                    bed_number,
+                    dpjp_id: practitioner.id,
                 })
                 .select('id')
                 .single()
@@ -171,29 +148,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                 return apiResponse.serverError('Failed to create episode of care')
             }
 
-            // Buat inpatient_admissions
-            const { data: admission, error: admissionError } = await supabase
-                .from('inpatient_admissions')
-                .insert({
-                    episode_of_care_id: episode.id,
-                    patient_id: existing.patient_id,
-                    admitted_from: 'igd',
-                    admission_date: now.toISOString(),
-                    dpjp_id,
-                    room_location_id,
-                    bed_number,
-                    room_class,
-                    status: 'admitted',
-                })
-                .select('id')
-                .single()
-
-            if (admissionError || !admission) {
-                console.error('Inpatient admission create error:', admissionError)
-                return apiResponse.serverError('Failed to create inpatient admission')
-            }
-
-            admissionId = admission.id
+            episodeId = episode.id
         }
 
         // Generate invoice for non-inpatient outcomes (discharged/referred)
@@ -204,9 +159,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         }
 
         return apiResponse.ok({
-            status: 'completed',
             outcome,
-            admission_id: admissionId,
+            episode_id: episodeId,
             emergency_id: updatedEmergency.id,
         })
     } catch {

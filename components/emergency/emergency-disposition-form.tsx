@@ -1,17 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, ArrowRightCircle, BedDouble } from "lucide-react"
+import { Loader2, ArrowRightCircle, BedDouble, Info } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-import type { EmergencyEncounter, Location, InpatientRoomClass, Practitioner } from "@/lib/types/outpatient"
+import type { EmergencyEncounter } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
-import { getLocations, getPractitioners } from "@/lib/api/client"
 import { useToast } from "@/hooks/use-toast"
 
 interface EmergencyDispositionFormProps {
@@ -21,49 +20,16 @@ interface EmergencyDispositionFormProps {
 
 export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDispositionFormProps) {
   const [outcome, setOutcome] = useState<string>("discharged")
-
-  // referred_out fields
   const [referredTo, setReferredTo] = useState("")
   const [referralLetter, setReferralLetter] = useState("")
-
-  // admitted_inpatient fields
-  const [rooms, setRooms] = useState<Location[]>([])
-  const [roomsLoading, setRoomsLoading] = useState(false)
-  const [selectedRoom, setSelectedRoom] = useState<string>("")
-  const [bedNumber, setBedNumber] = useState("")
-  const [roomClass, setRoomClass] = useState<InpatientRoomClass>("kelas_3")
-  const [doctors, setDoctors] = useState<Practitioner[]>([])
-  const [doctorsLoading, setDoctorsLoading] = useState(false)
-  const [dpjpId, setDpjpId] = useState("")
-
   const [dischargeSummary, setDischargeSummary] = useState("")
 
   const { resolveOutcome, actionLoading } = useEmergency()
   const { toast } = useToast()
 
-  useEffect(() => {
-    if (outcome === "admitted_inpatient") {
-      setRoomsLoading(true)
-      getLocations({ type: "patient_room" })
-        .then(setRooms)
-        .catch(() => {})
-        .finally(() => setRoomsLoading(false))
-
-      setDoctorsLoading(true)
-      getPractitioners({ role: "doctor" })
-        .then(setDoctors)
-        .catch(() => {})
-        .finally(() => setDoctorsLoading(false))
-    }
-  }, [outcome])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (outcome === "admitted_inpatient" && (!selectedRoom || !bedNumber || !dpjpId)) {
-      toast({ title: "Error", description: "Kamar, nomor bed, dan DPJP harus diisi", variant: "destructive" })
-      return
-    }
     if (outcome === "referred" && !referredTo) {
       toast({ title: "Error", description: "Tujuan rujukan harus diisi", variant: "destructive" })
       return
@@ -74,14 +40,6 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
       ...(outcome === "referred" && {
         referred_to: referredTo,
         referral_letter_no: referralLetter || undefined,
-      }),
-      ...(outcome === "admitted_inpatient" && {
-        admission_data: {
-          room_location_id: selectedRoom,
-          bed_number: bedNumber,
-          room_class: roomClass,
-          dpjp_id: dpjpId,
-        },
       }),
     }
 
@@ -138,94 +96,15 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
         )}
 
         {outcome === "admitted_inpatient" && (
-          <div className="space-y-4 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-            <h4 className="font-semibold flex items-center gap-2 text-sm">
-              <BedDouble className="w-4 h-4 text-blue-500" /> Registrasi Rawat Inap
-            </h4>
-
-            <div className="space-y-2">
-              <Label>DPJP (Dokter Penanggung Jawab) *</Label>
-              {doctorsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-foreground/50">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat dokter...
-                </div>
-              ) : (
-                <Select value={dpjpId} onValueChange={setDpjpId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih DPJP..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {doctors.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Pilih Kamar *</Label>
-              {roomsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-foreground/50">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat kamar...
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                  {rooms.map((room) => {
-                    const available = room.capacity - (room.occupied ?? 0)
-                    const isFull = available <= 0
-                    return (
-                      <button
-                        key={room.id}
-                        type="button"
-                        disabled={isFull}
-                        className={`p-3 rounded-lg border text-left text-sm transition-all ${
-                          selectedRoom === room.id
-                            ? "border-blue-500 bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
-                            : isFull
-                            ? "border-border/40 opacity-50 cursor-not-allowed"
-                            : "border-border hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10"
-                        }`}
-                        onClick={() => setSelectedRoom(room.id)}
-                      >
-                        <p className="font-medium">{room.name}</p>
-                        <p className="text-xs text-foreground/50">
-                          {room.floor ? `Lantai ${room.floor} · ` : ""}
-                          Tersedia: {available}/{room.capacity}
-                        </p>
-                      </button>
-                    )
-                  })}
-                  {rooms.length === 0 && (
-                    <p className="text-sm text-foreground/50 col-span-2 text-center py-4">Belum ada kamar tersedia.</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nomor Bed *</Label>
-                <Input
-                  value={bedNumber}
-                  onChange={(e) => setBedNumber(e.target.value)}
-                  placeholder="mis. A1, B2"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Kelas Kamar *</Label>
-                <Select value={roomClass} onValueChange={(v) => setRoomClass(v as InpatientRoomClass)}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vip">VIP</SelectItem>
-                    <SelectItem value="kelas_1">Kelas 1</SelectItem>
-                    <SelectItem value="kelas_2">Kelas 2</SelectItem>
-                    <SelectItem value="kelas_3">Kelas 3</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
+          <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+            <BedDouble className="w-4 h-4 text-blue-500" />
+            <AlertDescription className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+              <span>
+                Pasien akan dipindahkan ke Rawat Inap. Perawat akan menentukan kamar dan kelas perawatan setelah pasien terdaftar.
+              </span>
+            </AlertDescription>
+          </Alert>
         )}
 
         <div className="space-y-2">

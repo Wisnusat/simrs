@@ -12,14 +12,18 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart, Trash2, Plus,
-  FlaskConical, Stethoscope,
+  FlaskConical, Stethoscope, Clock, Loader2,
 } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
-import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getRunningBills, postRunningBill, deleteRunningBill, getLabOrders, getSurgeryRequests } from "@/lib/api/client"
+import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getRunningBills, postRunningBill, deleteRunningBill, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 
@@ -32,7 +36,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 
-import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, RunningBill, LabOrder, SurgeryRequest } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, RunningBill, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
@@ -57,6 +61,15 @@ export default function InpatientNurseDashboard() {
   const [labOrdersLoading, setLabOrdersLoading] = useState(false)
   const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
   const [surgeriesLoading, setSurgeriesLoading] = useState(false)
+
+  // Pending admissions (episodes_of_care without room — waiting for nurse room assignment)
+  const [pendingAdmissions, setPendingAdmissions] = useState<EpisodeOfCare[]>([])
+  const [pendingLoading, setPendingLoading] = useState(false)
+  const [assigningId, setAssigningId] = useState<string | null>(null)
+  const [rooms, setRooms] = useState<Location[]>([])
+  const [roomsLoading, setRoomsLoading] = useState(false)
+  const [assignForm, setAssignForm] = useState({ room_location_id: '', bed_number: '', room_class: 'kelas_3' as InpatientRoomClass })
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
 
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
 
@@ -128,6 +141,46 @@ export default function InpatientNurseDashboard() {
       setSurgeriesLoading(false)
     }
   }, [])
+
+  // Load pending admissions (episodes without room)
+  const loadPendingAdmissions = useCallback(async () => {
+    setPendingLoading(true)
+    try {
+      const data = await getAdmissionRequests()
+      setPendingAdmissions(data)
+    } catch {
+      setPendingAdmissions([])
+    } finally {
+      setPendingLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadPendingAdmissions() }, [loadPendingAdmissions])
+
+  const handleOpenAssign = useCallback(async (episodeId: string) => {
+    setAssigningId(episodeId)
+    setAssignForm({ room_location_id: '', bed_number: '', room_class: 'kelas_3' })
+    if (rooms.length === 0) {
+      setRoomsLoading(true)
+      getLocations({ type: 'patient_room' }).then(setRooms).catch(() => {}).finally(() => setRoomsLoading(false))
+    }
+  }, [rooms.length])
+
+  const handleAssignRoom = useCallback(async (episodeId: string) => {
+    const { room_location_id, bed_number, room_class } = assignForm
+    if (!room_location_id || !bed_number || !room_class) return
+    setAssignSubmitting(true)
+    try {
+      await postInpatientAssignment({ episode_of_care_id: episodeId, room_location_id, bed_number, room_class })
+      setAssigningId(null)
+      loadPendingAdmissions()
+      refreshAdm()
+    } catch {
+      // error handled by toast from hook or inline
+    } finally {
+      setAssignSubmitting(false)
+    }
+  }, [assignForm, loadPendingAdmissions, refreshAdm])
 
   // Handle opening CPPT for a patient
   const handleOpenCppt = useCallback(async (adm: InpatientAdmission) => {
@@ -201,6 +254,126 @@ export default function InpatientNurseDashboard() {
             <StatCard label="Dalam Perawatan" value={stats.inCare} icon={ClipboardList} colorClass="text-orange-600" />
             <StatCard label="Siap Pulang" value={stats.dischargeReady} icon={Heart} colorClass="text-pink-600" />
           </div>
+
+          {/* Pending admissions — waiting for room assignment */}
+          {(pendingLoading || pendingAdmissions.length > 0) && (
+            <Card className="border-orange-200 dark:border-orange-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Clock className="w-4 h-4 text-orange-500" />
+                  Pasien Menunggu Kamar
+                  {pendingAdmissions.length > 0 && (
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                      {pendingAdmissions.length}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>Pasien sudah disetujui rawat inap, belum mendapat kamar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {pendingLoading ? (
+                  <p className="text-sm text-center py-4 text-muted-foreground">Memuat...</p>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingAdmissions.map((ep) => (
+                      <div key={ep.id} className="border rounded-lg p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold">{(ep as any).patients?.full_name}</p>
+                            <p className="text-xs text-foreground/60">
+                              MR: {(ep as any).patients?.medical_record_no}
+                              {(ep as any).dpjp?.full_name && ` · DPJP: ${(ep as any).dpjp.full_name}`}
+                            </p>
+                            <p className="text-xs text-foreground/50 mt-0.5">
+                              Terdaftar: {new Date((ep as any).created_at ?? '').toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-orange-600 hover:bg-orange-700 shrink-0"
+                            onClick={() => handleOpenAssign(ep.id)}
+                          >
+                            <BedDouble className="w-3 h-3 mr-1" /> Assign Kamar
+                          </Button>
+                        </div>
+
+                        {assigningId === ep.id && (
+                          <div className="border-t pt-3 space-y-3 bg-muted/20 rounded-b-lg -mx-3 -mb-3 px-3 pb-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">Pilih Kamar *</Label>
+                              {roomsLoading ? (
+                                <p className="text-xs text-foreground/50 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Memuat kamar...</p>
+                              ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
+                                  {rooms.map((room) => {
+                                    const available = room.capacity - (room.occupied ?? 0)
+                                    const isFull = available <= 0
+                                    return (
+                                      <button
+                                        key={room.id}
+                                        type="button"
+                                        disabled={isFull}
+                                        className={`p-2 rounded border text-left text-xs transition-all ${
+                                          assignForm.room_location_id === room.id
+                                            ? 'border-orange-500 bg-orange-100 dark:bg-orange-900/30 ring-1 ring-orange-500'
+                                            : isFull
+                                            ? 'border-border/40 opacity-50 cursor-not-allowed'
+                                            : 'border-border hover:border-orange-300 hover:bg-orange-50/50'
+                                        }`}
+                                        onClick={() => setAssignForm(f => ({ ...f, room_location_id: room.id }))}
+                                      >
+                                        <p className="font-medium">{room.name}</p>
+                                        <p className="text-foreground/50">{room.floor ? `Lt ${room.floor} · ` : ''}Tersedia: {available}/{room.capacity}</p>
+                                      </button>
+                                    )
+                                  })}
+                                  {rooms.length === 0 && <p className="text-xs text-foreground/50 col-span-2 py-2">Tidak ada kamar.</p>}
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Nomor Bed *</Label>
+                                <Input
+                                  className="h-8 text-sm"
+                                  value={assignForm.bed_number}
+                                  onChange={(e) => setAssignForm(f => ({ ...f, bed_number: e.target.value }))}
+                                  placeholder="mis. A1, B2"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Kelas Kamar *</Label>
+                                <Select value={assignForm.room_class} onValueChange={(v) => setAssignForm(f => ({ ...f, room_class: v as InpatientRoomClass }))}>
+                                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="vip">VIP</SelectItem>
+                                    <SelectItem value="kelas_1">Kelas 1</SelectItem>
+                                    <SelectItem value="kelas_2">Kelas 2</SelectItem>
+                                    <SelectItem value="kelas_3">Kelas 3</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <Button size="sm" variant="outline" onClick={() => setAssigningId(null)}>Batal</Button>
+                              <Button
+                                size="sm"
+                                className="bg-orange-600 hover:bg-orange-700"
+                                disabled={assignSubmitting || !assignForm.room_location_id || !assignForm.bed_number}
+                                onClick={() => handleAssignRoom(ep.id)}
+                              >
+                                {assignSubmitting ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Menyimpan...</> : 'Simpan'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

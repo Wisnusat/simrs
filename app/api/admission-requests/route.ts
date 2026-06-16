@@ -64,7 +64,17 @@ export async function POST(req: NextRequest) {
     return apiResponse.badRequest('Episode of care not found')
   }
 
-  // 2. Patch episodes_of_care to assign the room
+  // 2. Infer admitted_from: IGD if patient has a pending inpatient transfer from emergency
+  const { data: emergencyEnc } = await supabase
+    .from('emergency_encounters')
+    .select('id')
+    .eq('patient_id', episode.patient_id)
+    .eq('status', 'admitted_to_inpatient')
+    .maybeSingle()
+
+  const admitted_from = emergencyEnc ? 'igd' : 'outpatient'
+
+  // 3. Patch episodes_of_care to assign the room
   const { error: patchError } = await supabase
     .from('episodes_of_care')
     .update({ room_location_id, bed_number })
@@ -72,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   if (patchError) return apiResponse.serverError(patchError.message)
 
-  // 3. Create inpatient_admissions record
+  // 4. Create inpatient_admissions record
   const { data: admission, error: admissionError } = await supabase
     .from('inpatient_admissions')
     .insert({
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest) {
       bed_number,
       room_class,
       dpjp_id: episode.dpjp_id,
-      admitted_from: 'outpatient',
+      admitted_from,
       status: 'admitted',
       admission_date: new Date().toISOString(),
     })
