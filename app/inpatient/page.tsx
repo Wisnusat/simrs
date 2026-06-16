@@ -279,7 +279,17 @@ export default function InpatientNurseDashboard() {
                       <div key={ep.id} className="border rounded-lg p-3 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="font-semibold">{(ep as any).patients?.full_name}</p>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className="font-semibold">{(ep as any).patients?.full_name}</p>
+                              <Badge
+                                variant="outline"
+                                className={(ep as any).source === 'igd'
+                                  ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 text-[10px] h-5'
+                                  : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] h-5'}
+                              >
+                                {(ep as any).source === 'igd' ? 'IGD' : 'Poli'}
+                              </Badge>
+                            </div>
                             <p className="text-xs text-foreground/60">
                               MR: {(ep as any).patients?.medical_record_no}
                               {(ep as any).dpjp?.full_name && ` · DPJP: ${(ep as any).dpjp.full_name}`}

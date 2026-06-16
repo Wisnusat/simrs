@@ -30,7 +30,27 @@ export async function GET(req: NextRequest) {
     .limit(100)
 
   if (error) return apiResponse.serverError(error.message)
-  return apiResponse.ok(data)
+
+  // Annotate each episode with source (igd vs poli) — single query, no N+1
+  const patientIds = (data ?? []).map((ep: any) => ep.patient_id)
+  let igdSet = new Set<string>()
+
+  if (patientIds.length > 0) {
+    const { data: igdRows } = await supabase
+      .from('emergency_encounters')
+      .select('patient_id')
+      .in('patient_id', patientIds)
+      .eq('status', 'admitted_to_inpatient')
+
+    igdSet = new Set((igdRows ?? []).map((r: any) => r.patient_id))
+  }
+
+  const annotated = (data ?? []).map((ep: any) => ({
+    ...ep,
+    source: igdSet.has(ep.patient_id) ? 'igd' : 'poli',
+  }))
+
+  return apiResponse.ok(annotated)
 }
 
 export async function POST(req: NextRequest) {
