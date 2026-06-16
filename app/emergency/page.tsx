@@ -251,20 +251,20 @@ export default function EmergencyDashboard() {
           </div>
 
           <Tabs defaultValue="triage" className="w-full">
-            <TabsList className={`grid w-full ${currentRole === "doctor" ? "grid-cols-5" : "grid-cols-4"}`}>
+            <TabsList className={`grid w-full ${currentRole === "doctor" ? "grid-cols-5" : "grid-cols-1"}`}>
               <TabsTrigger value="triage"><Stethoscope className="w-4 h-4 mr-1" /> Triage</TabsTrigger>
-              <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
-              <TabsTrigger value="cppt"><Activity className="w-4 h-4 mr-1" /> Catatan</TabsTrigger>
-              {currentRole === "doctor" && (
+              {currentRole === "doctor" && <>
+                <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
+                <TabsTrigger value="cppt"><Activity className="w-4 h-4 mr-1" /> Catatan</TabsTrigger>
                 <TabsTrigger value="dokter"><Stethoscope className="w-4 h-4 mr-1" /> Pemeriksaan</TabsTrigger>
-              )}
-              <TabsTrigger value="disposition"><ArrowLeft className="w-4 h-4 mr-1 rotate-[135deg]" /> Disposisi</TabsTrigger>
+                <TabsTrigger value="disposition"><ArrowLeft className="w-4 h-4 mr-1 rotate-[135deg]" /> Disposisi</TabsTrigger>
+              </>}
             </TabsList>
 
             <TabsContent value="triage" className="mt-4">
               <Card>
                 <CardContent className="pt-6">
-                  <EmergencyTriageForm 
+                  <EmergencyTriageForm
                     encounter={selectedAdm}
                     onSuccess={() => { refreshEnc(); setView("dashboard"); }}
                   />
@@ -272,94 +272,94 @@ export default function EmergencyDashboard() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="lab" className="mt-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <LabOrderForm
-                    encounterId={selectedAdm.encounter_id}
-                    patientId={selectedAdm.patient_id}
-                    onSubmit={async (input) => { const ok = await createLab(input); return ok }}
-                    onCancel={() => {}}
-                    loading={labActing}
-                    error={labError}
-                  />
-                  {labOrders.length > 0 && (
-                    <div className="mt-6 space-y-2">
-                      <h4 className="font-semibold text-sm">Riwayat Permintaan Lab</h4>
-                      {labOrders.map((lo) => (
-                        <div key={lo.id} className="flex justify-between items-center p-3 rounded-lg border text-sm">
-                          <div>
-                            <p className="font-medium">{lo.lab_order_items.map((i) => i.test_name).join(", ")}</p>
-                            <p className="text-xs text-foreground/50">{lo.priority} · {new Date(lo.order_date).toLocaleString('id-ID')}</p>
-                          </div>
-                          <StatusBadge status={lo.status} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="cppt" className="mt-4">
-              <Card>
-                <CardContent className="pt-6 space-y-6">
-                  <form onSubmit={handleCpptSubmit} className="space-y-4">
-                    <h3 className="font-semibold text-base">Catatan SOAP IGD</h3>
-                    {cpptError && <Alert variant="destructive"><AlertDescription>{cpptError}</AlertDescription></Alert>}
-                    {[
-                      { key: "subjective", label: "S — Subjektif", placeholder: "Keluhan pasien..." },
-                      { key: "objective", label: "O — Objektif", placeholder: "Pemeriksaan fisik, vital signs..." },
-                      { key: "assessment", label: "A — Asesmen", placeholder: "Diagnosis sementara / kerja..." },
-                      { key: "plan", label: "P — Plan", placeholder: "Tindakan, observasi, rencana lanjut..." },
-                    ].map((f) => (
-                      <div key={f.key} className="space-y-1.5">
-                        <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/70">{f.label}</Label>
-                        <Textarea
-                          rows={2}
-                          value={soap[f.key as keyof typeof soap]}
-                          onChange={(e) => setSoap((p) => ({ ...p, [f.key]: e.target.value }))}
-                          placeholder={f.placeholder}
-                        />
-                      </div>
-                    ))}
-                    <Button
-                      type="submit"
-                      disabled={cpptSubmitting || (!soap.subjective && !soap.objective)}
-                      className="w-full"
-                    >
-                      {cpptSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</> : "Simpan Catatan"}
-                    </Button>
-                  </form>
-
-                  {cpptNotes.length > 0 && (
-                    <div className="space-y-2">
-                      <Separator />
-                      <h4 className="font-semibold text-sm">Riwayat Catatan</h4>
-                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                        {cpptNotes.map((note) => (
-                          <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium">{note.practitioners?.full_name ?? "—"}</span>
-                              <span className="text-xs text-foreground/40">
-                                {new Date(note.note_date).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                              </span>
+            {currentRole === "doctor" && <>
+              <TabsContent value="lab" className="mt-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <LabOrderForm
+                      encounterId={selectedAdm.encounter_id}
+                      patientId={selectedAdm.patient_id}
+                      onSubmit={async (input) => { const ok = await createLab(input); return ok }}
+                      onCancel={() => {}}
+                      loading={labActing}
+                      error={labError}
+                    />
+                    {labOrders.length > 0 && (
+                      <div className="mt-6 space-y-2">
+                        <h4 className="font-semibold text-sm">Riwayat Permintaan Lab</h4>
+                        {labOrders.map((lo) => (
+                          <div key={lo.id} className="flex justify-between items-center p-3 rounded-lg border text-sm">
+                            <div>
+                              <p className="font-medium">{lo.lab_order_items.map((i) => i.test_name).join(", ")}</p>
+                              <p className="text-xs text-foreground/50">{lo.priority} · {new Date(lo.order_date).toLocaleString('id-ID')}</p>
                             </div>
-                            {note.subjective  && <p><span className="font-semibold text-xs text-foreground/60">S:</span> {note.subjective}</p>}
-                            {note.objective   && <p><span className="font-semibold text-xs text-foreground/60">O:</span> {note.objective}</p>}
-                            {note.assessment  && <p><span className="font-semibold text-xs text-foreground/60">A:</span> {note.assessment}</p>}
-                            {note.plan        && <p><span className="font-semibold text-xs text-foreground/60">P:</span> {note.plan}</p>}
+                            <StatusBadge status={lo.status} />
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
-                  {cpptLoading && <p className="text-sm text-foreground/50 text-center py-4">Memuat catatan...</p>}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-            {currentRole === "doctor" && (
+              <TabsContent value="cppt" className="mt-4">
+                <Card>
+                  <CardContent className="pt-6 space-y-6">
+                    <form onSubmit={handleCpptSubmit} className="space-y-4">
+                      <h3 className="font-semibold text-base">Catatan SOAP IGD</h3>
+                      {cpptError && <Alert variant="destructive"><AlertDescription>{cpptError}</AlertDescription></Alert>}
+                      {[
+                        { key: "subjective", label: "S — Subjektif", placeholder: "Keluhan pasien..." },
+                        { key: "objective", label: "O — Objektif", placeholder: "Pemeriksaan fisik, vital signs..." },
+                        { key: "assessment", label: "A — Asesmen", placeholder: "Diagnosis sementara / kerja..." },
+                        { key: "plan", label: "P — Plan", placeholder: "Tindakan, observasi, rencana lanjut..." },
+                      ].map((f) => (
+                        <div key={f.key} className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/70">{f.label}</Label>
+                          <Textarea
+                            rows={2}
+                            value={soap[f.key as keyof typeof soap]}
+                            onChange={(e) => setSoap((p) => ({ ...p, [f.key]: e.target.value }))}
+                            placeholder={f.placeholder}
+                          />
+                        </div>
+                      ))}
+                      <Button
+                        type="submit"
+                        disabled={cpptSubmitting || (!soap.subjective && !soap.objective)}
+                        className="w-full"
+                      >
+                        {cpptSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</> : "Simpan Catatan"}
+                      </Button>
+                    </form>
+
+                    {cpptNotes.length > 0 && (
+                      <div className="space-y-2">
+                        <Separator />
+                        <h4 className="font-semibold text-sm">Riwayat Catatan</h4>
+                        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                          {cpptNotes.map((note) => (
+                            <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium">{note.practitioners?.full_name ?? "—"}</span>
+                                <span className="text-xs text-foreground/40">
+                                  {new Date(note.note_date).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              {note.subjective  && <p><span className="font-semibold text-xs text-foreground/60">S:</span> {note.subjective}</p>}
+                              {note.objective   && <p><span className="font-semibold text-xs text-foreground/60">O:</span> {note.objective}</p>}
+                              {note.assessment  && <p><span className="font-semibold text-xs text-foreground/60">A:</span> {note.assessment}</p>}
+                              {note.plan        && <p><span className="font-semibold text-xs text-foreground/60">P:</span> {note.plan}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {cpptLoading && <p className="text-sm text-foreground/50 text-center py-4">Memuat catatan...</p>}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="dokter" className="mt-4">
                 <Card>
                   <CardContent className="pt-6">
@@ -367,18 +367,18 @@ export default function EmergencyDashboard() {
                   </CardContent>
                 </Card>
               </TabsContent>
-            )}
 
-            <TabsContent value="disposition" className="mt-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <EmergencyDispositionForm
-                     encounter={selectedAdm}
-                     onSuccess={() => { refreshEnc(); setView("dashboard"); }}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
+              <TabsContent value="disposition" className="mt-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <EmergencyDispositionForm
+                       encounter={selectedAdm}
+                       onSuccess={() => { refreshEnc(); setView("dashboard"); }}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </>}
           </Tabs>
 
         </div>

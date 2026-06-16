@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, AlertTriangle, ShieldAlert } from "lucide-react"
 import type { EmergencyEncounter, TriageCategory, AllergyCategory, AllergyCriticality } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
-import { postAllergy } from "@/lib/api/client"
+import { postAllergy, getVitalSigns } from "@/lib/api/client"
 
 interface EmergencyTriageFormProps {
   encounter: EmergencyEncounter
@@ -34,6 +34,22 @@ export function EmergencyTriageForm({ encounter, onSuccess }: EmergencyTriageFor
   })
 
   const { triage, actionLoading } = useEmergency()
+
+  useEffect(() => {
+    getVitalSigns(encounter.encounter_id)
+      .then(data => {
+        if (data.length > 0) {
+          const v = data[0]
+          setVitals({
+            systolic_bp: v.systolic_bp?.toString() ?? "",
+            heart_rate: v.heart_rate?.toString() ?? "",
+            temperature: v.temperature?.toString() ?? "",
+            oxygen_saturation: v.oxygen_saturation?.toString() ?? "",
+          })
+        }
+      })
+      .catch(() => {})
+  }, [encounter.encounter_id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
