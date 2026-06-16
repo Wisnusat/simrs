@@ -94,7 +94,18 @@ export async function GET(req: NextRequest) {
     `)
     .order('order_date', { ascending: false })
 
-  if (encounterId) query = query.eq('encounter_id', encounterId)
+  const episodeOfCareId = searchParams.get('episode_of_care_id')
+  if (episodeOfCareId) {
+    const { data: encs } = await supabase
+      .from('encounters')
+      .select('id')
+      .eq('episode_of_care_id', episodeOfCareId)
+    const ids = (encs ?? []).map((e: any) => e.id)
+    if (ids.length === 0) return apiResponse.ok([])
+    query = query.in('encounter_id', ids)
+  } else if (encounterId) {
+    query = query.eq('encounter_id', encounterId)
+  }
   if (status) query = query.eq('status', status)
   if (today === '1') {
     const d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })

@@ -12,13 +12,14 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart, Trash2, Plus,
+  FlaskConical, Stethoscope,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
-import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getRunningBills, postRunningBill, deleteRunningBill } from "@/lib/api/client"
+import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getRunningBills, postRunningBill, deleteRunningBill, getLabOrders, getSurgeryRequests } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 
@@ -31,7 +32,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 
-import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, RunningBill } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, RunningBill, LabOrder, SurgeryRequest } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
@@ -52,6 +53,10 @@ export default function InpatientNurseDashboard() {
   const [rbLoading, setRbLoading] = useState(false)
   const [rbSaving, setRbSaving] = useState(false)
   const [rbForm, setRbForm] = useState({ item_type: 'room', item_name: '', quantity: 1, unit_price: 0 })
+  const [labOrders, setLabOrders] = useState<LabOrder[]>([])
+  const [labOrdersLoading, setLabOrdersLoading] = useState(false)
+  const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
+  const [surgeriesLoading, setSurgeriesLoading] = useState(false)
 
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
 
@@ -100,12 +105,38 @@ export default function InpatientNurseDashboard() {
     }
   }, [])
 
+  const loadLabOrders = useCallback(async (episodeOfCareId: string) => {
+    setLabOrdersLoading(true)
+    try {
+      const orders = await getLabOrders({ episode_of_care_id: episodeOfCareId })
+      setLabOrders(orders)
+    } catch {
+      setLabOrders([])
+    } finally {
+      setLabOrdersLoading(false)
+    }
+  }, [])
+
+  const loadSurgeries = useCallback(async (episodeOfCareId: string) => {
+    setSurgeriesLoading(true)
+    try {
+      const data = await getSurgeryRequests({ episode_of_care_id: episodeOfCareId })
+      setSurgeries(data)
+    } catch {
+      setSurgeries([])
+    } finally {
+      setSurgeriesLoading(false)
+    }
+  }, [])
+
   // Handle opening CPPT for a patient
   const handleOpenCppt = useCallback(async (adm: InpatientAdmission) => {
     setCpptAdm(adm)
     setView("cppt")
     setPatientVitals(null) // reset; will be loaded once encounter is known
     setRunningBills([])
+    setLabOrders([])
+    setSurgeries([])
     setRbForm({ item_type: 'room', item_name: '', quantity: 1, unit_price: 0 })
     // Load previous notes from all encounters in this episode
     try {
@@ -115,7 +146,9 @@ export default function InpatientNurseDashboard() {
       setPreviousNotes([])
     }
     loadRunningBills(adm.episode_of_care_id)
-  }, [loadRunningBills])
+    loadLabOrders(adm.episode_of_care_id)
+    loadSurgeries(adm.episode_of_care_id)
+  }, [loadRunningBills, loadLabOrders, loadSurgeries])
 
   // CPPT note submission
   const handleCpptSubmit = useCallback(async (input: any): Promise<boolean> => {
@@ -329,6 +362,111 @@ export default function InpatientNurseDashboard() {
                 </p>
               )}
             </div>
+          )}
+
+          <Separator />
+
+          {/* ── Pemeriksaan Lab ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="w-4 h-4 text-blue-500" />
+                <CardTitle className="text-base">Pemeriksaan Lab</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {labOrdersLoading ? (
+                <p className="text-xs text-foreground/40">Memuat data lab...</p>
+              ) : labOrders.length === 0 ? (
+                <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
+              ) : (
+                <div className="space-y-3">
+                  {labOrders.map((lo) => (
+                    <div key={lo.id} className="border rounded-md p-3 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 text-xs text-foreground/60">
+                          <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
+                        </div>
+                        <StatusBadge status={lo.status} />
+                      </div>
+                      <div className="space-y-1">
+                        {(lo.lab_order_items ?? []).map((item: any) => (
+                          <div key={item.id} className="flex items-start justify-between gap-2 text-xs py-1 border-t border-border/40">
+                            <span className="font-medium">{item.test_name}</span>
+                            <div className="text-right space-y-0.5">
+                              {item.result_value ? (
+                                <>
+                                  <span className={`font-semibold ${
+                                    item.result_status === 'critical' ? 'text-red-600' :
+                                    item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' :
+                                    'text-green-700'
+                                  }`}>
+                                    {item.result_value} {item.result_unit}
+                                  </span>
+                                  {item.reference_range && (
+                                    <p className="text-foreground/40">Ref: {item.reference_range}</p>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-foreground/40 italic">Belum ada hasil</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Riwayat Operasi ── */}
+          {(surgeriesLoading || surgeries.length > 0) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-purple-500" />
+                  <CardTitle className="text-base">Riwayat Operasi</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {surgeriesLoading ? (
+                  <p className="text-xs text-foreground/40">Memuat data operasi...</p>
+                ) : (
+                  <div className="space-y-3">
+                    {surgeries.map((sr) => {
+                      const start = sr.surgery_start_at ? new Date(sr.surgery_start_at) : null
+                      const end = sr.surgery_end_at ? new Date(sr.surgery_end_at) : null
+                      const durationMin = start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : null
+                      return (
+                        <div key={sr.id} className="border rounded-md p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{sr.surgery_type}</span>
+                            <StatusBadge status={sr.status} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-foreground/60">
+                            {(sr as any).surgeon?.full_name && (
+                              <span>Dokter Bedah: <span className="text-foreground/80 font-medium">{(sr as any).surgeon.full_name}</span></span>
+                            )}
+                            {sr.anesthesia_type && (
+                              <span>Anestesi: <span className="text-foreground/80">{sr.anesthesia_type}</span></span>
+                            )}
+                            {start && (
+                              <span>Tgl Operasi: <span className="text-foreground/80">{start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span></span>
+                            )}
+                            {durationMin !== null && (
+                              <span>Durasi: <span className="text-foreground/80">{durationMin} menit</span></span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           <Separator />

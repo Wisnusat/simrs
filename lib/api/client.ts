@@ -238,6 +238,7 @@ export async function getLabServices(): Promise<LabService[]> {
 
 export async function getLabOrders(opts?: {
   encounter_id?: string
+  episode_of_care_id?: string
   status?: string
   today?: boolean
 }): Promise<LabOrder[]> {
@@ -655,6 +656,7 @@ export async function postInpatientAssignment(input: {
 export async function getSurgeryRequests(opts?: {
   status?: string
   patient_id?: string
+  episode_of_care_id?: string
 }): Promise<SurgeryRequest[]> {
   return fetchJson(`/api/surgery-requests${qs(opts ?? {})}`)
 }

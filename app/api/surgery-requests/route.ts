@@ -33,12 +33,10 @@ export async function GET(req: NextRequest) {
     `)
     .order('created_at', { ascending: false })
 
-  if (status) {
-    query = query.eq('status', status)
-  }
-  if (patientId) {
-    query = query.eq('patient_id', patientId)
-  }
+  const episodeOfCareId = searchParams.get('episode_of_care_id')
+  if (episodeOfCareId) query = query.eq('episode_of_care_id', episodeOfCareId)
+  if (status) query = query.eq('status', status)
+  if (patientId) query = query.eq('patient_id', patientId)
 
   const { data, error } = await query.limit(200)
   if (error) return apiResponse.serverError(error.message)
