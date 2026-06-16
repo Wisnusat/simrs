@@ -149,7 +149,7 @@ export async function syncInvoiceForEncounter(
   const built = await buildInvoiceFromEncounter(supabase, encounterId, orgId)
 
   const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-  const { data: invoice } = await supabase
+  const { data: invoice, error: invError } = await supabase
     .from('invoices')
     .upsert(
       {
@@ -157,7 +157,7 @@ export async function syncInvoiceForEncounter(
         patient_id: (enc as any).patient_id,
         organization_id: orgId,
         invoice_number: invoiceNumber,
-        payment_type: (enc as any).payment_type ?? 'general',
+        payment_type: (enc as any).payment_type ?? 'umum',
         subtotal: built.subtotal,
         discount_amount: built.discount_amount,
         tax_amount: built.tax_amount,
@@ -171,6 +171,11 @@ export async function syncInvoiceForEncounter(
     )
     .select('id')
     .single()
+
+  if (invError) {
+    console.error('Invoice upsert error:', invError)
+    return
+  }
 
   // Rewrite line items
   if (invoice) {

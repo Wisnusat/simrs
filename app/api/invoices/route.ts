@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
         patient_id: (encounter as any).patient_id,
         organization_id: (encounter as any).organization_id,
         invoice_number: invoiceNumber,
-        payment_type: (encounter as any).payment_type ?? 'general',
+        payment_type: (encounter as any).payment_type ?? 'umum',
         subtotal: built.subtotal,
         discount_amount: built.discount_amount,
         tax_amount: built.tax_amount,
