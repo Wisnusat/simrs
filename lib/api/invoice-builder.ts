@@ -148,11 +148,40 @@ export async function syncInvoiceForEncounter(
   const orgId = (enc as any).organization_id
   const built = await buildInvoiceFromEncounter(supabase, encounterId, orgId)
 
-  const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-  const { data: invoice, error: invError } = await supabase
+  // Can't use upsert(onConflict:'encounter_id') — the unique index on encounter_id
+  // is partial (WHERE episode_of_care_id IS NULL), which PostgreSQL's ON CONFLICT
+  // can't resolve without a WHERE clause. Use select-then-insert/update instead.
+  const { data: existing } = await supabase
     .from('invoices')
-    .upsert(
-      {
+    .select('id')
+    .eq('encounter_id', encounterId)
+    .is('episode_of_care_id', null)
+    .maybeSingle()
+
+  let invoiceId: string | null = null
+
+  if (existing) {
+    const { error: updateError } = await supabase
+      .from('invoices')
+      .update({
+        payment_type: (enc as any).payment_type ?? 'umum',
+        subtotal: built.subtotal,
+        discount_amount: built.discount_amount,
+        tax_amount: built.tax_amount,
+        total_amount: built.total_amount,
+      })
+      .eq('id', (existing as any).id)
+
+    if (updateError) {
+      console.error('Invoice update error:', updateError)
+      return
+    }
+    invoiceId = (existing as any).id
+  } else {
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
+    const { data: inserted, error: insertError } = await supabase
+      .from('invoices')
+      .insert({
         encounter_id: encounterId,
         patient_id: (enc as any).patient_id,
         organization_id: orgId,
@@ -163,27 +192,23 @@ export async function syncInvoiceForEncounter(
         tax_amount: built.tax_amount,
         total_amount: built.total_amount,
         status: 'unpaid',
-      },
-      {
-        onConflict: 'encounter_id',
-        ignoreDuplicates: false,
-      }
-    )
-    .select('id')
-    .single()
+      })
+      .select('id')
+      .single()
 
-  if (invError) {
-    console.error('Invoice upsert error:', invError)
-    return
+    if (insertError) {
+      console.error('Invoice insert error:', insertError)
+      return
+    }
+    invoiceId = (inserted as any).id
   }
 
   // Rewrite line items
-  if (invoice) {
-    const invId = (invoice as any).id
-    await supabase.from('invoice_items').delete().eq('invoice_id', invId)
+  if (invoiceId) {
+    await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
     if (built.items.length > 0) {
       await supabase.from('invoice_items').insert(
-        built.items.map((item) => ({ invoice_id: invId, ...item }))
+        built.items.map((item) => ({ invoice_id: invoiceId, ...item }))
       )
     }
   }
