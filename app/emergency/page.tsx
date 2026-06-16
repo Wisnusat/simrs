@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, AlertTriangle, Activity, UserPlus,
-  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope, Loader2
+  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope, Loader2, RefreshCw
 } from "lucide-react"
 
 import { useEmergency } from "@/hooks/emergency/use-emergency"
@@ -117,7 +117,7 @@ export default function EmergencyDashboard() {
   }
 
   return (
-    <DashboardLayout title="Instalasi Gawat Darurat" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
+    <DashboardLayout title="Instalasi Gawat Darurat" role={currentRole ?? "nurse"} sidebarItems={SIDEBAR(view, setView)}>
       {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">
@@ -125,12 +125,15 @@ export default function EmergencyDashboard() {
             <PageHeader
               title="Dashboard IGD"
               description="Kelola pasien Gawat Darurat (Triage & Tindakan)"
-              onRefresh={refreshEnc}
-              isRefreshing={encLoading}
             />
-            <Button onClick={() => setShowIntake(true)} className="bg-orange-600 hover:bg-orange-700">
-              <UserPlus className="w-4 h-4 mr-2" /> Pasien Baru IGD
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={refreshEnc} disabled={encLoading}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${encLoading ? "animate-spin" : ""}`} /> Refresh
+              </Button>
+              <Button onClick={() => setShowIntake(true)} className="bg-orange-600 hover:bg-orange-700">
+                <UserPlus className="w-4 h-4 mr-2" /> Pasien Baru IGD
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
