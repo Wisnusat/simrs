@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Globe, Save, Loader2, Plus, Trash2, Upload, Image as ImageIcon, Eye, EyeOff } from 'lucide-react'
+import { Globe, Save, Loader2, Plus, Trash2, Upload, Image as ImageIcon, Eye, EyeOff, Stethoscope, Baby, Scissors, Sparkles, Pill, FlaskConical, Heart, Activity, Brain, Microscope, Syringe, Thermometer, Ear, Shield, Dna, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
@@ -286,15 +286,40 @@ function AboutEditor({ content, saving, onSave }: { content: any; saving: boolea
     )
 }
 
+const SERVICE_ICON_OPTIONS: { key: string; label: string; Icon: any }[] = [
+    { key: 'Stethoscope', label: 'Umum',       Icon: Stethoscope },
+    { key: 'Baby',        label: 'Obgyn',       Icon: Baby },
+    { key: 'Scissors',    label: 'Bedah',       Icon: Scissors },
+    { key: 'Sparkles',    label: 'Gigi',        Icon: Sparkles },
+    { key: 'Pill',        label: 'Farmasi',     Icon: Pill },
+    { key: 'FlaskConical',label: 'Lab',         Icon: FlaskConical },
+    { key: 'Heart',       label: 'Jantung',     Icon: Heart },
+    { key: 'Eye',         label: 'Mata',        Icon: Eye },
+    { key: 'Activity',    label: 'IGD',         Icon: Activity },
+    { key: 'Brain',       label: 'Saraf',       Icon: Brain },
+    { key: 'Microscope',  label: 'Patologi',    Icon: Microscope },
+    { key: 'Syringe',     label: 'Imunisasi',   Icon: Syringe },
+    { key: 'Thermometer', label: 'Suhu',        Icon: Thermometer },
+    { key: 'Ear',         label: 'THT',         Icon: Ear },
+    { key: 'Shield',      label: 'Asuransi',    Icon: Shield },
+    { key: 'Dna',         label: 'Genetika',    Icon: Dna },
+]
+
 function ServicesEditor({ content, saving, onSave }: { content: any; saving: boolean; onSave: (c: any) => void }) {
     const [items, setItems] = useState<any[]>(content.items ?? [])
 
     const addItem = () => {
-        setItems([...items, { name: '', description: '', hours: '' }])
+        setItems([...items, { name: '', description: '', hours: '', icon: 'Stethoscope' }])
     }
 
     const removeItem = (idx: number) => {
         setItems(items.filter((_, i) => i !== idx))
+    }
+
+    const updateItem = (idx: number, patch: any) => {
+        const updated = [...items]
+        updated[idx] = { ...updated[idx], ...patch }
+        setItems(updated)
     }
 
     return (
@@ -318,29 +343,50 @@ function ServicesEditor({ content, saving, onSave }: { content: any; saving: boo
                                 <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                         </div>
+
+                        {/* Icon selector */}
+                        <div className="space-y-2">
+                            <Label className="text-xs">Ikon</Label>
+                            <div className="grid grid-cols-8 gap-1.5">
+                                {SERVICE_ICON_OPTIONS.map(({ key, label, Icon }) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        title={label}
+                                        onClick={() => updateItem(i, { icon: key })}
+                                        className={`relative flex flex-col items-center gap-1 p-2 rounded-lg border text-[10px] transition-all ${
+                                            item.icon === key
+                                                ? 'border-primary bg-primary/10 text-primary'
+                                                : 'border-border/40 text-foreground/50 hover:border-primary/40 hover:text-foreground/80'
+                                        }`}
+                                    >
+                                        <Icon size={18} strokeWidth={1.5} />
+                                        <span className="leading-tight text-center">{label}</span>
+                                        {item.icon === key && (
+                                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center">
+                                                <Check size={8} strokeWidth={3} className="text-primary-foreground" />
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-xs">Nama</Label>
                                 <Input
                                     value={item.name}
-                                    onChange={e => {
-                                        const updated = [...items]
-                                        updated[i] = { ...updated[i], name: e.target.value }
-                                        setItems(updated)
-                                    }}
-                                    placeholder="General Practitioner"
+                                    onChange={e => updateItem(i, { name: e.target.value })}
+                                    placeholder="Poli Umum"
                                 />
                             </div>
                             <div className="space-y-1">
                                 <Label className="text-xs">Jam Layanan</Label>
                                 <Input
                                     value={item.hours}
-                                    onChange={e => {
-                                        const updated = [...items]
-                                        updated[i] = { ...updated[i], hours: e.target.value }
-                                        setItems(updated)
-                                    }}
-                                    placeholder="Mon–Fri: 08:00–17:00"
+                                    onChange={e => updateItem(i, { hours: e.target.value })}
+                                    placeholder="Senin–Jumat: 08.00–17.00"
                                 />
                             </div>
                         </div>
@@ -348,12 +394,8 @@ function ServicesEditor({ content, saving, onSave }: { content: any; saving: boo
                             <Label className="text-xs">Deskripsi</Label>
                             <Input
                                 value={item.description}
-                                onChange={e => {
-                                    const updated = [...items]
-                                    updated[i] = { ...updated[i], description: e.target.value }
-                                    setItems(updated)
-                                }}
-                                placeholder="Comprehensive primary healthcare services"
+                                onChange={e => updateItem(i, { description: e.target.value })}
+                                placeholder="Layanan kesehatan umum untuk seluruh keluarga"
                             />
                         </div>
                     </div>
