@@ -63,8 +63,8 @@ export async function middleware(request: NextRequest) {
 
         const userRole = practitioner?.role
 
-        // If on login page, redirect to their own dashboard
-        if (pathname === '/') {
+        // If on login or register page, redirect to their own dashboard
+        if (pathname === '/' || pathname === '/register') {
             const ownRoute = Object.entries(ROLE_ROUTE_MAP).find(
                 ([, rules]) => {
                     return Array.isArray(rules) && rules.includes(userRole) || rules === userRole;

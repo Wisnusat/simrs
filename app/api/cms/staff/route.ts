@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
         if (isGuardError(admin)) return admin
 
         const body = await request.json()
-        const { full_name, email, role, specialization, gender, phone, nik, nip, str_number, sip_number } = body
+        const { full_name, email, password, role, specialization, gender, phone, nik, nip, str_number, sip_number } = body
 
         if (!full_name || !role) {
             return apiResponse.badRequest('full_name and role are required')
@@ -70,6 +71,29 @@ export async function POST(request: NextRequest) {
             return apiResponse.badRequest(`Invalid role. Must be one of: ${validRoles.join(', ')}`)
         }
 
+        if (password && password.length < 8) {
+            return apiResponse.badRequest('Password minimal 8 karakter')
+        }
+
+        // ── Optionally create Supabase Auth user ───────────────────────────
+        let userId: string | null = null
+        if (email && password) {
+            const supabaseAdmin = createAdminClient()
+            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+                email: email.trim().toLowerCase(),
+                password,
+                email_confirm: true,
+            })
+            if (authError || !authData.user) {
+                const msg = authError?.message ?? ''
+                if (msg.includes('already registered') || msg.includes('already been registered')) {
+                    return apiResponse.badRequest('Email sudah terdaftar sebagai akun')
+                }
+                return apiResponse.serverError('Gagal membuat akun: ' + msg)
+            }
+            userId = authData.user.id
+        }
+
         const practitionerData: Record<string, unknown> = {
             organization_id: admin.practitioner.organization_id,
             full_name,
@@ -77,12 +101,13 @@ export async function POST(request: NextRequest) {
             specialization: specialization ?? null,
             gender: gender ?? null,
             phone: phone ?? null,
-            email: email ?? null,
+            email: email ? email.trim().toLowerCase() : null,
             nik: nik ?? null,
             nip: nip ?? null,
             str_number: str_number ?? null,
             sip_number: sip_number ?? null,
             is_active: true,
+            ...(userId ? { user_id: userId } : {}),
         }
 
         const { data: newStaff, error: insertError } = await supabase
@@ -92,6 +117,11 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (insertError) {
+            // Rollback auth user if insert fails
+            if (userId) {
+                const supabaseAdmin = createAdminClient()
+                await supabaseAdmin.auth.admin.deleteUser(userId)
+            }
             console.error('Staff insert error:', insertError)
             if (insertError.code === '23505') {
                 return apiResponse.conflict('Staff member with this NIK/NIP already exists')

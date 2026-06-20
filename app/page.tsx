@@ -29,11 +29,17 @@ export default function SystemLoginPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center text-sm text-foreground/60">
+        <div className="mt-8 text-center text-sm text-foreground/60 space-y-2">
           <p>
-            Not a staff member?{' '}
+            Belum punya akun?{' '}
+            <Link href="/register" className="text-primary hover:text-primary/80 transition-colors font-medium">
+              Daftar sebagai staf
+            </Link>
+          </p>
+          <p>
+            Bukan staf?{' '}
             <Link href="https://klinik-eta.vercel.app/" className="text-primary hover:text-primary/80 transition-colors font-medium">
-              Go back home
+              Kembali ke beranda
             </Link>
           </p>
         </div>

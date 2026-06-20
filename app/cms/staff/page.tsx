@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Users, Plus, Loader2, MoreHorizontal, Pencil, UserX, UserCheck } from 'lucide-react'
+import { Users, Plus, Loader2, MoreHorizontal, Pencil, UserX, UserCheck, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 const ROLE_OPTIONS = [
@@ -52,6 +52,7 @@ function getRoleLabel(role: string) {
 interface StaffForm {
     full_name: string
     email: string
+    password: string
     role: string
     specialization: string
     gender: string
@@ -63,7 +64,7 @@ interface StaffForm {
 }
 
 const emptyForm: StaffForm = {
-    full_name: '', email: '', role: '', specialization: '', gender: '', phone: '',
+    full_name: '', email: '', password: '', role: '', specialization: '', gender: '', phone: '',
     nik: '', nip: '', str_number: '', sip_number: '',
 }
 
@@ -74,6 +75,7 @@ export default function StaffPage() {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [saving, setSaving] = useState(false)
     const [form, setForm] = useState<StaffForm>(emptyForm)
+    const [showPassword, setShowPassword] = useState(false)
     const [filterRole, setFilterRole] = useState<string>('')
     const [showInactive, setShowInactive] = useState(false)
     const [search, setSearch] = useState('')
@@ -100,6 +102,7 @@ export default function StaffPage() {
     const handleOpenCreate = () => {
         setForm(emptyForm)
         setEditingId(null)
+        setShowPassword(false)
         setShowDialog(true)
     }
 
@@ -107,6 +110,7 @@ export default function StaffPage() {
         setForm({
             full_name: member.full_name ?? '',
             email: member.email ?? '',
+            password: '',
             role: member.role ?? '',
             specialization: member.specialization ?? '',
             gender: member.gender ?? '',
@@ -117,6 +121,7 @@ export default function StaffPage() {
             sip_number: member.sip_number ?? '',
         })
         setEditingId(member.id)
+        setShowPassword(false)
         setShowDialog(true)
     }
 
@@ -340,6 +345,41 @@ export default function StaffPage() {
                                 />
                             </div>
                         </div>
+
+                        {/* Password — only shown when creating new staff */}
+                        {!editingId && (
+                            <div className="space-y-2">
+                                <Label>
+                                    Password Akun
+                                    <span className="ml-1.5 text-xs font-normal text-foreground/40">(opsional — kosongkan jika staf mendaftar sendiri)</span>
+                                </Label>
+                                <div className="relative">
+                                    <Input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={form.password}
+                                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                                        placeholder="Minimal 8 karakter"
+                                        className="pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(v => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/50 hover:text-foreground transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {form.password && form.password.length < 8 && (
+                                    <p className="text-xs text-destructive">Password minimal 8 karakter</p>
+                                )}
+                                {form.email && form.password && (
+                                    <p className="text-xs text-green-600 dark:text-green-400">Akun login akan dibuat dengan email dan password ini.</p>
+                                )}
+                                {form.email && !form.password && (
+                                    <p className="text-xs text-foreground/40">Tanpa password, data staf disimpan tanpa akun login.</p>
+                                )}
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Spesialisasi</Label>
