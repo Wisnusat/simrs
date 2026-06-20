@@ -16,6 +16,7 @@ import {
     Pill,
     FlaskConical,
     Activity,
+    BedDouble,
 } from 'lucide-react'
 
 export default function CmsLayout({ children }: { children: React.ReactNode }) {
@@ -86,6 +87,13 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
             href: '/cms/lab-services',
             onClick: () => navigateTo('/cms/lab-services'),
             active: pathname === '/cms/lab-services',
+        },
+        {
+            icon: BedDouble,
+            label: 'Tarif Kamar',
+            href: '/cms/room-rates',
+            onClick: () => navigateTo('/cms/room-rates'),
+            active: pathname === '/cms/room-rates',
         },
         // Owner-only items
         ...(isOwner ? [

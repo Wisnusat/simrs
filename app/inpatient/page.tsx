@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
-  Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart, Trash2, Plus,
+  Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
   FlaskConical, Stethoscope, Clock, Loader2,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
@@ -23,7 +23,7 @@ import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
-import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getRunningBills, postRunningBill, deleteRunningBill, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations } from "@/lib/api/client"
+import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 
@@ -36,7 +36,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 
-import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, RunningBill, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
@@ -53,10 +53,6 @@ export default function InpatientNurseDashboard() {
   const [allergyAdm, setAllergyAdm] = useState<InpatientAdmission | null>(null)
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [patientVitals, setPatientVitals] = useState<VitalSignsType[]>([])
-  const [runningBills, setRunningBills] = useState<RunningBill[]>([])
-  const [rbLoading, setRbLoading] = useState(false)
-  const [rbSaving, setRbSaving] = useState(false)
-  const [rbForm, setRbForm] = useState({ item_type: 'room', item_name: '', quantity: 1, unit_price: 0 })
   const [labOrders, setLabOrders] = useState<LabOrder[]>([])
   const [labOrdersLoading, setLabOrdersLoading] = useState(false)
   const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
@@ -104,19 +100,6 @@ export default function InpatientNurseDashboard() {
       .then((vs) => setPatientVitals(vs))
       .catch(() => setPatientVitals([]))
   }, [currentEncounterId])
-
-  // Load running bills for a given episode
-  const loadRunningBills = useCallback(async (episodeOfCareId: string) => {
-    setRbLoading(true)
-    try {
-      const bills = await getRunningBills(episodeOfCareId)
-      setRunningBills(bills)
-    } catch {
-      setRunningBills([])
-    } finally {
-      setRbLoading(false)
-    }
-  }, [])
 
   const loadLabOrders = useCallback(async (episodeOfCareId: string) => {
     setLabOrdersLoading(true)
@@ -187,10 +170,8 @@ export default function InpatientNurseDashboard() {
     setCpptAdm(adm)
     setView("cppt")
     setPatientVitals(null) // reset; will be loaded once encounter is known
-    setRunningBills([])
     setLabOrders([])
     setSurgeries([])
-    setRbForm({ item_type: 'room', item_name: '', quantity: 1, unit_price: 0 })
     // Load previous notes from all encounters in this episode
     try {
       const notes = await getClinicalNotesByEpisode(adm.episode_of_care_id)
@@ -198,10 +179,9 @@ export default function InpatientNurseDashboard() {
     } catch {
       setPreviousNotes([])
     }
-    loadRunningBills(adm.episode_of_care_id)
     loadLabOrders(adm.episode_of_care_id)
     loadSurgeries(adm.episode_of_care_id)
-  }, [loadRunningBills, loadLabOrders, loadSurgeries])
+  }, [loadLabOrders, loadSurgeries])
 
   // CPPT note submission
   const handleCpptSubmit = useCallback(async (input: any): Promise<boolean> => {
@@ -651,148 +631,6 @@ export default function InpatientNurseDashboard() {
               </CardContent>
             </Card>
           )}
-
-          <Separator />
-
-          {/* ── Tagihan Harian ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Tagihan Harian</CardTitle>
-                <span className="text-sm font-semibold text-blue-700">
-                  Total: Rp {runningBills.reduce((s, r) => s + r.subtotal, 0).toLocaleString('id-ID')}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {rbLoading ? (
-                <p className="text-xs text-foreground/40">Memuat tagihan...</p>
-              ) : runningBills.length === 0 ? (
-                <p className="text-xs text-foreground/40">Belum ada tagihan harian.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b text-foreground/50">
-                        <th className="text-left py-1 pr-2">Tgl</th>
-                        <th className="text-left py-1 pr-2">Jenis</th>
-                        <th className="text-left py-1 pr-2">Nama</th>
-                        <th className="text-right py-1 pr-2">Qty</th>
-                        <th className="text-right py-1 pr-2">Harga</th>
-                        <th className="text-right py-1 pr-2">Subtotal</th>
-                        <th className="py-1"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {runningBills.map((rb) => (
-                        <tr key={rb.id} className="border-b border-border/40">
-                          <td className="py-1 pr-2 whitespace-nowrap">{rb.charge_date}</td>
-                          <td className="py-1 pr-2 capitalize">
-                            {{ room: 'Kamar', action: 'Tindakan', medication: 'Obat', nutrition: 'Nutrisi', consultation: 'Konsultasi' }[rb.item_type] ?? rb.item_type}
-                          </td>
-                          <td className="py-1 pr-2">{rb.item_name}</td>
-                          <td className="py-1 pr-2 text-right">{rb.quantity}</td>
-                          <td className="py-1 pr-2 text-right">Rp {rb.unit_price.toLocaleString('id-ID')}</td>
-                          <td className="py-1 pr-2 text-right font-medium">Rp {rb.subtotal.toLocaleString('id-ID')}</td>
-                          <td className="py-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 text-red-500 hover:text-red-700"
-                              onClick={async () => {
-                                try {
-                                  await deleteRunningBill(rb.id)
-                                  if (cpptAdm) loadRunningBills(cpptAdm.episode_of_care_id)
-                                } catch { /* ignore */ }
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Add charge form */}
-              <div className="border rounded-md p-3 space-y-3 bg-muted/30">
-                <p className="text-xs font-medium text-foreground/60">Tambah Tagihan</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-foreground/50">Jenis</label>
-                    <select
-                      className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-                      value={rbForm.item_type}
-                      onChange={(e) => setRbForm((f) => ({ ...f, item_type: e.target.value }))}
-                    >
-                      <option value="room">Kamar</option>
-                      <option value="action">Tindakan</option>
-                      <option value="medication">Obat</option>
-                      <option value="nutrition">Nutrisi</option>
-                      <option value="consultation">Konsultasi</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-foreground/50">Nama Item</label>
-                    <input
-                      type="text"
-                      className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-                      placeholder="cth: Biaya Kamar VIP"
-                      value={rbForm.item_name}
-                      onChange={(e) => setRbForm((f) => ({ ...f, item_name: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-foreground/50">Qty</label>
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-                      value={rbForm.quantity}
-                      onChange={(e) => setRbForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-foreground/50">Harga Satuan (Rp)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-                      value={rbForm.unit_price}
-                      onChange={(e) => setRbForm((f) => ({ ...f, unit_price: Number(e.target.value) }))}
-                    />
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  disabled={rbSaving || !rbForm.item_name.trim() || rbForm.unit_price <= 0}
-                  onClick={async () => {
-                    if (!cpptAdm) return
-                    setRbSaving(true)
-                    try {
-                      await postRunningBill({
-                        episode_of_care_id: cpptAdm.episode_of_care_id,
-                        patient_id: cpptAdm.patient_id,
-                        item_type: rbForm.item_type,
-                        item_name: rbForm.item_name.trim(),
-                        quantity: rbForm.quantity,
-                        unit_price: rbForm.unit_price,
-                      })
-                      setRbForm({ item_type: 'room', item_name: '', quantity: 1, unit_price: 0 })
-                      loadRunningBills(cpptAdm.episode_of_care_id)
-                    } catch { /* ignore */ } finally {
-                      setRbSaving(false)
-                    }
-                  }}
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  {rbSaving ? 'Menyimpan...' : 'Tambah'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
 
           <Separator />
 

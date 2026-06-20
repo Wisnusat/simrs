@@ -219,7 +219,7 @@ export async function syncInvoiceForEncounter(
 
 // ---------------------------------------------------------------------------
 
-const ROOM_RATES: Record<string, number> = {
+const ROOM_RATES_FALLBACK: Record<string, number> = {
   vip: 500_000,
   kelas_1: 350_000,
   kelas_2: 250_000,
@@ -268,7 +268,14 @@ export async function syncInvoiceForEpisode(
     const startDate = new Date(admission.admission_date)
     const endDate = admission.discharge_date ? new Date(admission.discharge_date) : new Date()
     const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
-    const dailyRate = ROOM_RATES[admission.room_class] ?? ROOM_RATES.kelas_3
+
+    const { data: rateRow } = await supabase
+      .from('room_rates')
+      .select('daily_rate')
+      .eq('organization_id', (episode as any).organization_id ?? '')
+      .eq('room_class', admission.room_class)
+      .maybeSingle()
+    const dailyRate: number = (rateRow as any)?.daily_rate ?? ROOM_RATES_FALLBACK[admission.room_class] ?? ROOM_RATES_FALLBACK.kelas_3
 
     allItems.push({
       item_type: 'room' as any,

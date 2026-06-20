@@ -43,6 +43,34 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+
+  // Auto-add tindakan to running bill for inpatient encounters (fire-and-forget)
+  if (!is_surgery) {
+    ;(async () => {
+      try {
+        const { data: enc } = await supabase
+          .from('encounters')
+          .select('encounter_class, episode_of_care_id, patient_id')
+          .eq('id', encounter_id)
+          .maybeSingle()
+
+        if (enc?.encounter_class === 'inpatient' && enc?.episode_of_care_id) {
+          await supabase.from('running_bills').insert({
+            episode_of_care_id: enc.episode_of_care_id,
+            patient_id: (enc as any).patient_id ?? patient_id,
+            item_type: 'action',
+            item_name: procedure_display,
+            item_code: procedure_code,
+            quantity: 1,
+            unit_price: 0,
+            reference_id: (data as any).id,
+            charge_date: new Date().toISOString().split('T')[0],
+          })
+        }
+      } catch { /* non-critical, ignore */ }
+    })()
+  }
+
   return apiResponse.created(data)
 }
 

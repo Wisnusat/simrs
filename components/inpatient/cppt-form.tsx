@@ -177,7 +177,7 @@ export function CpptForm({
       )}
 
       {/* Vital Signs History */}
-      {vitalSigns.length > 0 && (
+      {vitalSigns?.length > 0 && (
         <div className="space-y-3">
           <Separator />
           <h4 className="font-semibold text-sm">Riwayat Tanda Vital (Shift Ini)</h4>
@@ -239,16 +239,16 @@ export function CpptForm({
             {previousNotes.map((note) => {
               const roleLabel =
                 note.writer_role === "doctor" ? "Dokter" :
-                note.writer_role === "nurse" ? "Perawat" :
-                note.writer_role === "nutritionist" ? "Ahli Gizi" :
-                note.writer_role === "pharmacist" ? "Apoteker" :
-                note.writer_role ?? "—"
+                  note.writer_role === "nurse" ? "Perawat" :
+                    note.writer_role === "nutritionist" ? "Ahli Gizi" :
+                      note.writer_role === "pharmacist" ? "Apoteker" :
+                        note.writer_role ?? "—"
 
               const roleColor =
                 note.writer_role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
-                note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
-                note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-                "bg-muted text-foreground/60"
+                  note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+                    note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                      "bg-muted text-foreground/60"
 
               return (
                 <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">

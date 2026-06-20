@@ -111,11 +111,19 @@ export async function PATCH(
 
     const { data: rx, error: rxErr } = await supabase
       .from('prescriptions')
-      .select('*, prescription_items ( id, medication_id, quantity )')
+      .select('*, prescription_items ( id, medication_id, quantity, medications(name) )')
       .eq('id', id)
       .single()
 
     if (rxErr || !rx) return apiResponse.notFound('Prescription not found')
+
+    // Check if this prescription belongs to an inpatient encounter
+    const { data: enc } = await supabase
+      .from('encounters')
+      .select('encounter_class, episode_of_care_id, patient_id')
+      .eq('id', (rx as any).encounter_id)
+      .maybeSingle()
+    const isInpatient = (enc as any)?.encounter_class === 'inpatient' && (enc as any)?.episode_of_care_id
 
     const errors: string[] = []
     let dispensedCount = 0
@@ -163,6 +171,20 @@ export async function PATCH(
         if (dispense) {
           dispensedCount++
           syncDispense(supabase, (dispense as any).id ?? '', {}).catch(() => { })
+
+          // Auto-add medication charge to running bill for inpatient
+          if (isInpatient) {
+            supabase.from('running_bills').insert({
+              episode_of_care_id: (enc as any).episode_of_care_id,
+              patient_id: (enc as any).patient_id ?? (rx as any).patient_id,
+              item_type: 'medication',
+              item_name: (item as any).medications?.name ?? `Obat ID ${item.medication_id}`,
+              quantity: deduct,
+              unit_price: (batch as any).unit_price,
+              reference_id: (dispense as any).id,
+              charge_date: new Date().toISOString().split('T')[0],
+            }).then(() => {}).catch(() => {})
+          }
         }
         remaining -= deduct
       }

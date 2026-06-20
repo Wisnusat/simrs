@@ -76,5 +76,57 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+
+  // Auto-charge room for this date (fire-and-forget, non-blocking)
+  ;(async () => {
+    try {
+      const chargeDate: string = record_date ?? new Date().toISOString().split('T')[0]
+
+      const { data: adm } = await supabase
+        .from('inpatient_admissions')
+        .select('episode_of_care_id, room_class, patient_id')
+        .eq('id', admission_id)
+        .maybeSingle()
+
+      if (!adm) return
+
+      // Guard: only one room charge per day
+      const { count } = await supabase
+        .from('running_bills')
+        .select('id', { count: 'exact', head: true })
+        .eq('episode_of_care_id', adm.episode_of_care_id)
+        .eq('item_type', 'room')
+        .eq('charge_date', chargeDate)
+
+      if ((count ?? 0) > 0) return
+
+      const { data: episode } = await supabase
+        .from('episodes_of_care')
+        .select('organization_id')
+        .eq('id', adm.episode_of_care_id)
+        .maybeSingle()
+
+      const { data: rateRow } = await supabase
+        .from('room_rates')
+        .select('daily_rate')
+        .eq('organization_id', (episode as any)?.organization_id ?? '')
+        .eq('room_class', adm.room_class)
+        .maybeSingle()
+
+      const FALLBACK: Record<string, number> = { vip: 500_000, kelas_1: 350_000, kelas_2: 250_000, kelas_3: 150_000 }
+      const rate: number = (rateRow as any)?.daily_rate ?? FALLBACK[adm.room_class] ?? 150_000
+
+      await supabase.from('running_bills').insert({
+        episode_of_care_id: adm.episode_of_care_id,
+        patient_id: adm.patient_id,
+        item_type: 'room',
+        item_name: `Biaya Kamar (${adm.room_class.replace('_', ' ').toUpperCase()})`,
+        quantity: 1,
+        unit_price: rate,
+        charge_date: chargeDate,
+      })
+    } catch { /* non-critical, ignore */ }
+  })()
+
   return apiResponse.created(data)
 }
