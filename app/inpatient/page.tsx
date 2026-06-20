@@ -569,28 +569,57 @@ export default function InpatientNurseDashboard() {
                           <StatusBadge status={lo.status} />
                         </div>
                         <div className="space-y-1">
-                          {(lo.lab_order_items ?? []).map((item: any) => (
-                            <div key={item.id} className="flex items-start justify-between gap-2 text-xs py-1 border-t border-border/40">
-                              <span className="font-medium">{item.test_name}</span>
-                              <div className="text-right space-y-0.5">
-                                {item.result_value ? (
-                                  <>
-                                    <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' :
-                                      item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' :
-                                        'text-green-700'
-                                      }`}>
+                          {(lo.lab_order_items ?? []).map((item: any) => {
+                            let parsed: Array<{ label: string; value: string; unit?: string; reference_range?: string; result_status?: string }> | null = null
+                            if (item.result_value) {
+                              try {
+                                const p = JSON.parse(item.result_value)
+                                if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
+                              } catch { /* plain string */ }
+                            }
+                            return (
+                              <div key={item.id} className="text-xs py-1 border-t border-border/40">
+                                <span className="font-medium">{item.test_name}</span>
+                                {parsed ? (
+                                  <table className="w-full mt-1">
+                                    <thead>
+                                      <tr className="text-foreground/40">
+                                        <th className="text-left font-normal pb-0.5">Parameter</th>
+                                        <th className="text-left font-normal pb-0.5">Nilai</th>
+                                        <th className="text-left font-normal pb-0.5">Rujukan</th>
+                                        <th className="text-right font-normal pb-0.5">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {parsed.map((p, i) => (
+                                        <tr key={i} className="border-t border-border/20">
+                                          <td className="py-0.5">{p.label || "—"}</td>
+                                          <td className={`py-0.5 font-semibold ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                            {p.value || "—"} {p.unit}
+                                          </td>
+                                          <td className="py-0.5 text-foreground/40">{p.reference_range || "—"}</td>
+                                          <td className="py-0.5 text-right">
+                                            <span className={`font-medium ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                              {p.result_status === "normal" ? "N" : p.result_status === "abnormal_low" ? "↓" : p.result_status === "abnormal_high" ? "↑" : p.result_status === "critical" ? "!" : "—"}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : item.result_value ? (
+                                  <div className="flex items-center justify-between mt-0.5">
+                                    <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' : item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' : 'text-green-700'}`}>
                                       {item.result_value} {item.result_unit}
                                     </span>
-                                    {item.reference_range && (
-                                      <p className="text-foreground/40">Ref: {item.reference_range}</p>
-                                    )}
-                                  </>
+                                    {item.reference_range && <span className="text-foreground/40">Ref: {item.reference_range}</span>}
+                                  </div>
                                 ) : (
-                                  <span className="text-foreground/40 italic">Belum ada hasil</span>
+                                  <span className="text-foreground/40 italic ml-1">Belum ada hasil</span>
                                 )}
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     ))}

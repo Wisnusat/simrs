@@ -66,11 +66,19 @@ export default function LabDashboard() {
   const handleResultSubmit = async (results: LabResultInput[]) => {
     if (!resultOrder) return false
     const ok = await submitResults(resultOrder.id, results)
-    if (ok) setResultOrder(null)
+    if (ok) {
+      // Auto-return outpatient encounter to doctor when results uploaded
+      const isWaitingLab = encounters.some(e => e.id === resultOrder.encounter_id)
+      if (isWaitingLab) {
+        await patchEncounter(resultOrder.encounter_id, { status: "in_progress" } as any)
+      }
+      setResultOrder(null)
+      handleRefreshAll()
+    }
     return ok
   }
 
-  // Mark lab done: encounter → in_progress so doctor can re-examine
+  // Mark lab done manually (fallback — normally auto-triggered by handleResultSubmit)
   const handleLabDone = async (encounter: Encounter) => {
     setLabDoneId(encounter.id)
     try {
@@ -92,7 +100,7 @@ export default function LabDashboard() {
       )
     }
     return (
-      <Button size="sm" variant="outline" onClick={() => advanceStatus(order.id, cfg.next!)} disabled={actionLoading}>
+      <Button size="sm" variant="outline" onClick={async () => { await advanceStatus(order.id, cfg.next!); handleRefreshAll() }} disabled={actionLoading}>
         {cfg.nextLabel}
       </Button>
     )
