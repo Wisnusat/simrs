@@ -2,22 +2,26 @@
 
 export const dynamic = 'force-dynamic'
 
+import { Badge } from "@/components/ui/badge"
 import { useSurgeryRequests } from "@/hooks/outpatient/use-surgery-requests"
 import { getLocations } from "@/lib/api/client"
-import { useState, useEffect } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import {
-  Activity, Clock, Compass, Shield, Users, RefreshCw, CheckCircle2, AlertCircle
-} from "lucide-react"
 import type { Location } from "@/lib/types/outpatient"
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Shield
+} from "lucide-react"
+import { useEffect, useState } from "react"
 
 export default function SurgeryQueuePublic() {
   const { data: surgeryRequests, loading, refresh } = useSurgeryRequests({ pollIntervalMs: 10_000 })
   const [rooms, setRooms] = useState<Location[]>([])
 
   useEffect(() => {
-    getLocations({ type: "ok" }).catch(() => {})
+    getLocations({ type: "ok" }).catch(() => { })
   }, [])
 
   // EHR/Kemenkes standard name masking for public TV displays

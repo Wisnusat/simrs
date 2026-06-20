@@ -46,6 +46,8 @@ import type {
   Practitioner,
   SurgeryRequest,
   SurgeryRequestInput,
+  SurgeryPerformer,
+  SurgeryPerformerInput,
   MedicalResume,
   MedicalResumeInput,
   RunningBill,
@@ -677,6 +679,20 @@ export async function patchSurgeryRequest(
   return fetchJson(`/api/surgery-requests/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(update),
+  })
+}
+
+export async function getSurgeryPerformers(surgeryRequestId: string): Promise<SurgeryPerformer[]> {
+  return fetchJson(`/api/surgery-performers?surgery_request_id=${surgeryRequestId}`)
+}
+
+export async function upsertSurgeryPerformers(
+  surgeryRequestId: string,
+  performers: SurgeryPerformerInput[],
+): Promise<SurgeryPerformer[]> {
+  return fetchJson('/api/surgery-performers', {
+    method: 'PUT',
+    body: JSON.stringify({ surgery_request_id: surgeryRequestId, performers }),
   })
 }
 

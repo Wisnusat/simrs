@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSurgeryRequests } from "@/hooks/outpatient/use-surgery-requests"
-import { getLocations, getPractitioners, postInpatientAdmission, postEpisodeOfCare, patchEncounter } from "@/lib/api/client"
-import type { Location, Practitioner, SurgeryRequest } from "@/lib/types/outpatient"
+import {
+  getLocations, getPractitioners,
+  postEpisodeOfCare, patchEncounter,
+  getSurgeryPerformers, upsertSurgeryPerformers,
+} from "@/lib/api/client"
+import type { Location, Practitioner, SurgeryRequest, SurgeryPerformerRole } from "@/lib/types/outpatient"
 import { useToast } from "@/hooks/use-toast"
 
 const FALLBACK_ROOMS: Location[] = [
@@ -18,6 +22,32 @@ const FALLBACK_DOCTORS: Practitioner[] = [
   { id: "f-doc-5", full_name: "dr. Susi Indriati, Sp.An", role: "doctor", organization_id: "" },
 ]
 
+export const ROLE_META: Record<string, { snomed_code: string; snomed_display: string; label: string; color: string }> = {
+  dpjp:             { snomed_code: "304292004", snomed_display: "Responsible observer", label: "DPJP / Surgeon",    color: "bg-blue-100 text-blue-700" },
+  anesthesiologist: { snomed_code: "88189002",  snomed_display: "Anesthesiologist",     label: "Dokter Anestesi",  color: "bg-purple-100 text-purple-700" },
+  assistant:        { snomed_code: "304291006", snomed_display: "Responsible clinician", label: "Asisten Bedah",   color: "bg-cyan-100 text-cyan-700" },
+  scrub_nurse:      { snomed_code: "224537007", snomed_display: "Scrub nurse",           label: "Scrub Nurse",     color: "bg-pink-100 text-pink-700" },
+  other:            { snomed_code: "",           snomed_display: "",                      label: "Lainnya",         color: "bg-muted text-foreground/60" },
+}
+
+export interface PerformerRow {
+  practitioner_id?: string | null
+  display_name: string
+  role: SurgeryPerformerRole
+  pre_op_notes: string
+  post_op_notes: string
+  sort_order: number
+}
+
+function makePerformerRow(
+  role: SurgeryPerformerRole,
+  practitioner_id: string | null | undefined,
+  display_name: string,
+  sort_order: number,
+): PerformerRow {
+  return { role, practitioner_id, display_name, pre_op_notes: "", post_op_notes: "", sort_order }
+}
+
 export function useSurgeryDashboard() {
   const { toast } = useToast()
   const { data: surgeryRequests, loading, refresh, updateSurgeryStatus, actionLoading, error: hookError } = useSurgeryRequests()
@@ -25,61 +55,71 @@ export function useSurgeryDashboard() {
   const [activeTab, setActiveTab] = useState("requested")
 
   // Modals state
-  const [scheduleItem, setScheduleItem] = useState<SurgeryRequest | null>(null)
-  const [preOpItem, setPreOpItem] = useState<SurgeryRequest | null>(null)
-  const [completeItem, setCompleteItem] = useState<SurgeryRequest | null>(null)
-  const [pacuItem, setPacuItem] = useState<SurgeryRequest | null>(null)
+  const [scheduleItem, setScheduleItem]   = useState<SurgeryRequest | null>(null)
+  const [preOpItem,    setPreOpItem]       = useState<SurgeryRequest | null>(null)
+  const [completeItem, setCompleteItem]   = useState<SurgeryRequest | null>(null)
+  const [pacuItem,     setPacuItem]        = useState<SurgeryRequest | null>(null)
   const [dischargeItem, setDischargeItem] = useState<SurgeryRequest | null>(null)
 
   // Loaded DB resources for forms
   const [okRooms, setOkRooms] = useState<Location[]>([])
   const [doctors, setDoctors] = useState<Practitioner[]>([])
-  const [wards, setWards] = useState<Location[]>([])
+  const [wards,   setWards]   = useState<Location[]>([])
 
   // Form fields
   const [scheduleForm, setScheduleForm] = useState({ date: "", room: "", surgeon: "", anesthesiologist: "" })
-  const [preOpForm, setPreOpForm] = useState({ assessment: "", clearance: "layak" })
-  const [completeForm, setCompleteForm] = useState({
-    surgeonNotes: "",
-    anesthesiologistNotes: "",
-    doctorTeam: [""] as string[]
-  })
-  const [pacuForm, setPacuForm] = useState({ pacuNotes: "" })
-  const [wardForm, setWardForm] = useState({ wardRoom: "", bedNumber: "", roomClass: "kelas_3" })
+  const [preOpForm,    setPreOpForm]    = useState({ assessment: "", clearance: "layak" })
+  const [pacuForm,     setPacuForm]     = useState({ pacuNotes: "" })
 
-  // Error/Success state within forms
+  // Performers form (replaces completeForm)
+  const [performers,         setPerformers]         = useState<PerformerRow[]>([])
+  const [performersLoading,  setPerformersLoading]  = useState(false)
+
   const [formError, setFormError] = useState("")
 
-  // Load draft from pacu_notes when completeItem is selected
+  // Load performers when completeItem is set
   useEffect(() => {
-    if (completeItem) {
-      setFormError("")
-      try {
-        if (completeItem.pacu_notes && completeItem.pacu_notes.startsWith("{")) {
-          const draft = JSON.parse(completeItem.pacu_notes)
-          setCompleteForm({
-            surgeonNotes: draft.surgeonNotes || "",
-            anesthesiologistNotes: draft.anesthesiologistNotes || "",
-            doctorTeam: Array.isArray(draft.doctorTeam) ? draft.doctorTeam : [""]
-          })
+    if (!completeItem) return
+    setFormError("")
+    setPerformersLoading(true)
+
+    getSurgeryPerformers(completeItem.id)
+      .then((rows) => {
+        if (rows.length > 0) {
+          setPerformers(rows.map((r, i) => ({
+            practitioner_id: r.practitioner_id,
+            display_name: r.display_name,
+            role: r.role,
+            pre_op_notes: r.pre_op_notes ?? "",
+            post_op_notes: r.post_op_notes ?? "",
+            sort_order: r.sort_order ?? i,
+          })))
         } else {
-          setCompleteForm({
-            surgeonNotes: completeItem.intra_op_notes || "",
-            anesthesiologistNotes: completeItem.post_op_notes || "",
-            doctorTeam: [""]
-          })
+          // Pre-seed with DPJP + Anesthesiologist from schedule
+          const seed: PerformerRow[] = []
+          if (completeItem.surgeon_id) {
+            seed.push(makePerformerRow("dpjp", completeItem.surgeon_id, completeItem.surgeon?.full_name ?? "DPJP", 0))
+          }
+          if (completeItem.anesthesiologist_id) {
+            seed.push(makePerformerRow("anesthesiologist", completeItem.anesthesiologist_id, completeItem.anesthesiologist?.full_name ?? "Anestesi", 1))
+          }
+          if (seed.length === 0) {
+            seed.push(makePerformerRow("dpjp", null, "", 0))
+            seed.push(makePerformerRow("anesthesiologist", null, "", 1))
+          }
+          setPerformers(seed)
         }
-      } catch (e) {
-        setCompleteForm({
-          surgeonNotes: completeItem.intra_op_notes || "",
-          anesthesiologistNotes: completeItem.post_op_notes || "",
-          doctorTeam: [""]
-        })
-      }
-    }
+      })
+      .catch(() => {
+        setPerformers([
+          makePerformerRow("dpjp", completeItem.surgeon_id, completeItem.surgeon?.full_name ?? "DPJP", 0),
+          makePerformerRow("anesthesiologist", completeItem.anesthesiologist_id, completeItem.anesthesiologist?.full_name ?? "Anestesi", 1),
+        ])
+      })
+      .finally(() => setPerformersLoading(false))
   }, [completeItem])
 
-  // Prefetch Operating Rooms, Doctors, and Wards
+  // Prefetch resources
   useEffect(() => {
     getLocations({ type: "ok" })
       .then((res) => setOkRooms(res.length > 0 ? res : FALLBACK_ROOMS))
@@ -94,33 +134,23 @@ export function useSurgeryDashboard() {
       .catch(() => setWards([]))
   }, [])
 
-  // Doctor team dynamic array methods
-  const addDoctorTeamMember = () => {
-    setCompleteForm((prev) => ({
+  // Performer CRUD
+  const addPerformer = () => {
+    setPerformers((prev) => [
       ...prev,
-      doctorTeam: [...prev.doctorTeam, ""]
-    }))
+      makePerformerRow("assistant", null, "", prev.length),
+    ])
   }
 
-  const removeDoctorTeamMember = (index: number) => {
-    setCompleteForm((prev) => ({
-      ...prev,
-      doctorTeam: prev.doctorTeam.filter((_, i) => i !== index)
-    }))
+  const removePerformer = (index: number) => {
+    setPerformers((prev) => prev.filter((_, i) => i !== index).map((p, i) => ({ ...p, sort_order: i })))
   }
 
-  const updateDoctorTeamMember = (index: number, value: string) => {
-    setCompleteForm((prev) => {
-      const newTeam = [...prev.doctorTeam]
-      newTeam[index] = value
-      return {
-        ...prev,
-        doctorTeam: newTeam
-      }
-    })
+  const updatePerformer = (index: number, patch: Partial<PerformerRow>) => {
+    setPerformers((prev) => prev.map((p, i) => i === index ? { ...p, ...patch } : p))
   }
 
-  // 1. Submit Schedule
+  // 1. Schedule
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!scheduleItem) return
@@ -141,7 +171,7 @@ export function useSurgeryDashboard() {
     }
   }
 
-  // 2. Submit Pre-Op
+  // 2. Pre-Op Assessment (Nurse)
   const handlePreOpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!preOpItem) return
@@ -168,71 +198,73 @@ export function useSurgeryDashboard() {
     })
     if (ok) {
       toast?.({ title: "Operasi Dimulai", description: "Operasi sedang berlangsung di kamar bedah." })
-      setActiveTab("scheduled")
     }
   }
 
-  // Save Draft (for incomplete completion form)
+  // 4. Save Draft (partial — saves performers without completing)
   const handleSaveDraft = async () => {
     if (!completeItem) return
-    const draftJson = JSON.stringify({
-      surgeonNotes: completeForm.surgeonNotes,
-      anesthesiologistNotes: completeForm.anesthesiologistNotes,
-      doctorTeam: completeForm.doctorTeam,
-    })
-
-    const ok = await updateSurgeryStatus(completeItem.id, "intra_operative", {
-      pacu_notes: draftJson,
-      intra_op_notes: completeForm.surgeonNotes,
-      post_op_notes: completeForm.anesthesiologistNotes,
-    })
-    if (ok) {
+    try {
+      await upsertSurgeryPerformers(completeItem.id, performers.map((p, i) => ({
+        ...p,
+        snomed_role_code: ROLE_META[p.role]?.snomed_code,
+        snomed_role_display: ROLE_META[p.role]?.snomed_display,
+        sort_order: i,
+      })))
+      // Keep status as intra_operative
+      await updateSurgeryStatus(completeItem.id, "intra_operative", {})
       toast?.({ title: "Draft Disimpan", description: "Laporan bedah berhasil disimpan sebagai draft." })
       setCompleteItem(null)
+    } catch {
+      setFormError("Gagal menyimpan draft")
     }
   }
 
-  // 4. Complete Surgery (Final Submit - requires both reports)
+  // 5. Complete Surgery (Final Submit)
   const handleCompleteSurgerySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!completeItem) return
-    if (!completeForm.surgeonNotes.trim() || !completeForm.anesthesiologistNotes.trim()) {
-      setFormError("Laporan DPJP (Bedah) dan Laporan Anestesi wajib diisi sebelum submit.")
+
+    const dpjp  = performers.find((p) => p.role === "dpjp")
+    const anest = performers.find((p) => p.role === "anesthesiologist")
+
+    if (!dpjp?.post_op_notes?.trim() || !anest?.post_op_notes?.trim()) {
+      setFormError("Laporan post-op DPJP dan Dokter Anestesi wajib diisi sebelum submit.")
+      return
+    }
+
+    const emptyNames = performers.filter((p) => !p.display_name.trim())
+    if (emptyNames.length > 0) {
+      setFormError("Semua anggota tim harus memiliki nama.")
       return
     }
 
     setFormError("")
-    const draftJson = JSON.stringify({
-      surgeonNotes: completeForm.surgeonNotes,
-      anesthesiologistNotes: completeForm.anesthesiologistNotes,
-      doctorTeam: completeForm.doctorTeam,
-    })
-
-    const teamString = completeForm.doctorTeam.filter(Boolean).join(", ")
-    const finalIntraNotes = completeForm.surgeonNotes + (teamString ? `\n\nTim Dokter Bedah: ${teamString}` : "")
-
-    // Move status directly to post_operative to enable transfer/discharge
-    const ok = await updateSurgeryStatus(completeItem.id, "post_operative", {
-      pacu_notes: draftJson,
-      intra_op_notes: finalIntraNotes,
-      post_op_notes: completeForm.anesthesiologistNotes,
-      surgery_end_at: new Date().toISOString(),
-    })
-    if (ok) {
-      toast?.({ title: "Operasi Selesai", description: "Laporan operasi berhasil disimpan dan disubmit!" })
-      setCompleteItem(null)
-      setActiveTab("scheduled")
+    try {
+      await upsertSurgeryPerformers(completeItem.id, performers.map((p, i) => ({
+        ...p,
+        snomed_role_code: ROLE_META[p.role]?.snomed_code,
+        snomed_role_display: ROLE_META[p.role]?.snomed_display,
+        sort_order: i,
+      })))
+      const ok = await updateSurgeryStatus(completeItem.id, "post_operative", {
+        surgery_end_at: new Date().toISOString(),
+      })
+      if (ok) {
+        toast?.({ title: "Operasi Selesai", description: "Laporan operasi berhasil disimpan dan disubmit!" })
+        setCompleteItem(null)
+        setActiveTab("scheduled")
+      }
+    } catch {
+      setFormError("Gagal menyimpan laporan operasi")
     }
   }
 
-  // 5. PACU Discharge (Deprecated by new flow but kept for type compatibility)
+  // 6. PACU (kept for type compatibility, legacy flow)
   const handlePacuSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!pacuItem) return
-    if (!pacuForm.pacuNotes.trim()) {
-      setFormError("Catatan observasi pemulihan (PACU) wajib diisi")
-      return
-    }
+    if (!pacuForm.pacuNotes.trim()) { setFormError("Catatan observasi PACU wajib diisi"); return }
     setFormError("")
     const ok = await updateSurgeryStatus(pacuItem.id, "post_operative", {
       pacu_discharge_at: new Date().toISOString(),
@@ -245,43 +277,37 @@ export function useSurgeryDashboard() {
     }
   }
 
-  // 6. Final Disposition / Discharge or Inpatient Admission
+  // 7. Final Disposition
   const handleFinalDischargeSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!dischargeItem) return
-
     setFormError("")
     try {
+      let newEpisodeId: string | null = null
       if (dischargeItem.needs_inpatient_after && !dischargeItem.episode_of_care_id) {
-        if (!wardForm.wardRoom || !wardForm.bedNumber) {
-          setFormError("Pilih bangsal rawat inap dan nomor bed pasien")
-          return
-        }
-
+        // Create episode_of_care only — nurse assigns the room via Permintaan Rawat Inap
         const episode = await postEpisodeOfCare({
           patient_id: dischargeItem.patient_id,
           dpjp_id: dischargeItem.surgeon_id || dischargeItem.requested_by,
           diagnosis_primary: `Pasca Operasi - ${dischargeItem.surgery_type}`,
         })
-
-        await postInpatientAdmission({
-          episode_of_care_id: episode.id,
-          patient_id: dischargeItem.patient_id,
-          room_location_id: wardForm.wardRoom,
-          bed_number: wardForm.bedNumber,
-          room_class: wardForm.roomClass as any,
-          dpjp_id: dischargeItem.surgeon_id || dischargeItem.requested_by,
-          admitted_from: "outpatient",
-        })
-
+        newEpisodeId = episode.id
         await patchEncounter(dischargeItem.encounter_id, {
           status: "admitted",
           episode_of_care_id: episode.id,
         } as any)
       }
-
-      await updateSurgeryStatus(dischargeItem.id, "surgery_completed")
-      toast?.({ title: "Proses Selesai", description: "Pasien telah berhasil dipindahkan ke rawat inap!" })
+      // Also update surgery_request.episode_of_care_id so the admission-requests API
+      // can correctly annotate the source badge as 'surgery' instead of 'poli'
+      await updateSurgeryStatus(dischargeItem.id, "surgery_completed",
+        newEpisodeId ? { episode_of_care_id: newEpisodeId } : undefined
+      )
+      const msg = dischargeItem.needs_inpatient_after && !dischargeItem.episode_of_care_id
+        ? "Permintaan rawat inap dikirim ke perawat untuk alokasi kamar."
+        : dischargeItem.needs_inpatient_after
+        ? "Pasien dikembalikan ke bangsal perawatan."
+        : "Pasien berhasil dipulangkan."
+      toast?.({ title: "Proses Selesai", description: msg })
       setDischargeItem(null)
       setActiveTab("history")
       refresh()
@@ -290,62 +316,38 @@ export function useSurgeryDashboard() {
     }
   }
 
-  const pendingRequests = surgeryRequests.filter((r) => r.status === "surgery_requested")
-  const activeSchedules = surgeryRequests.filter(
-    (r) =>
-      r.status === "surgery_scheduled" ||
-      r.status === "ready_for_surgery" ||
-      r.status === "intra_operative" ||
-      r.status === "post_operative"
+  const pendingRequests    = surgeryRequests.filter((r) => r.status === "surgery_requested")
+  const activeSchedules    = surgeryRequests.filter((r) =>
+    r.status === "surgery_scheduled" || r.status === "ready_for_surgery" ||
+    r.status === "intra_operative"   || r.status === "post_operative"
   )
   const historicalRequests = surgeryRequests.filter(
     (r) => r.pacu_discharge_at !== null || r.status === "post_operative" || r.status === "surgery_completed"
   )
 
   return {
-    activeTab,
-    setActiveTab,
-    scheduleItem,
-    setScheduleItem,
-    preOpItem,
-    setPreOpItem,
-    completeItem,
-    setCompleteItem,
-    pacuItem,
-    setPacuItem,
-    dischargeItem,
-    setDischargeItem,
-    okRooms,
-    doctors,
-    wards,
-    scheduleForm,
-    setScheduleForm,
-    preOpForm,
-    setPreOpForm,
-    completeForm,
-    setCompleteForm,
-    pacuForm,
-    setPacuForm,
-    wardForm,
-    setWardForm,
-    formError,
-    setFormError,
-    loading,
-    actionLoading,
-    hookError,
-    refresh,
+    activeTab, setActiveTab,
+    scheduleItem, setScheduleItem,
+    preOpItem, setPreOpItem,
+    completeItem, setCompleteItem,
+    pacuItem, setPacuItem,
+    dischargeItem, setDischargeItem,
+    okRooms, doctors, wards,
+    scheduleForm, setScheduleForm,
+    preOpForm, setPreOpForm,
+    performers, performersLoading,
+    addPerformer, removePerformer, updatePerformer,
+    pacuForm, setPacuForm,
+    formError, setFormError,
+    loading, actionLoading, hookError, refresh,
     handleScheduleSubmit,
     handlePreOpSubmit,
     handleStartSurgery,
     handleCompleteSurgerySubmit,
     handlePacuSubmit,
     handleFinalDischargeSubmit,
-    pendingRequests,
-    activeSchedules,
-    historicalRequests,
     handleSaveDraft,
-    addDoctorTeamMember,
-    removeDoctorTeamMember,
-    updateDoctorTeamMember,
+    pendingRequests, activeSchedules, historicalRequests,
+    // Legacy aliases removed — callers updated below
   }
 }

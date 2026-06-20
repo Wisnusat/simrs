@@ -264,11 +264,15 @@ export default function InpatientNurseDashboard() {
                               <p className="font-semibold">{(ep as any).patients?.full_name}</p>
                               <Badge
                                 variant="outline"
-                                className={(ep as any).source === 'igd'
-                                  ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 text-[10px] h-5'
-                                  : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] h-5'}
+                                className={
+                                  (ep as any).source === 'surgery'
+                                    ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] h-5'
+                                    : (ep as any).source === 'igd'
+                                    ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 text-[10px] h-5'
+                                    : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] h-5'
+                                }
                               >
-                                {(ep as any).source === 'igd' ? 'IGD' : 'Poli'}
+                                {(ep as any).source === 'surgery' ? 'Operasi' : (ep as any).source === 'igd' ? 'IGD' : 'Poli'}
                               </Badge>
                             </div>
                             <p className="text-xs text-foreground/60">
@@ -678,18 +682,28 @@ export default function InpatientNurseDashboard() {
 
           <Separator />
 
-          {/* CPPT Form */}
-          <CpptForm
-            encounterId={currentEncounterId}
-            patientId={cpptAdm.patient_id}
-            onSubmit={handleCpptSubmit}
-            onCreateShift={createDailyRecord}
-            loading={drAction}
-            error={null}
-            previousNotes={previousNotes}
-            todayShiftExists={todayRecords.length > 0}
-            vitalSigns={patientVitals}
-          />
+          {/* CPPT Form — blocked while patient is in surgery */}
+          {surgeries.some(s => s.status === 'intra_operative') ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 text-center">
+              <Stethoscope className="w-8 h-8 text-amber-500 animate-pulse" />
+              <p className="font-semibold text-amber-700 dark:text-amber-300">Pasien Sedang Dalam Tindakan Operasi</p>
+              <p className="text-sm text-amber-600/80 dark:text-amber-400/70 max-w-sm">
+                CPPT tidak dapat diinput selama operasi berlangsung. Input akan tersedia kembali setelah pasien dikembalikan ke bangsal.
+              </p>
+            </div>
+          ) : (
+            <CpptForm
+              encounterId={currentEncounterId}
+              patientId={cpptAdm.patient_id}
+              onSubmit={handleCpptSubmit}
+              onCreateShift={createDailyRecord}
+              loading={drAction}
+              error={null}
+              previousNotes={previousNotes}
+              todayShiftExists={todayRecords.length > 0}
+              vitalSigns={patientVitals}
+            />
+          )}
         </div>
       )}
 

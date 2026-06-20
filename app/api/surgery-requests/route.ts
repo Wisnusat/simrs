@@ -72,12 +72,24 @@ export async function POST(req: NextRequest) {
     return apiResponse.badRequest('patient_id, encounter_id, surgery_type, and indication are required')
   }
 
+  // Auto-populate episode_of_care_id from the encounter when not explicitly provided
+  // (inpatient encounters already have it; outpatient ones don't)
+  let resolvedEpisodeId = episode_of_care_id || null
+  if (!resolvedEpisodeId && encounter_id) {
+    const { data: enc } = await supabase
+      .from('encounters')
+      .select('episode_of_care_id')
+      .eq('id', encounter_id)
+      .single()
+    resolvedEpisodeId = enc?.episode_of_care_id || null
+  }
+
   const { data, error } = await supabase
     .from('surgery_requests')
     .insert({
       patient_id,
       encounter_id,
-      episode_of_care_id: episode_of_care_id || null,
+      episode_of_care_id: resolvedEpisodeId,
       requested_by: practitioner.id,
       surgery_type,
       indication,

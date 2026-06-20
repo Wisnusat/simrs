@@ -15,8 +15,10 @@ import { Dialog, DialogContent, DialogTitle, DialogFooter, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Activity, Calendar, Clock, Loader2, Play, CheckCircle, BedDouble,
-  ShieldCheck, Heart, ClipboardList, RefreshCw, LogOut, ExternalLink
+  ShieldCheck, Heart, ClipboardList, RefreshCw, LogOut, ExternalLink,
+  Plus, Trash2, UserRound,
 } from "lucide-react"
+import { ROLE_META, type PerformerRow } from "@/hooks/nurse/use-surgery-dashboard"
 
 export function SurgeryDashboard({ role }: { role: string }) {
   const {
@@ -38,12 +40,13 @@ export function SurgeryDashboard({ role }: { role: string }) {
     setScheduleForm,
     preOpForm,
     setPreOpForm,
-    completeForm,
-    setCompleteForm,
+    performers,
+    performersLoading,
+    addPerformer,
+    removePerformer,
+    updatePerformer,
     pacuForm,
     setPacuForm,
-    wardForm,
-    setWardForm,
     formError,
     setFormError,
     loading,
@@ -60,9 +63,6 @@ export function SurgeryDashboard({ role }: { role: string }) {
     activeSchedules,
     historicalRequests,
     handleSaveDraft,
-    addDoctorTeamMember,
-    removeDoctorTeamMember,
-    updateDoctorTeamMember,
   } = useSurgeryDashboard()
 
   const getStatusBadge = (status: string) => {
@@ -278,7 +278,6 @@ export function SurgeryDashboard({ role }: { role: string }) {
                               size="sm"
                               onClick={() => {
                                 setCompleteItem(item)
-                                setCompleteForm({ surgeonNotes: "", anesthesiologistNotes: "", doctorTeam: [""] })
                                 setFormError("")
                               }}
                               className="bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm"
@@ -293,7 +292,6 @@ export function SurgeryDashboard({ role }: { role: string }) {
                               size="sm"
                               onClick={() => {
                                 setDischargeItem(item)
-                                setWardForm({ wardRoom: "", bedNumber: "", roomClass: "kelas_3" })
                                 setFormError("")
                               }}
                               className="bg-zinc-800 hover:bg-zinc-900 text-white dark:bg-zinc-200 dark:hover:bg-zinc-100 dark:text-zinc-950 rounded-lg shadow-sm"
@@ -521,75 +519,114 @@ export function SurgeryDashboard({ role }: { role: string }) {
 
       {/* ── MODAL 3: COMPLETE SURGERY & ENTER REPORTS ── */}
       <Dialog open={!!completeItem} onOpenChange={(o) => { if (!o) setCompleteItem(null) }}>
-        <DialogContent className="max-w-lg rounded-xl p-6 overflow-y-auto max-h-[90vh]">
-          <DialogTitle className="text-lg font-bold flex items-center gap-2">
+        <DialogContent className="max-w-2xl rounded-xl p-6 max-h-[90vh] flex flex-col">
+          <DialogTitle className="text-lg font-bold flex items-center gap-2 shrink-0">
             <CheckCircle className="w-5 h-5 text-green-500" /> Selesaikan Operasi & Laporan Tim Medis
           </DialogTitle>
-          <DialogDescription className="text-xs">
-            Laporan bedah DPJP (Bedah) and Laporan Dokter Anestesi wajib diisi sebelum final submit. Anda dapat menyimpan draft kapan saja.
+          <DialogDescription className="text-xs shrink-0">
+            Isi catatan pre-op dan post-op untuk setiap anggota tim. Laporan post-op DPJP dan Anestesi wajib diisi sebelum submit.
           </DialogDescription>
-          <form onSubmit={handleCompleteSurgerySubmit} className="space-y-4 pt-2">
-            {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
 
-            <div className="space-y-1">
-              <Label className="text-sm font-semibold">Laporan Dokter Spesialis Bedah (DPJP) *</Label>
-              <Textarea
-                rows={4}
-                value={completeForm.surgeonNotes}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, surgeonNotes: e.target.value }))}
-                placeholder="Catat laporan pembedahan detail oleh Dokter DPJP / Operator..."
-                required
-              />
-            </div>
+          <form onSubmit={handleCompleteSurgerySubmit} className="flex flex-col flex-1 min-h-0 pt-2">
+            {formError && <Alert variant="destructive" className="mb-3 shrink-0"><AlertDescription>{formError}</AlertDescription></Alert>}
 
-            <div className="space-y-1">
-              <Label className="text-sm font-semibold">Laporan Dokter Anestesi *</Label>
-              <Textarea
-                rows={4}
-                value={completeForm.anesthesiologistNotes}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, anesthesiologistNotes: e.target.value }))}
-                placeholder="Catat tipe anestesi, catatan hemodinamik, obat anestesi, dll..."
-                required
-              />
-            </div>
+            {/* Performer cards — scrollable */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {performersLoading ? (
+                <div className="flex items-center gap-2 py-8 justify-center text-foreground/50">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat data tim...
+                </div>
+              ) : (
+                performers.map((performer, index) => {
+                  const meta = ROLE_META[performer.role] ?? ROLE_META.other
+                  const isRequired = performer.role === "dpjp" || performer.role === "anesthesiologist"
+                  return (
+                    <div key={index} className="border rounded-lg p-4 space-y-3">
+                      {/* Header row */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <UserRound className="w-4 h-4 text-foreground/40 shrink-0" />
+                        <Select
+                          value={performer.role}
+                          onValueChange={(v) => updatePerformer(index, {
+                            role: v as PerformerRow["role"],
+                          })}
+                        >
+                          <SelectTrigger className="w-44 h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(ROLE_META).map(([key, m]) => (
+                              <SelectItem key={key} value={key} className="text-xs">{m.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+                        <Input
+                          className="h-7 text-xs flex-1 min-w-32"
+                          placeholder="Nama dokter / staf *"
+                          value={performer.display_name}
+                          onChange={(e) => updatePerformer(index, { display_name: e.target.value })}
+                        />
+                        {!isRequired && (
+                          <Button
+                            type="button" variant="ghost" size="icon"
+                            className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                            onClick={() => removePerformer(index)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {isRequired && <span className="text-[10px] text-foreground/40 ml-auto shrink-0">Wajib</span>}
+                      </div>
 
-            <div className="space-y-2 border-t pt-3">
-              <Label className="text-sm font-semibold">Tim Dokter Bedah Tambahan</Label>
-              <div className="space-y-2">
-                {completeForm.doctorTeam.map((member, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <Input
-                      value={member}
-                      onChange={(e) => updateDoctorTeamMember(index, e.target.value)}
-                      placeholder={`Nama Dokter / Asisten ${index + 1}`}
-                      className="text-xs"
-                    />
-                    {completeForm.doctorTeam.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeDoctorTeamMember(index)}
-                        className="text-red-500 border-red-100 hover:bg-red-50 h-8"
-                      >
-                        Hapus
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      {/* Notes */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-foreground/60">Catatan Pre-Operatif</Label>
+                          <Textarea
+                            rows={3}
+                            className="text-xs resize-none"
+                            placeholder="Persiapan, asesmen, rencana tindakan sebelum operasi..."
+                            value={performer.pre_op_notes}
+                            onChange={(e) => updatePerformer(index, { pre_op_notes: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-foreground/60">
+                            Laporan Post-Operatif {isRequired && <span className="text-red-500">*</span>}
+                          </Label>
+                          <Textarea
+                            rows={3}
+                            className="text-xs resize-none"
+                            placeholder={
+                              performer.role === "dpjp"
+                                ? "Laporan pembedahan detail, teknik, temuan intra-op..."
+                                : performer.role === "anesthesiologist"
+                                  ? "Tipe anestesi, hemodinamik, obat, waktu induksi/ekstubasi..."
+                                  : "Catatan post-operatif..."
+                            }
+                            value={performer.post_op_notes}
+                            onChange={(e) => updatePerformer(index, { post_op_notes: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={addDoctorTeamMember}
-                className="text-xs mt-1 h-8"
+                onClick={addPerformer}
+                className="w-full text-xs h-8 border-dashed"
               >
-                + Tambah Anggota Tim
+                <Plus className="w-3.5 h-3.5 mr-1" /> Tambah Anggota Tim
               </Button>
             </div>
 
-            <DialogFooter className="pt-4 flex gap-2 justify-end border-t">
+            <DialogFooter className="pt-4 flex gap-2 justify-end border-t mt-4 shrink-0">
               <Button type="button" variant="outline" onClick={() => setCompleteItem(null)} disabled={actionLoading}>
                 Batal
               </Button>
@@ -604,7 +641,7 @@ export function SurgeryDashboard({ role }: { role: string }) {
               </Button>
               <Button
                 type="submit"
-                disabled={!completeForm.surgeonNotes.trim() || !completeForm.anesthesiologistNotes.trim() || actionLoading}
+                disabled={actionLoading}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Laporan"}
@@ -639,49 +676,10 @@ export function SurgeryDashboard({ role }: { role: string }) {
                     <p>Pasien akan dikembalikan ke bangsal / bed asal perawatan sebelumnya.</p>
                   </div>
                 ) : (
-                  <>
-                    <p className="text-xs text-foreground/60">Pasien berasal dari outpatient. Pilih bangsal & bed rawat inap untuk merawat pasien:</p>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Pilih Bangsal Perawatan *</Label>
-                      <Select
-                        value={wardForm.wardRoom}
-                        onValueChange={(val) => setWardForm((p) => ({ ...p, wardRoom: val }))}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Pilih Bangsal" /></SelectTrigger>
-                        <SelectContent>
-                          {wards.map((ward) => (
-                            <SelectItem key={ward.id} value={ward.id}>{ward.name} · Lantai {ward.floor ?? "—"}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Nomor Bed *</Label>
-                        <Input
-                          value={wardForm.bedNumber}
-                          onChange={(e) => setWardForm((p) => ({ ...p, bedNumber: e.target.value }))}
-                          placeholder="Ex: Bed A1, Bed B"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Kelas Kamar *</Label>
-                        <Select
-                          value={wardForm.roomClass}
-                          onValueChange={(val) => setWardForm((p) => ({ ...p, roomClass: val }))}
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="vip">VIP</SelectItem>
-                            <SelectItem value="kelas_1">Kelas 1</SelectItem>
-                            <SelectItem value="kelas_2">Kelas 2</SelectItem>
-                            <SelectItem value="kelas_3">Kelas 3 (BPJS)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </>
+                  <div className="text-xs text-foreground/70 space-y-1">
+                    <p className="font-medium text-blue-600">Permintaan Rawat Inap akan dikirim ke Perawat</p>
+                    <p>Alokasi kamar dan bed akan dilakukan oleh perawat melalui menu <span className="font-semibold">Permintaan Rawat Inap</span>.</p>
+                  </div>
                 )}
               </div>
             ) : (

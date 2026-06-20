@@ -680,6 +680,34 @@ export interface SurgeryRequestInput {
   needs_inpatient_after?: boolean
 }
 
+export type SurgeryPerformerRole = 'dpjp' | 'anesthesiologist' | 'assistant' | 'scrub_nurse' | 'other'
+
+export interface SurgeryPerformer {
+  id: string
+  surgery_request_id: string
+  practitioner_id?: string | null
+  display_name: string
+  role: SurgeryPerformerRole
+  snomed_role_code?: string
+  snomed_role_display?: string
+  pre_op_notes?: string
+  post_op_notes?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SurgeryPerformerInput {
+  practitioner_id?: string | null
+  display_name: string
+  role: SurgeryPerformerRole
+  snomed_role_code?: string
+  snomed_role_display?: string
+  pre_op_notes?: string
+  post_op_notes?: string
+  sort_order?: number
+}
+
 // ---------------------------------------------------------------------------
 // CMS — Lab Services
 // ---------------------------------------------------------------------------

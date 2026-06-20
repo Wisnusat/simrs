@@ -31,9 +31,22 @@ export async function GET(req: NextRequest) {
 
   if (error) return apiResponse.serverError(error.message)
 
-  // Annotate each episode with source (igd vs poli) — single query, no N+1
+  // Annotate each episode with source (surgery > igd > poli) — two queries, no N+1
+  const episodeIds = (data ?? []).map((ep: any) => ep.id)
   const patientIds = (data ?? []).map((ep: any) => ep.patient_id)
+
+  let surgerySet = new Set<string>()
   let igdSet = new Set<string>()
+
+  if (episodeIds.length > 0) {
+    const { data: surgeryRows } = await supabase
+      .from('surgery_requests')
+      .select('episode_of_care_id')
+      .in('episode_of_care_id', episodeIds)
+      .in('status', ['post_operative', 'surgery_completed'])
+
+    surgerySet = new Set((surgeryRows ?? []).map((r: any) => r.episode_of_care_id))
+  }
 
   if (patientIds.length > 0) {
     const { data: igdRows } = await supabase
@@ -47,7 +60,7 @@ export async function GET(req: NextRequest) {
 
   const annotated = (data ?? []).map((ep: any) => ({
     ...ep,
-    source: igdSet.has(ep.patient_id) ? 'igd' : 'poli',
+    source: surgerySet.has(ep.id) ? 'surgery' : igdSet.has(ep.patient_id) ? 'igd' : 'poli',
   }))
 
   return apiResponse.ok(annotated)
