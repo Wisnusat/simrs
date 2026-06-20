@@ -25,7 +25,8 @@ const DEMO_CREDENTIALS = [
   { role: 'Apoteker', email: 'apoteker@carewell.id', password: 'apoteker123' },
   { role: 'Kasir', email: 'kasir@carewell.id', password: 'kasir123' },
   { role: 'Owner', email: 'owner@carewell.id', password: 'owner123' },
-  { role: 'Gizi', email: 'gizi@carewell.id', password: 'gizi123' }
+  { role: 'Gizi', email: 'gizi@carewell.id', password: 'gizi123' },
+  { role: 'Lab', email: 'perawat.lab@carewell.id', password: 'labperawat123' }
 ]
 
 export default function LoginForm() {
