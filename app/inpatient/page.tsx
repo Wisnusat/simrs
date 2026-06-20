@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
-  FlaskConical, Stethoscope, Clock, Loader2,
+  FlaskConical, Stethoscope, Clock, Loader2, ChevronDown, ChevronRight,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -57,6 +57,7 @@ export default function InpatientNurseDashboard() {
   const [labOrdersLoading, setLabOrdersLoading] = useState(false)
   const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
   const [surgeriesLoading, setSurgeriesLoading] = useState(false)
+  const [labOpen, setLabOpen] = useState(false)
 
   // Pending admissions (episodes_of_care without room — waiting for nurse room assignment)
   const [pendingAdmissions, setPendingAdmissions] = useState<EpisodeOfCare[]>([])
@@ -145,7 +146,7 @@ export default function InpatientNurseDashboard() {
     setAssignForm({ room_location_id: '', bed_number: '', room_class: 'kelas_3' })
     if (rooms.length === 0) {
       setRoomsLoading(true)
-      getLocations({ type: 'patient_room' }).then(setRooms).catch(() => {}).finally(() => setRoomsLoading(false))
+      getLocations({ type: 'patient_room' }).then(setRooms).catch(() => { }).finally(() => setRoomsLoading(false))
     }
   }, [rooms.length])
 
@@ -169,7 +170,7 @@ export default function InpatientNurseDashboard() {
   const handleOpenCppt = useCallback(async (adm: InpatientAdmission) => {
     setCpptAdm(adm)
     setView("cppt")
-    setPatientVitals(null) // reset; will be loaded once encounter is known
+    setPatientVitals([]) // reset; will be loaded once encounter is known
     setLabOrders([])
     setSurgeries([])
     // Load previous notes from all encounters in this episode
@@ -303,13 +304,12 @@ export default function InpatientNurseDashboard() {
                                         key={room.id}
                                         type="button"
                                         disabled={isFull}
-                                        className={`p-2 rounded border text-left text-xs transition-all ${
-                                          assignForm.room_location_id === room.id
-                                            ? 'border-orange-500 bg-orange-100 dark:bg-orange-900/30 ring-1 ring-orange-500'
-                                            : isFull
+                                        className={`p-2 rounded border text-left text-xs transition-all ${assignForm.room_location_id === room.id
+                                          ? 'border-orange-500 bg-orange-100 dark:bg-orange-900/30 ring-1 ring-orange-500'
+                                          : isFull
                                             ? 'border-border/40 opacity-50 cursor-not-allowed'
                                             : 'border-border hover:border-orange-300 hover:bg-orange-50/50'
-                                        }`}
+                                          }`}
                                         onClick={() => setAssignForm(f => ({ ...f, room_location_id: room.id }))}
                                       >
                                         <p className="font-medium">{room.name}</p>
@@ -529,61 +529,76 @@ export default function InpatientNurseDashboard() {
 
           <Separator />
 
-          {/* ── Pemeriksaan Lab ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
+          {/* ── Pemeriksaan Lab (collapsible) ── */}
+          <div className="rounded-lg border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setLabOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-foreground/70">
                 <FlaskConical className="w-4 h-4 text-blue-500" />
-                <CardTitle className="text-base">Pemeriksaan Lab</CardTitle>
+                <span>Pemeriksaan Lab</span>
+                {labOrders.length > 0 && (
+                  <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+                    {labOrders.length} permintaan
+                  </span>
+                )}
               </div>
-            </CardHeader>
-            <CardContent>
-              {labOrdersLoading ? (
-                <p className="text-xs text-foreground/40">Memuat data lab...</p>
-              ) : labOrders.length === 0 ? (
-                <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
-              ) : (
-                <div className="space-y-3">
-                  {labOrders.map((lo) => (
-                    <div key={lo.id} className="border rounded-md p-3 space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2 text-xs text-foreground/60">
-                          <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                          <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
-                        </div>
-                        <StatusBadge status={lo.status} />
-                      </div>
-                      <div className="space-y-1">
-                        {(lo.lab_order_items ?? []).map((item: any) => (
-                          <div key={item.id} className="flex items-start justify-between gap-2 text-xs py-1 border-t border-border/40">
-                            <span className="font-medium">{item.test_name}</span>
-                            <div className="text-right space-y-0.5">
-                              {item.result_value ? (
-                                <>
-                                  <span className={`font-semibold ${
-                                    item.result_status === 'critical' ? 'text-red-600' :
-                                    item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' :
-                                    'text-green-700'
-                                  }`}>
-                                    {item.result_value} {item.result_unit}
-                                  </span>
-                                  {item.reference_range && (
-                                    <p className="text-foreground/40">Ref: {item.reference_range}</p>
-                                  )}
-                                </>
-                              ) : (
-                                <span className="text-foreground/40 italic">Belum ada hasil</span>
-                              )}
-                            </div>
+              {labOpen
+                ? <ChevronDown className="w-4 h-4 text-foreground/40" />
+                : <ChevronRight className="w-4 h-4 text-foreground/40" />
+              }
+            </button>
+
+            {labOpen && (
+              <div className="border-t px-4 py-3">
+                {labOrdersLoading ? (
+                  <p className="text-xs text-foreground/40">Memuat data lab...</p>
+                ) : labOrders.length === 0 ? (
+                  <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {labOrders.map((lo) => (
+                      <div key={lo.id} className="border rounded-md p-3 space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2 text-xs text-foreground/60">
+                            <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
                           </div>
-                        ))}
+                          <StatusBadge status={lo.status} />
+                        </div>
+                        <div className="space-y-1">
+                          {(lo.lab_order_items ?? []).map((item: any) => (
+                            <div key={item.id} className="flex items-start justify-between gap-2 text-xs py-1 border-t border-border/40">
+                              <span className="font-medium">{item.test_name}</span>
+                              <div className="text-right space-y-0.5">
+                                {item.result_value ? (
+                                  <>
+                                    <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' :
+                                      item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' :
+                                        'text-green-700'
+                                      }`}>
+                                      {item.result_value} {item.result_unit}
+                                    </span>
+                                    {item.reference_range && (
+                                      <p className="text-foreground/40">Ref: {item.reference_range}</p>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-foreground/40 italic">Belum ada hasil</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* ── Riwayat Operasi ── */}
           {(surgeriesLoading || surgeries.length > 0) && (

@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Loader2, ArrowLeft, Activity, Heart, Thermometer,
   BedDouble, Calendar, FlaskConical, Pill, FileText,
+  User, Clock,
 } from "lucide-react"
 import {
   postClinicalNote, postDiagnosis, postPrescription,
@@ -303,24 +304,46 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             {/* CPPT Timeline */}
             {previousNotes.length > 0 && (
               <div className="space-y-3">
-                <h4 className="font-semibold text-sm">Riwayat CPPT</h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {previousNotes.map((note) => (
-                    <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <Badge variant="outline" className="text-[10px]">
-                          {note.writer_role === "doctor" ? "Dokter" : note.writer_role === "nurse" ? "Perawat" : note.writer_role}
-                        </Badge>
-                        <span className="text-foreground/40">
-                          {new Date(note.note_date).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </span>
+                <h4 className="font-semibold text-sm">Riwayat CPPT (Semua Profesi)</h4>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {previousNotes.map((note) => {
+                    const roleLabel =
+                      note.writer_role === "doctor" ? "Dokter" :
+                      note.writer_role === "nurse" ? "Perawat" :
+                      note.writer_role === "nutritionist" ? "Ahli Gizi" :
+                      note.writer_role === "pharmacist" ? "Apoteker" :
+                      note.writer_role ?? "—"
+
+                    const roleColor =
+                      note.writer_role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+                      note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+                      note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                      "bg-muted text-foreground/60"
+
+                    return (
+                      <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <User className="w-3.5 h-3.5 text-foreground/40" />
+                            <span className="font-medium">{(note as any).practitioners?.full_name ?? "—"}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleColor}`}>
+                              {roleLabel}
+                            </span>
+                          </div>
+                          <span className="flex items-center gap-1 text-xs text-foreground/40">
+                            <Clock className="w-3 h-3" />
+                            {new Date(note.note_date).toLocaleString("id-ID", {
+                              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        {note.subjective && <p className="text-xs"><span className="font-semibold text-foreground/60">S:</span> {note.subjective}</p>}
+                        {note.objective && <p className="text-xs"><span className="font-semibold text-foreground/60">O:</span> {note.objective}</p>}
+                        {note.assessment && <p className="text-xs"><span className="font-semibold text-foreground/60">A:</span> {note.assessment}</p>}
+                        {note.plan && <p className="text-xs"><span className="font-semibold text-foreground/60">P:</span> {note.plan}</p>}
                       </div>
-                      {note.subjective && <p><strong className="text-foreground/60">S:</strong> {note.subjective}</p>}
-                      {note.objective && <p><strong className="text-foreground/60">O:</strong> {note.objective}</p>}
-                      {note.assessment && <p><strong className="text-foreground/60">A:</strong> {note.assessment}</p>}
-                      {note.plan && <p><strong className="text-foreground/60">P:</strong> {note.plan}</p>}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

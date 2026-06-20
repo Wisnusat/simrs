@@ -344,58 +344,51 @@ function SoapContent({ notes }: { notes: any[] }) {
     return <p className="text-xs text-foreground/40 italic">Tidak ada catatan SOAP.</p>
   }
 
+  const roleLabel = (role: string) => {
+    switch (role) {
+      case "doctor": return "Dokter"
+      case "nurse": return "Perawat"
+      case "nutritionist": return "Ahli Gizi"
+      case "pharmacist": return "Apoteker"
+      default: return role ?? "—"
+    }
+  }
+
+  const roleColor = (role: string) => {
+    switch (role) {
+      case "doctor": return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+      case "nurse": return "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
+      case "nutritionist": return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+      default: return "bg-muted text-foreground/60"
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {notes.map((note: any) => (
-        <div key={note.id} className="space-y-1.5">
-          {/* Writer badge */}
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={`text-[10px] px-1.5 py-0 ${
-                note.writer_role === "doctor"
-                  ? "border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400"
-                  : "border-green-300 text-green-600 dark:border-green-700 dark:text-green-400"
-              }`}
-            >
-              {note.writer_role === "doctor" ? "Dokter" : "Perawat"}
-            </Badge>
-            {note.practitioners?.full_name && (
-              <span className="text-[10px] text-foreground/40">{note.practitioners.full_name}</span>
-            )}
+        <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-foreground/40" />
+              <span className="font-medium text-xs">{note.practitioners?.full_name ?? "—"}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleColor(note.writer_role)}`}>
+                {roleLabel(note.writer_role)}
+              </span>
+            </div>
             {note.note_date && (
-              <span className="text-[10px] text-foreground/30">
-                {new Date(note.note_date).toLocaleDateString("id-ID")}
+              <span className="flex items-center gap-1 text-xs text-foreground/40">
+                <Calendar className="w-3 h-3" />
+                {new Date(note.note_date).toLocaleString("id-ID", {
+                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                })}
               </span>
             )}
           </div>
-
-          {/* SOAP fields */}
-          <div className="grid grid-cols-1 gap-1 text-xs">
-            {note.subjective && (
-              <div className="flex gap-2">
-                <span className="font-semibold text-foreground/50 w-4 shrink-0">S</span>
-                <span className="text-foreground/70">{note.subjective}</span>
-              </div>
-            )}
-            {note.objective && (
-              <div className="flex gap-2">
-                <span className="font-semibold text-foreground/50 w-4 shrink-0">O</span>
-                <span className="text-foreground/70">{note.objective}</span>
-              </div>
-            )}
-            {note.assessment && (
-              <div className="flex gap-2">
-                <span className="font-semibold text-foreground/50 w-4 shrink-0">A</span>
-                <span className="text-foreground/70">{note.assessment}</span>
-              </div>
-            )}
-            {note.plan && (
-              <div className="flex gap-2">
-                <span className="font-semibold text-foreground/50 w-4 shrink-0">P</span>
-                <span className="text-foreground/70">{note.plan}</span>
-              </div>
-            )}
+          <div className="space-y-1 text-xs">
+            {note.subjective && <p><span className="font-semibold text-foreground/60">S:</span> {note.subjective}</p>}
+            {note.objective && <p><span className="font-semibold text-foreground/60">O:</span> {note.objective}</p>}
+            {note.assessment && <p><span className="font-semibold text-foreground/60">A:</span> {note.assessment}</p>}
+            {note.plan && <p><span className="font-semibold text-foreground/60">P:</span> {note.plan}</p>}
           </div>
         </div>
       ))}
