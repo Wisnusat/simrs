@@ -41,6 +41,7 @@ export async function drainQueue(supabase: SupabaseClient, fhir: FhirClient, lim
     } catch (e: any) {
       if (e instanceof DeferSync) {
         // dependency not ready — retry soon, don't count as failure
+        // relies on claim_ss_sync_jobs not incrementing attempts at claim time
         await supabase.from('ss_sync_queue').update({
           status: 'pending',
           next_attempt_at: new Date(Date.now() + DEFER_DELAY_MS).toISOString(),

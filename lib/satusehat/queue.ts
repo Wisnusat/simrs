@@ -23,6 +23,7 @@ export async function enqueueSync(
         local_id: localId,
         action,
         status: 'pending',
+        attempts: 0,
         next_attempt_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
