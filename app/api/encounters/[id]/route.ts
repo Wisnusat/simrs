@@ -3,8 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncEncounter } from '@/lib/api/satu-sehat'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/encounters/[id]
@@ -137,7 +137,7 @@ export async function PATCH(
   await syncInvoiceForEncounter(supabase, id)
 
   if (body.status === 'finished') {
-    syncEncounter(supabase, id, { status: 'finished' }).catch(() => { })
+    enqueueSync(supabase, 'Encounter', id, 'PUT').catch(() => {})
   }
 
   return apiResponse.ok(data)
