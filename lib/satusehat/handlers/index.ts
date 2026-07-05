@@ -10,6 +10,7 @@ import { medicationRequestHandler, medicationDispenseHandler } from './medicatio
 import { compositionHandler } from './composition'
 import { procedureHandler } from './procedure'
 import { serviceRequestHandler, diagnosticReportHandler } from './lab'
+import { nutritionOrderHandler } from './nutrition-order'
 
 export const handlers: Record<string, SyncHandler> = {
   Patient: patientHandler,
@@ -25,4 +26,5 @@ export const handlers: Record<string, SyncHandler> = {
   Procedure: procedureHandler,
   ServiceRequest: serviceRequestHandler,
   DiagnosticReport: diagnosticReportHandler,
+  NutritionOrder: nutritionOrderHandler,
 }

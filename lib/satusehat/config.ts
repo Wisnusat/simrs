@@ -38,3 +38,4 @@ export const compositionIdentifierSystem = (orgId: string) => `http://sys-ids.ke
 export const serviceRequestIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/servicerequest/${orgId}`
 export const diagnosticReportIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/diagnostic/${orgId}`
 export const episodeOfCareIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/episode-of-care/${orgId}`
+export const nutritionOrderIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/nutrition-order/${orgId}`

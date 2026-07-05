@@ -11,6 +11,7 @@ import { buildComposition } from '@/lib/satusehat/builders/composition'
 import { buildProcedure } from '@/lib/satusehat/builders/procedure'
 import { buildServiceRequest, buildDiagnosticReport } from '@/lib/satusehat/builders/lab'
 import { buildEpisodeOfCare } from '@/lib/satusehat/builders/episode-of-care'
+import { buildNutritionOrder } from '@/lib/satusehat/builders/nutrition-order'
 
 describe('satusehat config', () => {
   it('builds staging URLs', () => {
@@ -305,5 +306,36 @@ describe('buildEpisodeOfCare', () => {
     const r: any = buildEpisodeOfCare({ ...base, status: 'discharged', endDate: '2026-07-05' })
     expect(r.status).toBe('finished')
     expect(r.period.end).toBe('2026-07-05')
+  })
+})
+
+describe('buildNutritionOrder', () => {
+  const base = {
+    localId: 'no-1', orgId: '100012345', isActive: true,
+    patientIhs: 'P0001', patientName: 'Budi',
+    nutritionistIhs: 'NR0001', nutritionistName: 'Nurul Gizi',
+    ssEncounterId: 'enc-ss-1',
+    orderDate: '2026-07-01',
+    dietaryRestrictions: 'Rendah garam', energyKcal: 1800, proteinG: 60,
+    notes: 'Hindari makanan pedas',
+  }
+  it('builds active NutritionOrder with oralDiet nutrients', () => {
+    const r: any = buildNutritionOrder(base)
+    expect(r.resourceType).toBe('NutritionOrder')
+    expect(r.status).toBe('active')
+    expect(r.intent).toBe('order')
+    expect(r.patient.reference).toBe('Patient/P0001')
+    expect(r.encounter.reference).toBe('Encounter/enc-ss-1')
+    expect(r.orderer.reference).toBe('Practitioner/NR0001')
+    expect(r.oralDiet.type[0].text).toBe('Rendah garam')
+    expect(r.oralDiet.nutrient).toHaveLength(2)
+    expect(r.oralDiet.nutrient[0].amount.value).toBe(1800)
+    expect(r.oralDiet.instruction).toBe('Hindari makanan pedas')
+  })
+  it('omits encounter when ssEncounterId null; maps is_active false → cancelled', () => {
+    const r: any = buildNutritionOrder({ ...base, ssEncounterId: null, isActive: false, energyKcal: null, proteinG: null })
+    expect(r.status).toBe('cancelled')
+    expect(r.encounter).toBeUndefined()
+    expect(r.oralDiet?.nutrient).toBeUndefined()
   })
 })
