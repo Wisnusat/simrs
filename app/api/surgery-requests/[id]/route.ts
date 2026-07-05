@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * PATCH /api/surgery-requests/[id]
@@ -86,6 +87,18 @@ export async function PATCH(
 
     if (procError) {
       console.error('Failed to auto-insert clinical procedure entry:', procError.message)
+    } else {
+      // Enqueue FHIR Procedure sync (fire-and-forget)
+      const { data: inserted } = await supabase
+        .from('procedures')
+        .select('id')
+        .eq('encounter_id', updated.encounter_id)
+        .eq('patient_id', updated.patient_id)
+        .eq('is_surgery', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      if (inserted?.id) enqueueSync(supabase, 'Procedure', inserted.id).catch(() => {})
     }
   }
 

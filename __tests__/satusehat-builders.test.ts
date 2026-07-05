@@ -243,6 +243,28 @@ describe('buildComposition', () => {
 })
 
 describe('buildProcedure', () => {
+  it('surgery path: performedPeriod + multi-performer array', () => {
+    const r: any = buildProcedure({
+      procedureCode: '100', procedureDisplay: 'Appendektomi',
+      performedAt: '2026-07-01T08:00:00+07:00',
+      performedEnd: '2026-07-01T10:00:00+07:00',
+      notes: 'Operasi berjalan lancar',
+      patientIhs: 'P0001', patientName: 'Budi',
+      ssEncounterId: 'enc-ss-1',
+      performers: [
+        { ihs: 'PR001', name: 'dr. Surgeon', snomedCode: '304292004', snomedDisplay: 'Responsible observer' },
+        { ihs: 'PR002', name: 'dr. Anest', snomedCode: '88189002', snomedDisplay: 'Anesthesiologist' },
+        { ihs: 'PR003', name: 'Nurse', snomedCode: null, snomedDisplay: null },
+      ],
+    })
+    expect(r.performedPeriod.start).toBe('2026-07-01T08:00:00+07:00')
+    expect(r.performedPeriod.end).toBe('2026-07-01T10:00:00+07:00')
+    expect(r.performedDateTime).toBeUndefined()
+    expect(r.performer).toHaveLength(3)
+    expect(r.performer[0].function.coding[0].code).toBe('304292004')
+    expect(r.performer[2].function).toBeUndefined()
+    expect(r.code.text).toBe('Appendektomi')
+  })
   it('maps ICD-9-CM code and performer', () => {
     const p: any = buildProcedure({
       procedureCode: '86.22', procedureDisplay: 'Excisional debridement', performedAt: '2026-07-01T11:00:00+07:00',
