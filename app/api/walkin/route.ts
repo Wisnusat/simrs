@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { getVClaimClient } from '@/lib/bpjs/vclaim'
 
 function generateBookingCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -44,6 +45,19 @@ export async function POST(req: NextRequest) {
         const dateStr = formatDate(now)
         const timeStr = formatTime(now)
         const bookingCode = generateBookingCode()
+
+        // BPJS eligibility check (synchronous, required before check-in)
+        if (paymentMethod === 'bpjs') {
+            const { data: patient } = await supabase
+                .from('patients').select('bpjs_no').eq('id', patientId).single()
+            if (!patient?.bpjs_no) {
+                return apiResponse.badRequest('Pasien belum memiliki nomor BPJS terdaftar')
+            }
+            const elig = await getVClaimClient().checkEligibility(patient.bpjs_no, dateStr)
+            if (!elig.eligible) {
+                return apiResponse.badRequest(`Verifikasi BPJS gagal: ${elig.reason ?? 'peserta tidak aktif'}`)
+            }
+        }
 
         // 1. Create Appointment
         const { data: appointmentData, error: appointmentError } = await supabase.rpc('create_appointment', {
