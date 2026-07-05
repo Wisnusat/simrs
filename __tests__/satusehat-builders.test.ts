@@ -10,6 +10,7 @@ import { buildMedication, buildMedicationRequest, buildMedicationDispense } from
 import { buildComposition } from '@/lib/satusehat/builders/composition'
 import { buildProcedure } from '@/lib/satusehat/builders/procedure'
 import { buildServiceRequest, buildDiagnosticReport } from '@/lib/satusehat/builders/lab'
+import { buildEpisodeOfCare } from '@/lib/satusehat/builders/episode-of-care'
 
 describe('satusehat config', () => {
   it('builds staging URLs', () => {
@@ -280,5 +281,29 @@ describe('lab builders', () => {
     expect(d.status).toBe('final')
     expect(d.basedOn[0].reference).toBe('ServiceRequest/ss-sr-1')
     expect(d.conclusion).toContain('Hemoglobin: 13.5 g/dL (ref: 13-17)')
+  })
+})
+
+describe('buildEpisodeOfCare', () => {
+  const base = {
+    localId: 'ep-1', orgId: '100012345', status: 'in_care',
+    patientIhs: 'P0001', patientName: 'Budi Santoso',
+    dpjpIhs: 'PR0001', dpjpName: 'dr. Ahmad',
+    startDate: '2026-07-01', endDate: null,
+  }
+  it('builds active episode for in_care status', () => {
+    const r: any = buildEpisodeOfCare(base)
+    expect(r.resourceType).toBe('EpisodeOfCare')
+    expect(r.status).toBe('active')
+    expect(r.patient.reference).toBe('Patient/P0001')
+    expect(r.careManager.reference).toBe('Practitioner/PR0001')
+    expect(r.period.start).toBe('2026-07-01')
+    expect(r.period.end).toBeUndefined()
+    expect(r.identifier[0].system).toContain('episode-of-care')
+  })
+  it('maps discharged → finished and includes end date', () => {
+    const r: any = buildEpisodeOfCare({ ...base, status: 'discharged', endDate: '2026-07-05' })
+    expect(r.status).toBe('finished')
+    expect(r.period.end).toBe('2026-07-05')
   })
 })

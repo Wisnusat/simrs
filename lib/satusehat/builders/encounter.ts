@@ -22,6 +22,7 @@ export interface EncounterInput {
   arrivedAt: string | null
   startedAt: string | null
   finishedAt: string | null
+  ssEpisodeOfCareId?: string
 }
 
 export function buildEncounter(input: EncounterInput): object {
@@ -54,6 +55,7 @@ export function buildEncounter(input: EncounterInput): object {
     ...(periodStart ? { period: { start: periodStart, ...(input.finishedAt ? { end: input.finishedAt } : {}) } } : {}),
     location: [{ location: { reference: `Location/${input.ssLocationId}`, display: input.locationName } }],
     ...(history.length ? { statusHistory: history } : {}),
+    ...(input.ssEpisodeOfCareId ? { episodeOfCare: [{ reference: `EpisodeOfCare/${input.ssEpisodeOfCareId}` }] } : {}),
     serviceProvider: orgRef(input.orgId),
   }
 }

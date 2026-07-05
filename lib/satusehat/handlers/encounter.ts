@@ -1,4 +1,5 @@
 import type { SyncHandler } from '../worker'
+import { DeferSync } from '../worker'
 import { ssConfig } from '../config'
 import { buildEncounter, type EncounterInput } from '../builders/encounter'
 import { ensurePatientIhs } from '../patient-service'
@@ -10,7 +11,7 @@ export const encounterHandler: SyncHandler = async (supabase, fhir, job) => {
     .from('encounters')
     .select(`
       id, encounter_class, status, arrived_at, started_at, finished_at,
-      location_id, ss_encounter_id,
+      location_id, ss_encounter_id, episode_of_care_id,
       patients:patient_id ( id, full_name ),
       doctor:doctor_id ( id, full_name ),
       nurse:nurse_id ( id, full_name )
@@ -23,6 +24,20 @@ export const encounterHandler: SyncHandler = async (supabase, fhir, job) => {
   const practitionerRow = (enc.doctor ?? enc.nurse) as any
   if (!practitionerRow) throw new Error(`encounter ${enc.id} has no doctor or nurse`)
   if (!enc.location_id) throw new Error(`encounter ${enc.id} has no location`)
+
+  // For inpatient encounters that belong to an episode, DeferSync until episode is synced
+  let ssEpisodeOfCareId: string | undefined
+  if (enc.episode_of_care_id) {
+    const { data: ep } = await supabase
+      .from('episodes_of_care')
+      .select('ss_episode_of_care_id')
+      .eq('id', enc.episode_of_care_id)
+      .single()
+    if (!ep?.ss_episode_of_care_id) {
+      throw new DeferSync(`EpisodeOfCare ${enc.episode_of_care_id} not yet synced`)
+    }
+    ssEpisodeOfCareId = ep.ss_episode_of_care_id
+  }
 
   const { orgId } = ssConfig()
   const patientIhs = await ensurePatientIhs(supabase, fhir, patient.id)
@@ -38,6 +53,7 @@ export const encounterHandler: SyncHandler = async (supabase, fhir, job) => {
     practitionerIhs, practitionerName: practitionerRow.full_name,
     ssLocationId: loc.id, locationName: loc.name,
     arrivedAt: enc.arrived_at, startedAt: enc.started_at, finishedAt: enc.finished_at,
+    ssEpisodeOfCareId,
   } as EncounterInput)
 
   // Update-in-place if already synced (finish flow), else create

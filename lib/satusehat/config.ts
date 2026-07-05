@@ -37,3 +37,4 @@ export const medicationIdentifierSystem = (orgId: string) => `http://sys-ids.kem
 export const compositionIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/composition/${orgId}`
 export const serviceRequestIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/servicerequest/${orgId}`
 export const diagnosticReportIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/diagnostic/${orgId}`
+export const episodeOfCareIdentifierSystem = (orgId: string) => `http://sys-ids.kemkes.go.id/episode-of-care/${orgId}`

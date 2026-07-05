@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -149,6 +150,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             }
 
             episodeId = episode.id
+            enqueueSync(supabase, 'EpisodeOfCare', episode.id).catch(() => {})
         }
 
         // Generate invoice for non-inpatient outcomes (discharged/referred)

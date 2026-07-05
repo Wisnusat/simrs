@@ -1,6 +1,7 @@
 import type { SyncHandler } from '../worker'
 import { patientHandler } from './patient'
 import { encounterHandler } from './encounter'
+import { episodeOfCareHandler } from './episode-of-care'
 import { observationHandler } from './observation'
 import { conditionHandler } from './condition'
 import { allergyHandler } from './allergy'
@@ -12,6 +13,7 @@ import { serviceRequestHandler, diagnosticReportHandler } from './lab'
 
 export const handlers: Record<string, SyncHandler> = {
   Patient: patientHandler,
+  EpisodeOfCare: episodeOfCareHandler,
   Encounter: encounterHandler,
   Observation: observationHandler,
   Condition: conditionHandler,
