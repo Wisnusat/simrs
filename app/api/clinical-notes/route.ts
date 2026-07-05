@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncClinicalNote } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/clinical-notes
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   if (error) return apiResponse.serverError(error.message)
 
-  syncClinicalNote(supabase, (data as any).id, { encounter_id, patient_id }).catch(() => { })
+  enqueueSync(supabase, 'ClinicalImpression', (data as any).id).catch(() => {})
 
   return apiResponse.created(data)
 }

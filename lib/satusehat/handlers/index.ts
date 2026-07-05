@@ -4,6 +4,7 @@ import { encounterHandler } from './encounter'
 import { observationHandler } from './observation'
 import { conditionHandler } from './condition'
 import { allergyHandler } from './allergy'
+import { clinicalNoteHandler } from './clinical-note'
 
 export const handlers: Record<string, SyncHandler> = {
   Patient: patientHandler,
@@ -11,4 +12,5 @@ export const handlers: Record<string, SyncHandler> = {
   Observation: observationHandler,
   Condition: conditionHandler,
   AllergyIntolerance: allergyHandler,
+  ClinicalImpression: clinicalNoteHandler,
 }

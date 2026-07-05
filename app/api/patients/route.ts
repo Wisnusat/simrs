@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/patients
@@ -145,6 +146,8 @@ export async function POST(request: NextRequest) {
             }
             return apiResponse.serverError('Failed to register patient')
         }
+
+        enqueueSync(supabase, 'Patient', (newPatient as any).id).catch(() => {})
 
         return apiResponse.created(newPatient)
     } catch {

@@ -5,6 +5,7 @@ import { buildEncounter } from '@/lib/satusehat/builders/encounter'
 import { buildVitalObservations } from '@/lib/satusehat/builders/observation'
 import { buildCondition } from '@/lib/satusehat/builders/condition'
 import { buildAllergy } from '@/lib/satusehat/builders/allergy'
+import { buildClinicalImpression } from '@/lib/satusehat/builders/clinical-note'
 
 describe('satusehat config', () => {
   it('builds staging URLs', () => {
@@ -147,5 +148,28 @@ describe('buildAllergy', () => {
     expect(a.clinicalStatus.coding[0].code).toBe('inactive')
     expect(a.reaction).toBeUndefined()
     expect(a.onsetDateTime).toBeUndefined()
+  })
+})
+
+describe('buildClinicalImpression', () => {
+  it('folds SOAP into summary', () => {
+    const c: any = buildClinicalImpression({
+      subjective: 'Nyeri kepala', objective: 'TD 120/80', assessment: 'Cephalgia', plan: 'Paracetamol',
+      noteDate: '2026-07-01T09:00:00+07:00',
+      patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(c.resourceType).toBe('ClinicalImpression')
+    expect(c.status).toBe('completed')
+    expect(c.summary).toBe('S: Nyeri kepala\nO: TD 120/80\nA: Cephalgia\nP: Paracetamol')
+    expect(c.assessor.reference).toBe('Practitioner/N1')
+    expect(c.date).toBe('2026-07-01T09:00:00+07:00')
+  })
+  it('skips empty SOAP sections', () => {
+    const c: any = buildClinicalImpression({
+      subjective: 'Nyeri', objective: null, assessment: null, plan: null,
+      noteDate: '2026-07-01T09:00:00+07:00',
+      patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(c.summary).toBe('S: Nyeri')
   })
 })
