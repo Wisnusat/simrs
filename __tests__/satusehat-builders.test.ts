@@ -7,6 +7,9 @@ import { buildCondition } from '@/lib/satusehat/builders/condition'
 import { buildAllergy } from '@/lib/satusehat/builders/allergy'
 import { buildClinicalImpression } from '@/lib/satusehat/builders/clinical-note'
 import { buildMedication, buildMedicationRequest, buildMedicationDispense } from '@/lib/satusehat/builders/medication'
+import { buildComposition } from '@/lib/satusehat/builders/composition'
+import { buildProcedure } from '@/lib/satusehat/builders/procedure'
+import { buildServiceRequest, buildDiagnosticReport } from '@/lib/satusehat/builders/lab'
 
 describe('satusehat config', () => {
   it('builds staging URLs', () => {
@@ -213,5 +216,69 @@ describe('pharmacy builders', () => {
     expect(d.authorizingPrescription[0].reference).toBe('MedicationRequest/ss-mr-1')
     expect(d.quantity.value).toBe(10)
     expect(d.whenHandedOver).toBe('2026-07-01T10:00:00+07:00')
+  })
+})
+
+describe('buildComposition', () => {
+  it('builds discharge summary with sections', () => {
+    const c: any = buildComposition({
+      localId: 'res-1', orgId: '100012345', resumeDate: '2026-07-02T10:00:00+07:00',
+      chiefComplaint: 'Demam 3 hari', historyOfIllness: 'Demam naik turun', physicalExamination: 'Suhu 38.5',
+      summary: 'DHF grade I, membaik', followUpPlan: 'Kontrol 3 hari',
+      patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(c.resourceType).toBe('Composition')
+    expect(c.status).toBe('final')
+    expect(c.type.coding[0].code).toBe('18842-5')
+    expect(c.title).toBe('Resume Medis')
+    expect(c.custodian.reference).toBe('Organization/100012345')
+    const titles = c.section.map((s: any) => s.title)
+    expect(titles).toContain('Keluhan Utama')
+    expect(titles).toContain('Ringkasan')
+    const keluhan = c.section.find((s: any) => s.title === 'Keluhan Utama')
+    expect(keluhan.text.div).toContain('Demam 3 hari')
+  })
+})
+
+describe('buildProcedure', () => {
+  it('maps ICD-9-CM code and performer', () => {
+    const p: any = buildProcedure({
+      procedureCode: '86.22', procedureDisplay: 'Excisional debridement', performedAt: '2026-07-01T11:00:00+07:00',
+      notes: 'Tanpa penyulit', patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(p.resourceType).toBe('Procedure')
+    expect(p.status).toBe('completed')
+    expect(p.code.coding[0]).toEqual({ system: 'http://hl7.org/fhir/sid/icd-9-cm', code: '86.22', display: 'Excisional debridement' })
+    expect(p.performedDateTime).toBe('2026-07-01T11:00:00+07:00')
+    expect(p.performer[0].actor.reference).toBe('Practitioner/N1')
+    expect(p.note[0].text).toBe('Tanpa penyulit')
+  })
+})
+
+describe('lab builders', () => {
+  it('buildServiceRequest lists LOINC-coded items', () => {
+    const s: any = buildServiceRequest({
+      localId: 'lab-1', orgId: '100012345', orderDate: '2026-07-01T09:30:00+07:00',
+      items: [{ loincCode: '718-7', testName: 'Hemoglobin' }],
+      clinicalNotes: 'Curiga anemia',
+      patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(s.resourceType).toBe('ServiceRequest')
+    expect(s.status).toBe('active')
+    expect(s.intent).toBe('original-order')
+    expect(s.code.coding[0]).toEqual({ system: 'http://loinc.org', code: '718-7', display: 'Hemoglobin' })
+    expect(s.note[0].text).toBe('Curiga anemia')
+  })
+  it('buildDiagnosticReport aggregates result lines into conclusion', () => {
+    const d: any = buildDiagnosticReport({
+      localId: 'lab-1', orgId: '100012345', effective: '2026-07-01T12:00:00+07:00',
+      ssServiceRequestId: 'ss-sr-1',
+      results: [{ testName: 'Hemoglobin', value: '13.5', unit: 'g/dL', referenceRange: '13-17' }],
+      patientIhs: 'P0001', patientName: 'Budi', ssEncounterId: 'enc-ss-1',
+    })
+    expect(d.resourceType).toBe('DiagnosticReport')
+    expect(d.status).toBe('final')
+    expect(d.basedOn[0].reference).toBe('ServiceRequest/ss-sr-1')
+    expect(d.conclusion).toContain('Hemoglobin: 13.5 g/dL (ref: 13-17)')
   })
 })

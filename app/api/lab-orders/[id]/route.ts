@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/lab-orders/[id]
@@ -104,6 +105,8 @@ export async function PATCH(
 
     // Auto-advance to result_uploaded
     await supabase.from('lab_orders').update({ status: 'result_uploaded' }).eq('id', id)
+
+    enqueueSync(supabase, 'DiagnosticReport', id).catch(() => {})
 
     return apiResponse.ok({ updated: updates.length })
   }

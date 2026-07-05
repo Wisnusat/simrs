@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/procedures
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
       } catch { /* non-critical, ignore */ }
     })()
   }
+
+  enqueueSync(supabase, 'Procedure', (data as any).id).catch(() => {})
 
   return apiResponse.created(data)
 }

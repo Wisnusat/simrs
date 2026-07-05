@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * Helper: resolve current practitioner (staff) from authenticated user.
@@ -189,6 +190,8 @@ export async function POST(request: NextRequest) {
             console.error('Emergency encounter create error:', emergencyError)
             return apiResponse.serverError('Failed to create emergency encounter')
         }
+
+        enqueueSync(supabase, 'Encounter', encounter.id).catch(() => {})
 
         return apiResponse.created(emergency)
     } catch {
