@@ -25,8 +25,9 @@ export async function ensurePractitionerIhs(
   const ihs = res.body?.entry?.[0]?.resource?.id
   if (!ihs) throw new Error(`SATUSEHAT has no Practitioner for NIK of ${prac.full_name}`)
 
-  await supabase.from('practitioners')
+  const { error: updateErr } = await supabase.from('practitioners')
     .update({ ss_practitioner_id: ihs, ss_ihs_number: ihs })
     .eq('id', practitionerId)
+  if (updateErr) throw new Error(`Failed to persist IHS for practitioner ${practitionerId}: ${updateErr.message}`)
   return ihs
 }

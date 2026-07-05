@@ -68,8 +68,9 @@ export async function ensurePatientIhs(
     ihs = res.body?.data?.patient_id ?? res.body?.id
     if (!ihs) throw new Error(`Patient create returned no id: ${JSON.stringify(res.body)}`)
   }
-  await supabase.from('patients')
+  const { error: updateErr } = await supabase.from('patients')
     .update({ ss_patient_id: ihs, ss_ihs_number: ihs })
     .eq('id', patientId)
+  if (updateErr) throw new Error(`Failed to persist IHS for patient ${patientId}: ${updateErr.message}`)
   return ihs
 }
