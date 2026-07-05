@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncVitalSigns } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/vital-signs
@@ -77,9 +77,7 @@ export async function POST(req: NextRequest) {
       .eq('id', queue_id)
   }
 
-  syncVitalSigns(supabase, (vs as any).id, {
-    encounter_id, systolic_bp, diastolic_bp, heart_rate, temperature, weight_kg, height_cm,
-  }).catch(() => { })
+  enqueueSync(supabase, 'Observation', (vs as any).id).catch(() => {})
 
   return apiResponse.created(vs)
 }

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { SS_AUTH_URL, SS_FHIR_URL, FHIR, encounterIdentifierSystem } from '@/lib/satusehat/config'
 import { buildPatientPayload } from '@/lib/satusehat/patient-service'
 import { buildEncounter } from '@/lib/satusehat/builders/encounter'
+import { buildVitalObservations } from '@/lib/satusehat/builders/observation'
+import { buildCondition } from '@/lib/satusehat/builders/condition'
+import { buildAllergy } from '@/lib/satusehat/builders/allergy'
 
 describe('satusehat config', () => {
   it('builds staging URLs', () => {
@@ -73,5 +76,76 @@ describe('buildEncounter', () => {
   it('maps inpatient → IMP and emergency → EMER', () => {
     expect((buildEncounter({ ...input, encClass: 'inpatient' }) as any).class.code).toBe('IMP')
     expect((buildEncounter({ ...input, encClass: 'emergency' }) as any).class.code).toBe('EMER')
+  })
+})
+
+describe('buildVitalObservations', () => {
+  const ctx = { patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1' }
+  it('emits one Observation per non-null vital with LOINC + UCUM', () => {
+    const obs = buildVitalObservations({
+      id: 'vs-1', recorded_at: '2026-07-01T08:15:00+07:00',
+      systolic_bp: 120, diastolic_bp: 80, heart_rate: 72, respiratory_rate: null,
+      temperature: 36.8, oxygen_saturation: null, weight_kg: null, height_cm: null,
+      gcs_score: null, pain_scale: null,
+    }, ctx)
+    expect(obs.map(o => o.loinc).sort()).toEqual(['8310-5', '8462-4', '8480-6', '8867-4'])
+    const sys: any = obs.find(o => o.loinc === '8480-6')!.payload
+    expect(sys.code.coding[0]).toEqual({ system: 'http://loinc.org', code: '8480-6', display: 'Systolic blood pressure' })
+    expect(sys.valueQuantity).toEqual({ value: 120, unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' })
+    expect(sys.encounter.reference).toBe('Encounter/enc-ss-1')
+    expect(sys.category[0].coding[0].code).toBe('vital-signs')
+    expect(sys.effectiveDateTime).toBe('2026-07-01T08:15:00+07:00')
+  })
+  it('returns empty array when all vitals null', () => {
+    expect(buildVitalObservations({
+      id: 'vs-2', recorded_at: '2026-07-01T08:15:00+07:00',
+      systolic_bp: null, diastolic_bp: null, heart_rate: null, respiratory_rate: null,
+      temperature: null, oxygen_saturation: null, weight_kg: null, height_cm: null,
+      gcs_score: null, pain_scale: null,
+    }, ctx)).toEqual([])
+  })
+})
+
+describe('buildCondition', () => {
+  it('maps ICD-10 with encounter-diagnosis category', () => {
+    const c: any = buildCondition({
+      icd10Code: 'A09', icd10Display: 'Diare dan gastroenteritis', clinicalStatus: 'active',
+      onsetDate: '2026-07-01', patientIhs: 'P0001', patientName: 'Budi', ssEncounterId: 'enc-ss-1',
+    })
+    expect(c.resourceType).toBe('Condition')
+    expect(c.code.coding[0]).toEqual({ system: 'http://hl7.org/fhir/sid/icd-10', code: 'A09', display: 'Diare dan gastroenteritis' })
+    expect(c.category[0].coding[0].code).toBe('encounter-diagnosis')
+    expect(c.clinicalStatus.coding[0].code).toBe('active')
+    expect(c.subject.reference).toBe('Patient/P0001')
+    expect(c.encounter.reference).toBe('Encounter/enc-ss-1')
+    expect(c.onsetDateTime).toBe('2026-07-01')
+  })
+})
+
+describe('buildAllergy', () => {
+  it('maps category, criticality, free-text substance and reaction', () => {
+    const a: any = buildAllergy({
+      substanceDisplay: 'Amoxicillin', category: 'medication', criticality: 'high',
+      reactionDescription: 'Ruam kulit', onsetDate: '2020-01-01', isActive: true,
+      patientIhs: 'P0001', patientName: 'Budi', ssEncounterId: 'enc-ss-1',
+    })
+    expect(a.resourceType).toBe('AllergyIntolerance')
+    expect(a.clinicalStatus.coding[0].code).toBe('active')
+    expect(a.verificationStatus.coding[0].code).toBe('confirmed')
+    expect(a.category).toEqual(['medication'])
+    expect(a.criticality).toBe('high')
+    expect(a.code.text).toBe('Amoxicillin')
+    expect(a.reaction[0].manifestation[0].text).toBe('Ruam kulit')
+    expect(a.patient.reference).toBe('Patient/P0001')
+  })
+  it('omits reaction when empty and maps inactive', () => {
+    const a: any = buildAllergy({
+      substanceDisplay: 'Udang', category: 'food', criticality: 'low',
+      reactionDescription: null, onsetDate: null, isActive: false,
+      patientIhs: 'P0001', patientName: 'Budi', ssEncounterId: 'enc-ss-1',
+    })
+    expect(a.clinicalStatus.coding[0].code).toBe('inactive')
+    expect(a.reaction).toBeUndefined()
+    expect(a.onsetDateTime).toBeUndefined()
   })
 })
