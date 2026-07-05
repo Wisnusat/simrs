@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs'
 import { SupabaseClient } from '@supabase/supabase-js'
 import type { FhirClient } from './client'
 import { handlers } from './handlers'
@@ -60,6 +61,13 @@ export async function drainQueue(supabase: SupabaseClient, fhir: FhirClient, lim
         last_error: String(e?.message ?? e).slice(0, 2000),
         updated_at: new Date().toISOString(),
       }).eq('id', job.id)
+      Sentry.withScope((scope) => {
+        scope.setTag('satusehat.resource_type', job.resource_type)
+        scope.setTag('satusehat.action', job.action)
+        scope.setTag('satusehat.dead', String(dead))
+        scope.setContext('job', { id: job.id, local_id: job.local_id, attempts })
+        Sentry.captureException(e)
+      })
       stats.failed++
     }
   }
