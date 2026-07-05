@@ -4,7 +4,6 @@ import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
 import { buildInvoiceFromEncounter } from '@/lib/api/invoice-builder'
-import { syncInvoice } from '@/lib/api/satu-sehat'
 
 /**
  * GET /api/invoices
@@ -69,6 +68,7 @@ export async function GET(req: NextRequest) {
         tax_amount: built.tax_amount,
         total_amount: built.total_amount,
         status: 'unpaid',
+        ss_sync_status: 'not_required',
       })
       .select()
       .single()

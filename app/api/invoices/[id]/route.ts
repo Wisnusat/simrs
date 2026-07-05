@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncInvoice } from '@/lib/api/satu-sehat'
 
 /**
  * GET /api/invoices/[id]
@@ -118,7 +117,6 @@ export async function PATCH(
       .single()
 
     if (error) return apiResponse.serverError(error.message)
-    syncInvoice(supabase, id, { payment_method }).catch(() => {})
 
     // Cascade: mark the encounter as finished
     if ((data as any).encounter_id) {
