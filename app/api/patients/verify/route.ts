@@ -22,7 +22,7 @@ import { lookupPatientByNik, ensurePatientIhs } from '@/lib/satusehat/patient-se
  *  3. Neither side knows the NIK → return not_found (frontend opens full registration form)
  */
 export async function POST(req: NextRequest) {
-  const rl = await rateLimit(req, 'patients-verify:post', RATE_LIMITS.read)
+  const rl = await rateLimit(req, 'patients-verify:post', RATE_LIMITS.write)
   if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
 
   const supabase = await createClient()
@@ -79,13 +79,26 @@ export async function POST(req: NextRequest) {
   const medical_record_no = mrData as string
 
   const r = found.resource
+
+  // Guard: birthDate is NOT NULL in DB — skip insert if SATUSEHAT returned no date
+  if (!r.birthDate) {
+    console.error('SATUSEHAT patient missing birthDate for NIK verification')
+    return apiResponse.ok({ status: 'not_found' })
+  }
+
+  const genderAllowed = ['male', 'female', 'other', 'unknown'] as const
+  type AllowedGender = (typeof genderAllowed)[number]
+  const gender: AllowedGender = (genderAllowed as readonly string[]).includes(r.gender)
+    ? (r.gender as AllowedGender)
+    : 'male'
+
   const { data: created, error: insertError } = await admin
     .from('patients')
     .insert({
       nik,
       full_name: r.name?.[0]?.text ?? r.name?.[0]?.given?.join(' ') ?? 'Tanpa Nama',
-      gender: r.gender === 'female' ? 'female' : 'male',
-      date_of_birth: r.birthDate ?? null,
+      gender,
+      date_of_birth: r.birthDate,
       address: r.address?.[0]?.line?.join(', ') ?? null,
       city: r.address?.[0]?.city ?? null,
       phone: r.telecom?.find((t: { system: string; value?: string }) => t.system === 'phone')?.value ?? null,
@@ -98,8 +111,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (insertError) {
+    // Race condition: another request already inserted this patient
+    if (insertError.code === '23505') {
+      const { data: refetched } = await admin
+        .from('patients')
+        .select('*')
+        .eq('nik', nik)
+        .single()
+      return apiResponse.ok({ status: 'found_local', patient: refetched })
+    }
     console.error('Patient auto-create error:', insertError)
-    return apiResponse.serverError(`Gagal membuat pasien: ${insertError.message}`)
+    return apiResponse.serverError('Gagal membuat pasien')
   }
 
   return apiResponse.ok({ status: 'found_ihs', patient: created })
