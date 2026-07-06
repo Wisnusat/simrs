@@ -15,15 +15,9 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
 
+  // Use COUNT(*) GROUP BY in DB — never fetches row payload, O(1) cost regardless of table size
   const [countsRes, recentRes] = await Promise.all([
-    admin.from('ss_sync_queue')
-      .select('status')
-      .then(({ data, error }) => {
-        if (error) throw error
-        const counts: Record<string, number> = { pending: 0, processing: 0, success: 0, failed: 0, dead: 0 }
-        for (const row of data ?? []) counts[row.status] = (counts[row.status] ?? 0) + 1
-        return counts
-      }),
+    admin.rpc('ss_queue_counts') as Promise<{ data: Array<{ status: string; count: number }> | null; error: unknown }>,
     admin.from('ss_sync_queue')
       .select('id, resource_type, local_id, action, attempts, max_attempts, last_error, status, updated_at')
       .in('status', ['failed', 'dead'])
@@ -31,8 +25,11 @@ export async function GET(req: NextRequest) {
       .limit(10),
   ])
 
+  const counts: Record<string, number> = { pending: 0, processing: 0, success: 0, failed: 0, dead: 0 }
+  for (const row of countsRes.data ?? []) counts[row.status] = Number(row.count)
+
   return apiResponse.ok({
-    counts: countsRes,
+    counts,
     recentFailures: recentRes.data ?? [],
   })
 }
