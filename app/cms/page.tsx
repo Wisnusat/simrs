@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Calendar, DollarSign, Activity, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Users, Calendar, DollarSign, Activity, TrendingUp, AlertTriangle, MonitorDot } from 'lucide-react'
 
 interface DashboardStats {
     totalStaff: number
@@ -177,6 +177,13 @@ export default function CmsDashboardPage() {
                     description="Atur konten halaman utama website klinik"
                     href="/cms/landing-page"
                     color="text-violet-500"
+                />
+                <QuickActionCard
+                    icon={MonitorDot}
+                    title="System Monitor"
+                    description="Status layanan, antrian SATUSEHAT, dan log error Sentry"
+                    href="/cms/monitoring"
+                    color="text-cyan-500"
                 />
             </div>
         </div>
