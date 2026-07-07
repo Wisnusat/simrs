@@ -82,21 +82,21 @@ function Topology({
     : null
 
   return (
-    <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: '#0b0b18' }}>
+    <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: '#f5f5f5' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div className="flex items-center gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-          <span className="text-white font-semibold text-sm tracking-wide">Live Service Topology</span>
+          <div className={`w-2 h-2 rounded-full ${health ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+          <span className="text-black font-semibold text-sm tracking-wide">Live Service Topology</span>
         </div>
         <div className="flex items-center gap-2">
           {health && (
             <>
-              <span className="text-[11px] text-white/50 border border-white/15 rounded-full px-2.5 py-0.5">
+              <span className="text-[11px] text-black border border-gray-300 rounded-full px-2.5 py-0.5">
                 {online}/3 online
               </span>
               {avgMs !== null && (
-                <span className="text-[11px] text-white/50 border border-white/15 rounded-full px-2.5 py-0.5">
+                <span className="text-[11px] text-black border border-gray-300 rounded-full px-2.5 py-0.5">
                   {avgMs}ms avg
                 </span>
               )}
@@ -105,7 +105,7 @@ function Topology({
           <button
             onClick={onRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 text-[11px] text-white/60 border border-white/15 rounded-full px-3 py-1 hover:bg-white/8 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 text-[11px] text-black border border-gray-200 rounded-full px-3 py-1 hover:bg-gray-200 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
             {lastRefreshed ? lastRefreshed.toLocaleTimeString('id-ID') : 'Refresh'}
@@ -201,8 +201,8 @@ function Topology({
           </g>
         ))}
         {/* Label */}
-        <text x={C.x} y={C.y + 62} textAnchor="middle" fill="white" fontSize="13" fontWeight="600">App Server</text>
-        <text x={C.x} y={C.y + 77} textAnchor="middle" fill="rgba(255,255,255,0.35)" fontSize="10">Vercel · Next.js 15</text>
+        <text x={C.x} y={C.y + 62} textAnchor="middle" fill="black" fontSize="13" fontWeight="600">App Server</text>
+        <text x={C.x} y={C.y + 77} textAnchor="middle" fill="black" fontSize="10">Vercel · Next.js 15</text>
 
         {/* ── SUPABASE NODE ── */}
         <circle cx={DB.x} cy={DB.y} r="34"
@@ -214,7 +214,7 @@ function Topology({
         <ellipse cx={DB.x} cy={DB.y + 6} rx="11" ry="3.5" fill={dbColor} opacity="0.85" />
         <line x1={DB.x - 11} y1={DB.y - 2} x2={DB.x + 11} y2={DB.y - 2} stroke={dbColor} strokeWidth="0.5" opacity="0.5" />
         {/* Labels */}
-        <text x={DB.x} y={DB.y + 50} textAnchor="middle" fill="white" fontSize="11" fontWeight="600">Supabase DB</text>
+        <text x={DB.x} y={DB.y + 50} textAnchor="middle" fill="black" fontSize="11" fontWeight="600">Supabase DB</text>
         <text x={DB.x} y={DB.y + 64} textAnchor="middle" fill={dbColor} fontSize="12" fontWeight="700">
           {health?.supabase ? `${health.supabase.latencyMs}ms` : '···'}
         </text>
@@ -228,7 +228,7 @@ function Topology({
           points={`${RD.x - 5},${RD.y - 12} ${RD.x + 4},${RD.y - 1} ${RD.x - 1},${RD.y - 1} ${RD.x + 5},${RD.y + 12} ${RD.x - 4},${RD.y + 1} ${RD.x + 1},${RD.y + 1}`}
           fill={rdColor} opacity="0.85"
         />
-        <text x={RD.x} y={RD.y + 44} textAnchor="middle" fill="white" fontSize="11" fontWeight="600">Upstash Redis</text>
+        <text x={RD.x} y={RD.y + 44} textAnchor="middle" fill="black" fontSize="11" fontWeight="600">Upstash Redis</text>
         <text x={RD.x} y={RD.y + 57} textAnchor="middle" fill={rdColor} fontSize="12" fontWeight="700">
           {health?.redis ? `${health.redis.latencyMs}ms` : '···'}
         </text>
@@ -247,7 +247,7 @@ function Topology({
         <ellipse cx={SS.x} cy={SS.y} rx="7" ry="13" fill="none" stroke={ssColor} strokeWidth="1" opacity="0.5" />
         <line x1={SS.x - 13} y1={SS.y} x2={SS.x + 13} y2={SS.y} stroke={ssColor} strokeWidth="1" opacity="0.5" />
         {/* Labels */}
-        <text x={SS.x} y={SS.y + 51} textAnchor="middle" fill="white" fontSize="11" fontWeight="600">SATUSEHAT API</text>
+        <text x={SS.x} y={SS.y + 51} textAnchor="middle" fill="black" fontSize="11" fontWeight="600">SATUSEHAT API</text>
         <text x={SS.x} y={SS.y + 65} textAnchor="middle" fill={ssColor} fontSize="12" fontWeight="700">
           {health?.satusehat ? `${health.satusehat.latencyMs}ms` : '···'}
         </text>
@@ -260,11 +260,11 @@ function Topology({
         {/* ── Legend ── */}
         <g transform="translate(290,368)">
           <circle cx="6" cy="5" r="4.5" fill="#10b981" />
-          <text x="15" y="9" fill="rgba(255,255,255,0.38)" fontSize="9.5">≤150ms</text>
+          <text x="15" y="9" fill="rgba(0,0,0)" fontSize="9.5">≤150ms</text>
           <circle cx="76" cy="5" r="4.5" fill="#f59e0b" />
-          <text x="85" y="9" fill="rgba(255,255,255,0.38)" fontSize="9.5">151-800ms</text>
+          <text x="85" y="9" fill="rgba(0,0,0)" fontSize="9.5">151-800ms</text>
           <circle cx="162" cy="5" r="4.5" fill="#f43f5e" />
-          <text x="171" y="9" fill="rgba(255,255,255,0.38)" fontSize="9.5">{'>'}800ms</text>
+          <text x="171" y="9" fill="rgba(0,0,0)" fontSize="9.5">{'>'}800ms</text>
         </g>
       </svg>
     </div>
