@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
-import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { getVClaimClient } from '@/lib/bpjs/vclaim'
 import * as Sentry from '@sentry/nextjs'
 
@@ -32,7 +32,7 @@ function formatDate(date: Date) {
 export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient()
-        const auth = await requireAuth(supabase)
+        const auth = await requirePractitioner(supabase)
         if (isGuardError(auth)) return auth
 
         const body = await req.json()
@@ -96,9 +96,11 @@ export async function POST(req: NextRequest) {
         })
 
         if (checkinError) {
+            // Rollback: delete the appointment to avoid orphaned walk-in appointments
+            await supabase.from('appointments').delete().eq('id', appointmentId)
             console.error('Walk-in checkin_appointment RPC error:', checkinError)
             Sentry.captureException(checkinError)
-            return apiResponse.serverError('Appointment created but check-in failed')
+            return apiResponse.serverError('Gagal check-in otomatis, silakan coba lagi')
         }
 
         return apiResponse.created({

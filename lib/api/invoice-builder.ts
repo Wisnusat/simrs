@@ -263,30 +263,8 @@ export async function syncInvoiceForEpisode(
 
   const allItems: InvoiceLineItem[] = []
 
-  // 1. Room charges
-  if (admission) {
-    const startDate = new Date(admission.admission_date)
-    const endDate = admission.discharge_date ? new Date(admission.discharge_date) : new Date()
-    const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
-
-    const { data: rateRow } = await supabase
-      .from('room_rates')
-      .select('daily_rate')
-      .eq('organization_id', (episode as any).organization_id ?? '')
-      .eq('room_class', admission.room_class)
-      .maybeSingle()
-    const dailyRate: number = (rateRow as any)?.daily_rate ?? ROOM_RATES_FALLBACK[admission.room_class] ?? ROOM_RATES_FALLBACK.kelas_3
-
-    allItems.push({
-      item_type: 'room' as any,
-      item_name: `Biaya Kamar (${admission.room_class.replace('_', ' ').toUpperCase()}) × ${days} hari`,
-      quantity: days,
-      unit_price: dailyRate,
-      reference_id: admission.id,
-    })
-  }
-
-  // 2. Running bill manual charges
+  // 1. Running bill charges (room per-day, procedures, medications — all auto-inserted
+  //    by their respective routes). This is the single source of truth for these types.
   const { data: runningBills } = await supabase
     .from('running_bills')
     .select('item_type, item_name, item_code, quantity, unit_price, reference_id')
@@ -303,26 +281,68 @@ export async function syncInvoiceForEpisode(
     })
   }
 
-  // 3. Aggregate charges from all encounters
+  // 2. Consultation and lab charges per encounter (not tracked in running_bills)
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('medical_fee')
+    .eq('id', (episode as any).organization_id)
+    .single()
+  const consultationFee: number = (org as any)?.medical_fee ?? 50_000
+
   for (const encId of encounterIds) {
-    const built = await buildInvoiceFromEncounter(
-      supabase,
-      encId,
-      (episode as any).organization_id,
-    )
-    allItems.push(...built.items)
+    allItems.push({
+      item_type: 'consultation',
+      item_name: 'Biaya Konsultasi Dokter',
+      quantity: 1,
+      unit_price: consultationFee,
+    })
+
+    const { data: labOrders } = await supabase
+      .from('lab_orders')
+      .select('id, lab_order_items(id, test_name, loinc_code)')
+      .eq('encounter_id', encId)
+
+    for (const lo of (labOrders ?? [])) {
+      for (const item of ((lo as any).lab_order_items ?? [])) {
+        allItems.push({
+          item_type: 'lab',
+          item_name: item.test_name,
+          item_code: item.loinc_code,
+          quantity: 1,
+          unit_price: 75_000,
+          reference_id: lo.id,
+        })
+      }
+    }
   }
 
   const subtotal = allItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
   const total_amount = subtotal
 
-  // Upsert episode-level invoice — onConflict on episode_of_care_id prevents duplicates
+  // Upsert episode-level invoice — use select-then-insert/update to avoid overwriting
+  // payment status when the invoice already exists and has been paid.
   const firstEncounterId = encounterIds[0] ?? null
   const invoiceNumber = `INV-IP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-  const { data: invoice } = await supabase
+
+  const { data: existingInv } = await supabase
     .from('invoices')
-    .upsert(
-      {
+    .select('id')
+    .eq('episode_of_care_id', episodeOfCareId)
+    .maybeSingle()
+
+  let invoice: { id: string } | null = null
+
+  if (existingInv) {
+    // Update amounts only — never touch status to avoid resetting a paid invoice
+    await supabase
+      .from('invoices')
+      .update({ subtotal, discount_amount: 0, tax_amount: 0, total_amount })
+      .eq('id', (existingInv as any).id)
+    invoice = existingInv as any
+  } else {
+    const { data: inserted } = await supabase
+      .from('invoices')
+      .insert({
         encounter_id: firstEncounterId,
         episode_of_care_id: episodeOfCareId,
         patient_id: (episode as any).patient_id,
@@ -334,14 +354,11 @@ export async function syncInvoiceForEpisode(
         tax_amount: 0,
         total_amount,
         status: 'unpaid',
-      },
-      {
-        onConflict: 'episode_of_care_id',
-        ignoreDuplicates: false,
-      }
-    )
-    .select('id')
-    .single()
+      })
+      .select('id')
+      .single()
+    invoice = inserted as any
+  }
 
   // Rewrite line items
   if (invoice) {

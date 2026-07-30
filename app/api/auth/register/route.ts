@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { requireAdmin, isGuardError } from '@/lib/api/guards'
 
 const ORGANIZATION_ID = '28b360d2-93a2-4c97-a032-83af396be6ba'
 
@@ -15,6 +17,10 @@ const VALID_ROLES = ['doctor', 'nurse', 'pharmacist', 'cashier', 'lab_nurse', 'n
 export async function POST(request: NextRequest) {
     const rl = await rateLimit(request, 'auth:register', RATE_LIMITS.auth)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
+
+    const supabase = await createClient()
+    const auth = await requireAdmin(supabase)
+    if (isGuardError(auth)) return auth
 
     try {
         const body = await request.json()

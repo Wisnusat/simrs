@@ -118,9 +118,12 @@ export async function rateLimit(
   key: string,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
+  // x-real-ip is set by Vercel/Cloudflare infrastructure and cannot be spoofed by clients.
+  // Avoid x-forwarded-for[0] (leftmost) — clients can prepend arbitrary IPs to that header.
+  const xfwdFor = request.headers.get('x-forwarded-for')
   const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
     request.headers.get('x-real-ip') ??
+    (xfwdFor ? xfwdFor.split(',').at(-1)?.trim() : undefined) ??
     'unknown'
 
   if (

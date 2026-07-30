@@ -171,7 +171,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     }
   }
 
-  // Discharge flow
+  // Discharge approval flow — dokter menyetujui kepulangan, kasir yang menyelesaikan pembayaran
   const handleDischarge = async () => {
     if (!dischargeSummary.trim()) {
       setError("Ringkasan pulang wajib diisi")
@@ -181,12 +181,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     setError("")
     try {
       await patchInpatientAdmission(admission.id, {
-        status: "discharged",
+        status: "discharge_approved",
         discharge_summary: dischargeSummary,
-      })
-      await patchEpisodeOfCare(admission.episode_of_care_id, {
-        status: "discharged",
-        end_date: new Date().toISOString().split("T")[0],
       })
       onDischarge()
     } catch (err: any) {
@@ -451,7 +447,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 disabled={loading || !dischargeSummary.trim()}
                 className="w-full bg-orange-600 hover:bg-orange-700"
               >
-                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Pulangkan Pasien"}
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Setujui Kepulangan"}
               </Button>
             </div>
           </TabsContent>

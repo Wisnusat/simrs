@@ -62,6 +62,11 @@ export async function PATCH(
 
   // ── Status update ───────────────────────────────────────────────────────
   if (body.status) {
+    const VALID_STATUSES = ['sample_taken', 'processing', 'result_uploaded', 'verified', 'cancelled']
+    if (!VALID_STATUSES.includes(body.status)) {
+      return apiResponse.badRequest(`Status tidak valid: ${body.status}`)
+    }
+
     const { data, error } = await supabase
       .from('lab_orders')
       .update({
@@ -95,6 +100,7 @@ export async function PATCH(
             notes: item.notes ?? null,
           })
           .eq('id', item.item_id)
+          .eq('lab_order_id', id)
           .select()
           .single()
       )

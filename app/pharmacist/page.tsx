@@ -39,6 +39,7 @@ export default function PharmacistDashboard() {
   const [selected, setSelected] = useState<Prescription | null>(null)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [invLoading, setInvLoading] = useState(false)
+  const [dispenseErrors, setDispenseErrors] = useState<string[]>([])
 
   const { data: prescriptions, loading, refresh, stats, dispense, actionLoading: dispensing, error: rxError } =
     usePrescriptions({ today: true })
@@ -57,8 +58,16 @@ export default function PharmacistDashboard() {
 
   const handleDispense = async (id: string) => {
     if (!isPaid) return false
+    setDispenseErrors([])
     const result = await dispense(id)
-    if (result) setSelected(null)
+    if (result) {
+      if (result.errors.length > 0) {
+        // Partial failure — keep modal open so pharmacist sees which items failed
+        setDispenseErrors(result.errors)
+      } else {
+        setSelected(null)
+      }
+    }
     return result
   }
 
@@ -211,7 +220,7 @@ export default function PharmacistDashboard() {
       )}
 
       {/* ── Prescription Detail Dialog ── */}
-      <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null) }}>
+      <Dialog open={!!selected} onOpenChange={open => { if (!open) { setSelected(null); setDispenseErrors([]) } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Detail Resep</DialogTitle>
           {selected && (
@@ -237,10 +246,21 @@ export default function PharmacistDashboard() {
                   </AlertDescription>
                 </Alert>
               )}
+              {dispenseErrors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription>
+                    <strong>Sebagian obat gagal diserahkan — stok tidak mencukupi:</strong>
+                    <ul className="mt-1 list-disc list-inside text-sm">
+                      {dispenseErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
               <PrescriptionDetail
                 prescription={selected}
                 onDispense={handleDispense}
-                onClose={() => setSelected(null)}
+                onClose={() => { setSelected(null); setDispenseErrors([]) }}
                 loading={dispensing}
                 error={rxError}
                 disableDispense={!isPaid}

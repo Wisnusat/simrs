@@ -51,10 +51,6 @@ export async function POST(req: NextRequest) {
 
   if (rxError) return apiResponse.serverError(rxError.message)
 
-  const { data, error } = await supabase.rpc('get_current_practitioner_role')
-
-  console.log('RPC role result:', data)
-  console.log('RPC error:', error)
   // Insert items
   const { data: rxItems, error: itemsError } = await supabase
     .from('prescription_items')
@@ -72,7 +68,11 @@ export async function POST(req: NextRequest) {
     )
     .select()
 
-  if (itemsError) return apiResponse.serverError(itemsError.message)
+  if (itemsError) {
+    // Rollback: delete orphaned prescription header
+    await supabase.from('prescriptions').delete().eq('id', (prescription as any).id)
+    return apiResponse.serverError(itemsError.message)
+  }
 
   // Stock check — warn only, never block
   const { data: stocks } = await supabase

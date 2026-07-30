@@ -102,16 +102,19 @@ export async function PATCH(
 
   // ── Dispense — FEFO stock deduction ────────────────────────────────────
   if (body.dispense) {
-    const { error: statusErr } = await supabase
+    // Idempotency guard: block double-dispense
+    const { data: current } = await supabase
       .from('prescriptions')
-      .update({ status: 'completed' })
+      .select('status')
       .eq('id', id)
+      .single()
 
-    if (statusErr) return apiResponse.serverError(`Gagal mengubah status resep: ${statusErr.message}`)
+    if (current?.status === 'completed')
+      return apiResponse.conflict('Resep sudah diserahkan')
 
     const { data: rx, error: rxErr } = await supabase
       .from('prescriptions')
-      .select('*, prescription_items ( id, medication_id, quantity, medications(name) )')
+      .select('*, prescription_items ( id, medication_id, quantity, is_dispensed, medications(name) )')
       .eq('id', id)
       .single()
 
@@ -128,7 +131,10 @@ export async function PATCH(
     const errors: string[] = []
     let dispensedCount = 0
 
-    for (const item of (rx as any).prescription_items ?? []) {
+    // Only process items not yet dispensed
+    const pendingItems = ((rx as any).prescription_items ?? []).filter((i: any) => !i.is_dispensed)
+
+    for (const item of pendingItems) {
       const { data: batches } = await supabase
         .from('medication_stock')
         .select('id, quantity, unit_price')
@@ -148,10 +154,21 @@ export async function PATCH(
         if (remaining <= 0) break
         const deduct = Math.min(remaining, (batch as any).quantity)
 
-        await supabase
+        // Atomic stock deduction: only updates if batch still has enough quantity.
+        // Guards against race condition where two concurrent dispense requests both
+        // read the same batch quantity and try to deduct from it simultaneously.
+        const { data: deducted } = await supabase
           .from('medication_stock')
           .update({ quantity: (batch as any).quantity - deduct })
           .eq('id', (batch as any).id)
+          .gte('quantity', deduct)
+          .select('id, unit_price')
+          .maybeSingle()
+
+        if (!deducted) {
+          // Batch was consumed by a concurrent request — skip to next batch
+          continue
+        }
 
         const { data: dispense } = await supabase
           .from('medication_dispenses')
@@ -180,7 +197,7 @@ export async function PATCH(
               item_type: 'medication',
               item_name: (item as any).medications?.name ?? `Obat ID ${item.medication_id}`,
               quantity: deduct,
-              unit_price: (batch as any).unit_price,
+              unit_price: (deducted as any).unit_price,
               reference_id: (dispense as any).id,
               charge_date: new Date().toISOString().split('T')[0],
             }).then(() => {}).catch(() => {})
@@ -193,6 +210,14 @@ export async function PATCH(
         .from('prescription_items')
         .update({ is_dispensed: true })
         .eq('id', item.id)
+    }
+
+    // Mark prescription completed only after all items processed
+    if (errors.length === 0) {
+      await supabase
+        .from('prescriptions')
+        .update({ status: 'completed' })
+        .eq('id', id)
     }
 
     return apiResponse.ok({ dispensed: dispensedCount, errors })

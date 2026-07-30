@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
         // Verify PO exists and belongs to this org
         const { data: po, error: fetchError } = await supabase
             .from('purchase_orders')
-            .select('id, status, organization_id')
+            .select('id, status, organization_id, approved_at')
             .eq('id', id)
             .eq('organization_id', owner.practitioner.organization_id)
             .single()
@@ -44,8 +44,18 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
             return apiResponse.notFound('Purchase order not found')
         }
 
-        if (po.status !== 'po_draft' && po.status !== 'po_sent') {
-            return apiResponse.badRequest(`Cannot ${action} a PO with status "${po.status}"`)
+        if (action === 'approve') {
+            if (po.status !== 'po_draft') {
+                return apiResponse.badRequest(`Hanya PO dengan status draft yang bisa disetujui`)
+            }
+            if ((po as any).approved_at !== null) {
+                return apiResponse.conflict('PO sudah disetujui sebelumnya')
+            }
+        } else {
+            // reject
+            if (!['po_draft', 'po_sent'].includes(po.status)) {
+                return apiResponse.badRequest(`Tidak bisa menolak PO dengan status "${po.status}"`)
+            }
         }
 
         const updates: Record<string, unknown> = {

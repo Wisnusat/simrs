@@ -341,6 +341,7 @@ export async function dispensePrescription(
 
 export async function getInvoices(opts?: {
   encounter_id?: string
+  episode_of_care_id?: string
   status?: InvoiceStatus | 'all'
   today?: boolean
 }): Promise<Invoice | Invoice[]> {

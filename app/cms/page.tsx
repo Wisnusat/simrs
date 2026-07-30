@@ -30,9 +30,13 @@ export default function CmsDashboardPage() {
                     fetch('/api/cms/staff'),
                 ])
 
+                let actualRole = 'admin'
                 if (meRes.ok) {
                     const meData = await meRes.json()
-                    if (meData.success) setUserRole(meData.data.role)
+                    if (meData.success) {
+                        actualRole = meData.data.role
+                        setUserRole(actualRole)
+                    }
                 }
 
                 const staffData = staffRes.ok ? await staffRes.json() : { data: [] }
@@ -43,7 +47,7 @@ export default function CmsDashboardPage() {
                 }))
 
                 // Only owner can access reports
-                if (userRole === 'owner') {
+                if (actualRole === 'owner') {
                     try {
                         const now = new Date()
                         const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]

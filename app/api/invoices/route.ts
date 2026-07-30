@@ -30,8 +30,20 @@ export async function GET(req: NextRequest) {
   const { practitioner } = auth
   const { searchParams } = new URL(req.url)
   const encounterId = searchParams.get('encounter_id')
+  const episodeId = searchParams.get('episode_of_care_id')
   const status = searchParams.get('status')
   const today = searchParams.get('today')
+
+  // ── Single episode — return episode-level invoice ───────────────────────
+  if (episodeId) {
+    const { data: existing } = await supabase
+      .from('invoices')
+      .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+      .eq('episode_of_care_id', episodeId)
+      .maybeSingle()
+    if (existing) return apiResponse.ok(existing)
+    return apiResponse.notFound('Invoice belum dibuat untuk episode ini')
+  }
 
   // ── Single encounter — return or auto-generate ──────────────────────────
   if (encounterId) {
@@ -73,7 +85,18 @@ export async function GET(req: NextRequest) {
       .select()
       .single()
 
-    if (invError) return apiResponse.serverError(invError.message)
+    if (invError) {
+      // 23505 = unique_violation: a concurrent request already created the invoice
+      if ((invError as any).code === '23505') {
+        const { data: raceInv } = await supabase
+          .from('invoices')
+          .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+          .eq('encounter_id', encounterId)
+          .single()
+        if (raceInv) return apiResponse.ok(raceInv)
+      }
+      return apiResponse.serverError(invError.message)
+    }
 
     await supabase.from('invoice_items').insert(
       built.items.map((item) => ({

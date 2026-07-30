@@ -190,6 +190,8 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (emergencyError || !emergency) {
+            // Rollback: delete orphaned encounter
+            await supabase.from('encounters').delete().eq('id', encounter.id)
             console.error('Emergency encounter create error:', emergencyError)
             Sentry.captureException(emergencyError)
             return apiResponse.serverError('Failed to create emergency encounter')

@@ -2,42 +2,95 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, Clock, CreditCard, DollarSign, LayoutDashboard, Receipt, TrendingUp } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { CheckCircle, Clock, CreditCard, DollarSign, LayoutDashboard, Loader2, LogOut, Receipt, TrendingUp } from "lucide-react"
 import { useInvoices } from "@/hooks/outpatient/use-invoices"
+import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { PaymentForm } from "@/components/cashier/payment-form"
 import { ReceiptView } from "@/components/cashier/receipt-view"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { EmptyState } from "@/components/shared/empty-state"
-import type { Invoice, PaymentMethod } from "@/lib/types/outpatient"
+import { getInvoices, payInvoice } from "@/lib/api/client"
+import type { Invoice, InpatientAdmission, PaymentMethod } from "@/lib/types/outpatient"
 
-const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",         active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: CreditCard,      label: "Pembayaran",        active: active === "payments",  onClick: () => set("payments") },
-  { icon: Receipt,         label: "Riwayat Pembayaran", active: active === "history",  onClick: () => set("history") },
-  { icon: TrendingUp,      label: "Laporan",           active: active === "reports",   onClick: () => set("reports") },
+type View = 'dashboard' | 'payments' | 'discharge' | 'history' | 'reports'
+
+const SIDEBAR = (active: View, set: (v: View) => void) => [
+  { icon: LayoutDashboard, label: "Dashboard",          active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: CreditCard,      label: "Pembayaran",         active: active === "payments",  onClick: () => set("payments") },
+  { icon: LogOut,          label: "Siap Pulang",        active: active === "discharge", onClick: () => set("discharge") },
+  { icon: Receipt,         label: "Riwayat Pembayaran", active: active === "history",   onClick: () => set("history") },
+  { icon: TrendingUp,      label: "Laporan",            active: active === "reports",   onClick: () => set("reports") },
 ]
 
 export default function CashierDashboard() {
-  const [view, setView] = useState("dashboard")
+  const [view, setView] = useState<View>("dashboard")
   const [payTarget, setPayTarget] = useState<Invoice | null>(null)
   const [receiptTarget, setReceiptTarget] = useState<Invoice | null>(null)
 
+  // Invoice loading for a discharge-approved patient
+  const [dischargeTarget, setDischargeTarget] = useState<InpatientAdmission | null>(null)
+  const [dischargeInvoice, setDischargeInvoice] = useState<Invoice | null>(null)
+  const [dischargeInvLoading, setDischargeInvLoading] = useState(false)
+  const [dischargeInvError, setDischargeInvError] = useState<string | null>(null)
+  const [dischargePayLoading, setDischargePayLoading] = useState(false)
+  const [dischargePayError, setDischargePayError] = useState<string | null>(null)
+
   const { data: invoices, loading, refresh, stats, pay, cancel, actionLoading: paying, error: payError } = useInvoices({ today: true })
+  const { data: dischargeAdmissions, loading: dischargeLoading, refresh: refreshDischarge } = useAdmissions({ status: 'discharge_approved' })
 
   const handlePay = async (method: PaymentMethod, paidAmount?: number) => {
     if (!payTarget) return false
     const ok = await pay(payTarget.id, method, paidAmount)
     if (ok) setPayTarget(null)
     return ok
+  }
+
+  const openDischargePatient = useCallback(async (adm: InpatientAdmission) => {
+    setDischargeTarget(adm)
+    setDischargeInvoice(null)
+    setDischargeInvError(null)
+    setDischargePayError(null)
+    setDischargeInvLoading(true)
+    try {
+      const inv = await getInvoices({ episode_of_care_id: adm.episode_of_care_id })
+      setDischargeInvoice(Array.isArray(inv) ? inv[0] ?? null : (inv as Invoice | null))
+      if (!inv || (Array.isArray(inv) && inv.length === 0)) {
+        setDischargeInvError('Invoice belum tersedia. Tunggu beberapa detik lalu coba lagi.')
+      }
+    } catch {
+      setDischargeInvError('Invoice belum tersedia. Tunggu beberapa detik lalu coba lagi.')
+    } finally {
+      setDischargeInvLoading(false)
+    }
+  }, [])
+
+  const handleDischargePay = async (method: PaymentMethod, paidAmount?: number) => {
+    if (!dischargeInvoice) return false
+    setDischargePayLoading(true)
+    setDischargePayError(null)
+    try {
+      await payInvoice(dischargeInvoice.id, { payment_method: method, paid_amount: paidAmount })
+      setDischargeTarget(null)
+      setDischargeInvoice(null)
+      refreshDischarge()
+      refresh()
+      return true
+    } catch (err: any) {
+      setDischargePayError(err.message ?? 'Gagal memproses pembayaran')
+      return false
+    } finally {
+      setDischargePayLoading(false)
+    }
   }
 
   const fmt = (n: number) => `Rp ${n.toLocaleString("id-ID")}`
@@ -71,6 +124,30 @@ export default function CashierDashboard() {
               {stats.pending === 0 && <EmptyState message="Tidak ada invoice yang menunggu pembayaran." />}
             </CardContent>
           </Card>
+          {dischargeAdmissions.length > 0 && (
+            <Card className="border-blue-200 dark:border-blue-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LogOut className="w-4 h-4 text-blue-500" />
+                  Pasien Siap Pulang
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{dischargeAdmissions.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {dischargeAdmissions.slice(0, 3).map((adm) => (
+                  <div key={adm.id} className="flex justify-between items-center p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
+                    <div>
+                      <p className="font-medium">{adm.patients.full_name}</p>
+                      <p className="text-sm text-foreground/60">{adm.locations?.name} · Bed {adm.bed_number}</p>
+                    </div>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setView("discharge"); openDischargePatient(adm) }}>
+                      <CreditCard className="w-4 h-4 mr-1" />Bayar & Pulangkan
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -130,6 +207,66 @@ export default function CashierDashboard() {
         </div>
       )}
 
+      {/* SIAP PULANG */}
+      {view === "discharge" && (
+        <div className="space-y-6">
+          <PageHeader title="Pasien Siap Pulang" description="Rawat inap — dokter sudah setujui kepulangan. Selesaikan pembayaran untuk memulangkan pasien." onRefresh={refreshDischarge} isRefreshing={dischargeLoading} />
+          {dischargeAdmissions.length === 0 && !dischargeLoading && (
+            <EmptyState message="Tidak ada pasien yang menunggu kepulangan saat ini." />
+          )}
+          <div className="space-y-3">
+            {dischargeAdmissions.map((adm) => (
+              <Card key={adm.id} className={dischargeTarget?.id === adm.id ? "border-blue-400 ring-1 ring-blue-400" : ""}>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <p className="font-semibold">{adm.patients.full_name}</p>
+                      <p className="text-sm text-foreground/60">
+                        MR: {adm.patients.medical_record_no} · {adm.locations?.name} · Bed {adm.bed_number}
+                      </p>
+                      {adm.discharge_approved_at && (
+                        <p className="text-xs text-foreground/50 mt-0.5">
+                          Disetujui: {new Date(adm.discharge_approved_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => openDischargePatient(adm)}
+                      disabled={dischargeTarget?.id === adm.id && dischargeInvLoading}
+                    >
+                      {dischargeTarget?.id === adm.id && dischargeInvLoading
+                        ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Memuat Invoice...</>
+                        : <><CreditCard className="w-4 h-4 mr-1" />Bayar & Pulangkan</>
+                      }
+                    </Button>
+                  </div>
+
+                  {dischargeTarget?.id === adm.id && (
+                    <div className="mt-4 border-t pt-4">
+                      {dischargeInvError && (
+                        <Alert variant="destructive" className="mb-3">
+                          <AlertDescription>{dischargeInvError}</AlertDescription>
+                        </Alert>
+                      )}
+                      {dischargeInvoice && (
+                        <PaymentForm
+                          invoice={dischargeInvoice}
+                          onPay={handleDischargePay}
+                          onCancel={() => { setDischargeTarget(null); setDischargeInvoice(null) }}
+                          loading={dischargePayLoading}
+                          error={dischargePayError}
+                        />
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* HISTORY */}
       {view === "history" && (
         <div className="space-y-6">
@@ -185,7 +322,7 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      {/* Payment Dialog */}
+      {/* Payment Dialog (outpatient) */}
       <Dialog open={!!payTarget} onOpenChange={(o) => { if (!o) setPayTarget(null) }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogTitle>Proses Pembayaran</DialogTitle>

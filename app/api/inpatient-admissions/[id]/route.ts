@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { enqueueSync } from '@/lib/satusehat/queue'
+import { syncInvoiceForEpisode } from '@/lib/api/invoice-builder'
 
 /**
  * GET   /api/inpatient-admissions/[id] — full admission detail
@@ -79,6 +80,14 @@ export async function PATCH(
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+
+  // On discharge_approved: sync/build invoice in background so cashier can process payment immediately
+  if (body.status === 'discharge_approved' && data) {
+    const episodeId = (data as any).episode_of_care_id
+    if (episodeId) {
+      syncInvoiceForEpisode(supabase, episodeId).catch(() => {})
+    }
+  }
 
   // If discharged, also close the episode and re-sync to SATUSEHAT with finished status
   if (body.status === 'discharged' && data) {

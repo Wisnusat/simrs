@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
-  FlaskConical, Stethoscope, Clock, Loader2, ChevronDown, ChevronRight,
+  FlaskConical, Stethoscope, Clock, Loader2, ChevronDown, ChevronRight, LogOut,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -39,9 +39,10 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: BedDouble, label: "Pasien Rawat Inap", active: active === "patients", onClick: () => set("patients") },
-  { icon: ClipboardList, label: "CPPT Harian", active: active === "cppt", onClick: () => set("cppt") },
+  { icon: LayoutDashboard, label: "Dashboard",         active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: BedDouble,       label: "Pasien Rawat Inap", active: active === "patients",  onClick: () => set("patients") },
+  { icon: ClipboardList,   label: "CPPT Harian",       active: active === "cppt",      onClick: () => set("cppt") },
+  { icon: LogOut,          label: "Pulang Hari Ini",   active: active === "discharged", onClick: () => set("discharged") },
 ]
 
 export default function InpatientNurseDashboard() {
@@ -69,6 +70,7 @@ export default function InpatientNurseDashboard() {
   const [assignSubmitting, setAssignSubmitting] = useState(false)
 
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
+  const { data: dischargedToday, loading: dischargedLoading, refresh: refreshDischarged } = useAdmissions({ status: 'discharged' })
 
   // Daily records for the selected CPPT patient
   const {
@@ -704,6 +706,50 @@ export default function InpatientNurseDashboard() {
               vitalSigns={patientVitals}
             />
           )}
+        </div>
+      )}
+
+      {/* ── PULANG HARI INI ── */}
+      {view === "discharged" && (
+        <div className="space-y-6">
+          <PageHeader
+            title="Pulang Hari Ini"
+            description="Pasien yang sudah selesai pembayaran dan boleh dipulangkan"
+            onRefresh={refreshDischarged}
+            isRefreshing={dischargedLoading}
+          />
+          {dischargedToday.length === 0 && !dischargedLoading && (
+            <div className="text-center py-12 text-foreground/50 text-sm">Belum ada pasien yang pulang hari ini.</div>
+          )}
+          <div className="space-y-3">
+            {dischargedToday
+              .filter((adm) => {
+                // Show only those discharged today
+                if (!adm.discharge_date) return true
+                const d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+                return adm.discharge_date.startsWith(d)
+              })
+              .map((adm) => (
+                <div key={adm.id} className="flex items-start justify-between gap-4 p-4 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                  <div>
+                    <p className="font-semibold">{adm.patients.full_name}</p>
+                    <p className="text-sm text-foreground/60">
+                      MR: {adm.patients.medical_record_no}
+                      {adm.locations?.name && ` · ${adm.locations.name}`}
+                      {adm.bed_number && ` · Bed ${adm.bed_number}`}
+                    </p>
+                    {adm.discharge_date && (
+                      <p className="text-xs text-foreground/50 mt-0.5">
+                        Pulang: {new Date(adm.discharge_date).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700 font-medium flex items-center gap-1">
+                    <Heart className="w-3 h-3" /> Sudah Pulang
+                  </span>
+                </div>
+              ))}
+          </div>
         </div>
       )}
 

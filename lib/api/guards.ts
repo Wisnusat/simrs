@@ -49,10 +49,6 @@ export async function requireAdmin(
 
     const { user } = authResult
 
-    if (user.id === 'service-account') {
-        return { user, practitioner: { id: 'service-account', role: 'admin', organization_id: 'system' } }
-    }
-
     const { data: practitioner, error } = await supabase
         .from('practitioners')
         .select('id, role, organization_id, full_name')
