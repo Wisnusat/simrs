@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { getVClaimClient } from '@/lib/bpjs/vclaim'
+import * as Sentry from '@sentry/nextjs'
 
 function generateBookingCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
 
         if (appointmentError) {
             console.error('Walk-in create_appointment RPC error:', appointmentError)
-            
+            Sentry.captureException(appointmentError)
+
             if (appointmentError.message?.includes('POLI_NOT_FOUND')) {
                 return apiResponse.notFound('Poli service not found or inactive')
             }
@@ -95,6 +97,7 @@ export async function POST(req: NextRequest) {
 
         if (checkinError) {
             console.error('Walk-in checkin_appointment RPC error:', checkinError)
+            Sentry.captureException(checkinError)
             return apiResponse.serverError('Appointment created but check-in failed')
         }
 
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
 
     } catch (e) {
         console.error('Walk-in POST error:', e)
+        Sentry.captureException(e)
         return apiResponse.serverError()
     }
 }

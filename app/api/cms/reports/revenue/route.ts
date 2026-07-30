@@ -5,6 +5,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireOwner, isGuardError } from '@/lib/api/guards'
 import { generateExcelResponse } from '@/lib/api/excel-export'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/reports/revenue
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Revenue report error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch revenue data')
         }
 

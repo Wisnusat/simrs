@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/pharmacist/po
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
 
         if (poError) {
             console.error('PO insert error:', poError)
+            Sentry.captureException(poError)
             return apiResponse.serverError('Failed to create purchase order')
         }
 
@@ -115,6 +117,7 @@ export async function POST(request: NextRequest) {
 
         if (itemError) {
             console.error('PO items insert error:', itemError)
+            Sentry.captureException(itemError)
             return apiResponse.serverError('Failed to create PO items')
         }
 

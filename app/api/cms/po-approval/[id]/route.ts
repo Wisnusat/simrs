@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireOwner, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 interface RouteContext {
     params: Promise<{ id: string }>
@@ -69,6 +70,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
 
         if (updateError) {
             console.error('PO update error:', updateError)
+            Sentry.captureException(updateError)
             return apiResponse.serverError('Failed to update purchase order')
         }
 

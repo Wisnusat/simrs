@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { enqueueSync } from '@/lib/satusehat/queue'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * Helper: resolve current practitioner (staff) from authenticated user.
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Emergency encounters fetch error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch emergency encounters')
         }
 
@@ -166,6 +168,7 @@ export async function POST(request: NextRequest) {
 
         if (encounterError || !encounter) {
             console.error('Encounter create error:', encounterError)
+            Sentry.captureException(encounterError)
             return apiResponse.serverError('Failed to create encounter')
         }
 
@@ -188,6 +191,7 @@ export async function POST(request: NextRequest) {
 
         if (emergencyError || !emergency) {
             console.error('Emergency encounter create error:', emergencyError)
+            Sentry.captureException(emergencyError)
             return apiResponse.serverError('Failed to create emergency encounter')
         }
 

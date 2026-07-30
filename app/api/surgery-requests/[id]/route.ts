@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { enqueueSync } from '@/lib/satusehat/queue'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * PATCH /api/surgery-requests/[id]
@@ -87,6 +88,7 @@ export async function PATCH(
 
     if (procError) {
       console.error('Failed to auto-insert clinical procedure entry:', procError.message)
+      Sentry.captureException(procError)
     } else {
       // Enqueue FHIR Procedure sync (fire-and-forget)
       const { data: inserted } = await supabase

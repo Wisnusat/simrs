@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 interface RouteContext {
     params: Promise<{ id: string }>
@@ -83,6 +84,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
 
         if (error || !updated) {
             console.error('Staff update error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to update staff member')
         }
 

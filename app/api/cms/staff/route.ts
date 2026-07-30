@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/staff
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Staff list error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch staff')
         }
 
@@ -123,6 +125,7 @@ export async function POST(request: NextRequest) {
                 await supabaseAdmin.auth.admin.deleteUser(userId)
             }
             console.error('Staff insert error:', insertError)
+            Sentry.captureException(insertError)
             if (insertError.code === '23505') {
                 return apiResponse.conflict('Staff member with this NIK/NIP already exists')
             }

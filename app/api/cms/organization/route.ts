@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/organization
@@ -103,6 +104,7 @@ export async function PUT(request: NextRequest) {
 
         if (updateError) {
             console.error('Organization update error:', updateError)
+            Sentry.captureException(updateError)
             return apiResponse.serverError('Failed to update organization')
         }
 

@@ -6,6 +6,7 @@ import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
 import { realFhirClient } from '@/lib/satusehat/client'
 import { lookupPatientByNik, ensurePatientIhs } from '@/lib/satusehat/patient-service'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * POST /api/patients/verify
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
         await ensurePatientIhs(admin, realFhirClient, local.id)
       } catch (e) {
         console.error('IHS refresh failed:', e)
+        Sentry.captureException(e)
       }
     }
     const { data: fresh } = await admin.from('patients').select('*').eq('id', local.id).single()
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
     found = await lookupPatientByNik(realFhirClient, nik)
   } catch (e) {
     console.error('SATUSEHAT lookup error:', e)
+    Sentry.captureException(e)
     // Degrade gracefully — staff can register manually
     return apiResponse.ok({ status: 'not_found' })
   }
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest) {
 
   if (mrError || !mrData) {
     console.error('MR number generation failed:', mrError)
+    Sentry.captureException(mrError)
     return apiResponse.serverError('Gagal membuat nomor rekam medis')
   }
   const medical_record_no = mrData as string
@@ -83,6 +87,7 @@ export async function POST(req: NextRequest) {
   // Guard: birthDate is NOT NULL in DB — skip insert if SATUSEHAT returned no date
   if (!r.birthDate) {
     console.error('SATUSEHAT patient missing birthDate for NIK verification')
+    Sentry.captureMessage('SATUSEHAT patient missing birthDate for NIK verification', 'error')
     return apiResponse.ok({ status: 'not_found' })
   }
 
@@ -121,6 +126,7 @@ export async function POST(req: NextRequest) {
       return apiResponse.ok({ status: 'found_local', patient: refetched })
     }
     console.error('Patient auto-create error:', insertError)
+    Sentry.captureException(insertError)
     return apiResponse.serverError('Gagal membuat pasien')
   }
 

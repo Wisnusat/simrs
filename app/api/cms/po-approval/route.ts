@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireOwner, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/po-approval
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('PO list error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch purchase orders')
         }
 
