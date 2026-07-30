@@ -220,6 +220,9 @@ export default function DashboardLayout({
               <p className="text-xs text-sidebar-foreground/50">{label}</p>
             </div>
           </div>
+          <p className="px-2 pb-2 text-[10px] text-sidebar-foreground/30 group-data-[collapsible=icon]:hidden">
+            v{process.env.NEXT_PUBLIC_APP_VERSION ?? '—'}
+          </p>
         </SidebarFooter>
 
         <SidebarRail />
