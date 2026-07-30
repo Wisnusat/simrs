@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncDiagnosis } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/diagnoses
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   if (error) return apiResponse.serverError(error.message)
 
-  syncDiagnosis(supabase, (data as any).id, { encounter_id, icd10_code, icd10_display }).catch(() => { })
+  enqueueSync(supabase, 'Condition', (data as any).id).catch(() => {})
 
   return apiResponse.created(data)
 }

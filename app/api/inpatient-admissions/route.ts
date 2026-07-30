@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET  /api/inpatient-admissions — list active admissions
@@ -84,5 +85,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+  // Re-enqueue episode so room assignment is reflected in SATUSEHAT
+  enqueueSync(supabase, 'EpisodeOfCare', episode_of_care_id).catch(() => {})
   return apiResponse.created(data)
 }

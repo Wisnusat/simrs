@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/episodes-of-care/[id]   — full episode detail
@@ -68,5 +69,6 @@ export async function PATCH(
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+  enqueueSync(supabase, 'EpisodeOfCare', id).catch(() => {})
   return apiResponse.ok(data)
 }

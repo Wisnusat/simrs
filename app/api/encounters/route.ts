@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/encounters
@@ -140,6 +141,8 @@ export async function POST(req: NextRequest) {
       .update({ status: 'called' })
       .eq('id', queue_id)
   }
+
+  enqueueSync(supabase, 'Encounter', (encounter as any).id).catch(() => {})
 
   return apiResponse.created(encounter)
 }

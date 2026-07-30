@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET   /api/inpatient-admissions/[id] — full admission detail
@@ -79,7 +80,7 @@ export async function PATCH(
 
   if (error) return apiResponse.serverError(error.message)
 
-  // If discharged, also close the episode
+  // If discharged, also close the episode and re-sync to SATUSEHAT with finished status
   if (body.status === 'discharged' && data) {
     const episodeId = (data as any).episode_of_care_id
     if (episodeId) {
@@ -90,6 +91,7 @@ export async function PATCH(
           end_date: new Date().toISOString().split('T')[0],
         })
         .eq('id', episodeId)
+      enqueueSync(supabase, 'EpisodeOfCare', episodeId).catch(() => {})
     }
   }
 

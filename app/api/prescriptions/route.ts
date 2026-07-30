@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncPrescription } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/prescriptions
@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
     .filter((item) => (stockMap.get(item.medication_id) ?? 0) < item.quantity)
     .map((item) => `Stok obat ID ${item.medication_id} tidak mencukupi`)
 
-  syncPrescription(supabase, (prescription as any).id, { encounter_id, patient_id }).catch(() => { })
+  for (const item of (rxItems ?? [])) {
+    enqueueSync(supabase, 'MedicationRequest', (item as any).id).catch(() => {})
+  }
 
   return apiResponse.created({
     prescription: { ...prescription, prescription_items: rxItems },

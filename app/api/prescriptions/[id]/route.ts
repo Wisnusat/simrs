@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncDispense } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/prescriptions/[id]
@@ -170,7 +170,7 @@ export async function PATCH(
 
         if (dispense) {
           dispensedCount++
-          syncDispense(supabase, (dispense as any).id ?? '', {}).catch(() => { })
+          enqueueSync(supabase, 'MedicationDispense', (dispense as any).id).catch(() => {})
 
           // Auto-add medication charge to running bill for inpatient
           if (isInpatient) {

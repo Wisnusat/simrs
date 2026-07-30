@@ -24,6 +24,7 @@
  */
 
 import type {
+  Patient,
   QueueEntry, QueueStatus,
   VitalSigns, VitalSignsInput,
   Encounter, EncounterStatus,
@@ -768,6 +769,26 @@ export async function postMedicalResume(input: MedicalResumeInput): Promise<Medi
   return fetchJson('/api/medical-resumes', {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Patient NIK Verification  /api/patients/verify
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify a 16-digit NIK against local DB and SATUSEHAT.
+ * Returns one of three statuses:
+ *  - found_local  — patient exists in local DB (IHS refreshed if missing)
+ *  - found_ihs    — not local but SATUSEHAT found them; a local patient row was auto-created
+ *  - not_found    — neither source recognises the NIK; open full registration form
+ */
+export async function verifyPatientNik(
+  nik: string,
+): Promise<{ status: 'found_local' | 'found_ihs' | 'not_found'; patient?: Patient }> {
+  return fetchJson('/api/patients/verify', {
+    method: 'POST',
+    body: JSON.stringify({ nik }),
   })
 }
 
