@@ -277,13 +277,20 @@ export async function syncInvoiceForEpisode(
     .limit(1)
     .maybeSingle()
 
-  // Fetch all encounters in this episode
+  // Fetch all encounters in this episode (with class so we can bill correctly)
   const { data: encounters } = await supabase
     .from('encounters')
-    .select('id')
+    .select('id, encounter_class')
     .eq('episode_of_care_id', episodeOfCareId)
 
   const encounterIds = (encounters ?? []).map((e: any) => e.id)
+  // Only the initial outpatient encounter gets a consultation fee.
+  // Inpatient daily encounters are covered by the room rate.
+  const outpatientEncounterIds = new Set(
+    (encounters ?? [])
+      .filter((e: any) => e.encounter_class === 'outpatient')
+      .map((e: any) => e.id)
+  )
 
   const allItems: InvoiceLineItem[] = []
 
@@ -323,12 +330,14 @@ export async function syncInvoiceForEpisode(
   )
 
   for (const encId of encounterIds) {
-    allItems.push({
-      item_type: 'consultation',
-      item_name: 'Biaya Konsultasi Dokter',
-      quantity: 1,
-      unit_price: consultationFee,
-    })
+    if (outpatientEncounterIds.has(encId)) {
+      allItems.push({
+        item_type: 'consultation',
+        item_name: 'Biaya Konsultasi Dokter',
+        quantity: 1,
+        unit_price: consultationFee,
+      })
+    }
 
     const { data: labOrders } = await supabase
       .from('lab_orders')

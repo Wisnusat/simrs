@@ -23,14 +23,12 @@ import { useAdmissions } from "@/hooks/inpatient/use-admissions"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
-import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations } from "@/lib/api/client"
+import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations, getEncounters } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
-import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 
 import { InpatientPatientList } from "@/components/inpatient/patient-list"
 import { CpptForm } from "@/components/inpatient/cppt-form"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
-import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { AllergyForm } from "@/components/nutritionist/allergy-form"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
@@ -39,18 +37,16 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard",         active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: BedDouble,       label: "Pasien Rawat Inap", active: active === "patients",  onClick: () => set("patients") },
-  { icon: ClipboardList,   label: "CPPT Harian",       active: active === "cppt",      onClick: () => set("cppt") },
-  { icon: LogOut,          label: "Pulang Hari Ini",   active: active === "discharged", onClick: () => set("discharged") },
+  { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: BedDouble, label: "Pasien Rawat Inap", active: active === "patients", onClick: () => set("patients") },
+  { icon: ClipboardList, label: "CPPT Harian", active: active === "cppt", onClick: () => set("cppt") },
+  { icon: LogOut, label: "Pulang Hari Ini", active: active === "discharged", onClick: () => set("discharged") },
 ]
 
 export default function InpatientNurseDashboard() {
   const [view, setView] = useState("dashboard")
-  const [selectedAdm, setSelectedAdm] = useState<InpatientAdmission | null>(null)
   const [cpptAdm, setCpptAdm] = useState<InpatientAdmission | null>(null)
   const [vitalsAdm, setVitalsAdm] = useState<InpatientAdmission | null>(null)
-  const [labAdm, setLabAdm] = useState<InpatientAdmission | null>(null)
   const [allergyAdm, setAllergyAdm] = useState<InpatientAdmission | null>(null)
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [patientVitals, setPatientVitals] = useState<VitalSignsType[]>([])
@@ -59,6 +55,8 @@ export default function InpatientNurseDashboard() {
   const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
   const [surgeriesLoading, setSurgeriesLoading] = useState(false)
   const [labOpen, setLabOpen] = useState(false)
+  const [cpptPoliServiceId, setCpptPoliServiceId] = useState<string | undefined>(undefined)
+  const [cpptSubmitting, setCpptSubmitting] = useState(false)
 
   // Pending admissions (episodes_of_care without room — waiting for nurse room assignment)
   const [pendingAdmissions, setPendingAdmissions] = useState<EpisodeOfCare[]>([])
@@ -74,19 +72,17 @@ export default function InpatientNurseDashboard() {
 
   // Daily records for the selected CPPT patient
   const {
-    todayRecords, loading: drLoading, actionLoading: drAction,
-    createDailyRecord, refresh: refreshDr,
+    todayRecords, createDailyRecord, refresh: refreshDr,
   } = useDailyRecords({
     admissionId: cpptAdm?.id ?? null,
     episodeOfCareId: cpptAdm?.episode_of_care_id ?? undefined,
     patientId: cpptAdm?.patient_id ?? undefined,
-    poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b", // TODO: dynamic from admission context
+    poliServiceId: cpptPoliServiceId,
   })
 
   // Vital signs and lab for current encounter
   const { submit: submitVitals, loading: vsLoading, error: vsError, clearError: clearVsError } = useVitalSigns()
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
-  const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ encounterId: currentEncounterId ?? undefined, pollIntervalMs: 0 })
 
   // Allergies for selected CPPT patient
   const {
@@ -175,6 +171,15 @@ export default function InpatientNurseDashboard() {
     setPatientVitals([]) // reset; will be loaded once encounter is known
     setLabOrders([])
     setSurgeries([])
+    setCpptPoliServiceId(undefined)
+    // Resolve poli_service_id from the episode's outpatient encounter
+    getEncounters({ episode_of_care_id: adm.episode_of_care_id })
+      .then((encs) => {
+        const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
+        const first = outpatient ?? encs[0]
+        setCpptPoliServiceId(first?.poli_service_id)
+      })
+      .catch(() => { })
     // Load previous notes from all encounters in this episode
     try {
       const notes = await getClinicalNotesByEpisode(adm.episode_of_care_id)
@@ -188,9 +193,9 @@ export default function InpatientNurseDashboard() {
 
   // CPPT note submission
   const handleCpptSubmit = useCallback(async (input: any): Promise<boolean> => {
+    setCpptSubmitting(true)
     try {
       await postClinicalNote(input)
-      // Refresh notes
       if (cpptAdm) {
         const notes = await getClinicalNotesByEpisode(cpptAdm.episode_of_care_id)
         setPreviousNotes(notes)
@@ -198,6 +203,8 @@ export default function InpatientNurseDashboard() {
       return true
     } catch {
       return false
+    } finally {
+      setCpptSubmitting(false)
     }
   }, [cpptAdm])
 
@@ -206,12 +213,6 @@ export default function InpatientNurseDashboard() {
     if (ok) { setVitalsAdm(null); refreshDr() }
     return ok
   }, [submitVitals, refreshDr])
-
-  const handleLabSubmit = useCallback(async (input: any) => {
-    const ok = await createLab(input)
-    if (ok) setLabAdm(null)
-    return ok
-  }, [createLab])
 
   const handleAllergySubmit = useCallback(async (input: any) => {
     const ok = await createAllergy(input)
@@ -270,8 +271,8 @@ export default function InpatientNurseDashboard() {
                                   (ep as any).source === 'surgery'
                                     ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] h-5'
                                     : (ep as any).source === 'igd'
-                                    ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 text-[10px] h-5'
-                                    : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] h-5'
+                                      ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 text-[10px] h-5'
+                                      : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] h-5'
                                 }
                               >
                                 {(ep as any).source === 'surgery' ? 'Operasi' : (ep as any).source === 'igd' ? 'IGD' : 'Poli'}
@@ -430,14 +431,6 @@ export default function InpatientNurseDashboard() {
             >
               <Activity className="w-4 h-4 mr-1" /> Input Tanda Vital
             </Button>
-            {/* <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setLabAdm(cpptAdm)}
-              disabled={!currentEncounterId}
-            >
-              <FlaskConical className="w-4 h-4 mr-1" /> Permintaan Lab
-            </Button> */}
             <Button
               size="sm"
               variant="outline"
@@ -699,7 +692,7 @@ export default function InpatientNurseDashboard() {
               patientId={cpptAdm.patient_id}
               onSubmit={handleCpptSubmit}
               onCreateShift={createDailyRecord}
-              loading={drAction}
+              loading={cpptSubmitting}
               error={null}
               previousNotes={previousNotes}
               todayShiftExists={todayRecords.length > 0}
@@ -770,23 +763,6 @@ export default function InpatientNurseDashboard() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* ── Lab Order Dialog ── */}
-      {/* <Dialog open={!!labAdm} onOpenChange={(o) => { if (!o) setLabAdm(null) }}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle>Permintaan Pemeriksaan Lab</DialogTitle>
-          {labAdm && currentEncounterId && (
-            <LabOrderForm
-              encounterId={currentEncounterId}
-              patientId={labAdm.patient_id}
-              onSubmit={handleLabSubmit}
-              onCancel={() => setLabAdm(null)}
-              loading={labActing}
-              error={labError}
-            />
-          )}
-        </DialogContent>
-      </Dialog> */}
 
       {/* ── Allergy Dialog ── */}
       <Dialog open={!!allergyAdm} onOpenChange={(o) => { if (!o) setAllergyAdm(null) }}>
