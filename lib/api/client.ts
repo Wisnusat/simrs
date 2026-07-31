@@ -730,6 +730,13 @@ export async function deleteCmsLabService(id: string): Promise<{ deleted: boolea
   })
 }
 
+export async function patchCmsLabServicePrice(id: string, price: number): Promise<LabService> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, price }),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // CMS — Master Lab Services  /api/cms/master-lab-services
 // ---------------------------------------------------------------------------

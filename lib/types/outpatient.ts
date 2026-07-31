@@ -253,6 +253,7 @@ export interface LabService {
   loinc_code: string
   category: string
   is_active: boolean
+  price: number
 }
 
 export interface LabOrderItem {

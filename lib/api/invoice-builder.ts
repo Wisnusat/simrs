@@ -37,14 +37,15 @@ export async function buildInvoiceFromEncounter(
 ): Promise<BuiltInvoice> {
   const items: InvoiceLineItem[] = []
 
-  // ── 1. Consultation fee ────────────────────────────────────────────────
+  // ── 1. Consultation fee + action fee ──────────────────────────────────
   const { data: org } = await supabase
     .from('organizations')
-    .select('medical_fee')
+    .select('medical_fee, action_fee')
     .eq('id', organizationId)
     .single()
 
   const consultationFee: number = (org as any)?.medical_fee ?? 50_000
+  const actionFee: number = (org as any)?.action_fee ?? 50_000
   items.push({
     item_type: 'consultation',
     item_name: 'Biaya Konsultasi Dokter',
@@ -65,12 +66,22 @@ export async function buildInvoiceFromEncounter(
       item_name: proc.procedure_display,
       item_code: proc.procedure_code,
       quantity: 1,
-      unit_price: 50_000,
+      unit_price: actionFee,
       reference_id: proc.id,
     })
   }
 
   // ── 3. Lab orders ──────────────────────────────────────────────────────
+  // Pre-fetch lab service prices for this org (keyed by loinc_code)
+  const { data: labServicePrices } = await supabase
+    .from('lab_services')
+    .select('loinc_code, price')
+    .eq('organization_id', organizationId)
+
+  const labPriceMap = new Map<string, number>(
+    (labServicePrices ?? []).map((s: any) => [s.loinc_code, Number(s.price)])
+  )
+
   const { data: labOrders } = await supabase
     .from('lab_orders')
     .select('id, lab_order_items(id, test_name, loinc_code)')
@@ -78,12 +89,13 @@ export async function buildInvoiceFromEncounter(
 
   for (const lo of (labOrders ?? [])) {
     for (const item of (lo.lab_order_items ?? [])) {
+      const labPrice = labPriceMap.get(item.loinc_code) ?? 75_000
       items.push({
         item_type: 'lab',
         item_name: item.test_name,
         item_code: item.loinc_code,
         quantity: 1,
-        unit_price: 75_000,
+        unit_price: labPrice,
         reference_id: lo.id,
       })
     }
@@ -139,11 +151,23 @@ export async function syncInvoiceForEncounter(
 ): Promise<void> {
   const { data: enc } = await supabase
     .from('encounters')
-    .select('patient_id, organization_id, payment_type')
+    .select('patient_id, organization_id, payment_type, episode_of_care_id')
     .eq('id', encounterId)
     .single()
 
   if (!enc) return
+
+  // This encounter belongs to an inpatient episode — billing is handled entirely by
+  // syncInvoiceForEpisode (one consolidated episode invoice). Delete any encounter-level
+  // invoice that may have been created before the admission was confirmed, then bail.
+  if ((enc as any).episode_of_care_id) {
+    await supabase
+      .from('invoices')
+      .delete()
+      .eq('encounter_id', encounterId)
+      .is('episode_of_care_id', null)
+    return
+  }
 
   const orgId = (enc as any).organization_id
   const built = await buildInvoiceFromEncounter(supabase, encounterId, orgId)
@@ -289,6 +313,15 @@ export async function syncInvoiceForEpisode(
     .single()
   const consultationFee: number = (org as any)?.medical_fee ?? 50_000
 
+  const { data: labServicePrices } = await supabase
+    .from('lab_services')
+    .select('loinc_code, price')
+    .eq('organization_id', (episode as any).organization_id)
+
+  const labPriceMap = new Map<string, number>(
+    (labServicePrices ?? []).map((s: any) => [s.loinc_code, Number(s.price)])
+  )
+
   for (const encId of encounterIds) {
     allItems.push({
       item_type: 'consultation',
@@ -304,12 +337,13 @@ export async function syncInvoiceForEpisode(
 
     for (const lo of (labOrders ?? [])) {
       for (const item of ((lo as any).lab_order_items ?? [])) {
+        const labPrice = labPriceMap.get(item.loinc_code) ?? 75_000
         allItems.push({
           item_type: 'lab',
           item_name: item.test_name,
           item_code: item.loinc_code,
           quantity: 1,
-          unit_price: 75_000,
+          unit_price: labPrice,
           reference_id: lo.id,
         })
       }

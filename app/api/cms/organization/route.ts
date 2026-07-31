@@ -29,6 +29,8 @@ export async function GET(request: NextRequest) {
                 phone,
                 email,
                 head_name,
+                medical_fee,
+                action_fee,
                 operational_hours,
                 logo_url,
                 ss_organization_id,
@@ -74,7 +76,7 @@ export async function PUT(request: NextRequest) {
         if (isGuardError(admin)) return admin
 
         const body = await request.json()
-        const { name, address, phone, email, head_name, operational_hours } = body
+        const { name, address, phone, email, head_name, medical_fee, action_fee, operational_hours } = body
 
         const updates: Record<string, unknown> = {}
         if (name !== undefined) updates.name = name
@@ -82,6 +84,16 @@ export async function PUT(request: NextRequest) {
         if (phone !== undefined) updates.phone = phone
         if (email !== undefined) updates.email = email
         if (head_name !== undefined) updates.head_name = head_name
+        if (medical_fee !== undefined) {
+            const v = Number(medical_fee)
+            if (isNaN(v) || v < 0) return apiResponse.badRequest('medical_fee tidak valid')
+            updates.medical_fee = v
+        }
+        if (action_fee !== undefined) {
+            const v = Number(action_fee)
+            if (isNaN(v) || v < 0) return apiResponse.badRequest('action_fee tidak valid')
+            updates.action_fee = v
+        }
         if (operational_hours !== undefined) {
             if (typeof operational_hours !== 'object' || Array.isArray(operational_hours)) {
                 return apiResponse.badRequest('operational_hours must be a JSON object')

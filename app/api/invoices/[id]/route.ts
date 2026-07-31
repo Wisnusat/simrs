@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
@@ -134,16 +135,18 @@ export async function PATCH(
         .eq('id', (data as any).encounter_id)
     }
 
-    // Inpatient: auto-discharge admission + close episode when invoice paid
+    // Inpatient: auto-discharge admission + close episode when invoice paid.
+    // Must use admin client — cashier role is blocked by RLS from writing to these tables.
     const episodeId = (invoice as any).episode_of_care_id
     if (episodeId) {
+      const admin = createAdminClient()
       const now = new Date().toISOString()
-      await supabase
+      await admin
         .from('inpatient_admissions')
         .update({ status: 'discharged', discharge_date: now })
         .eq('episode_of_care_id', episodeId)
-        .eq('status', 'discharge_approved') // only if doctor already approved
-      await supabase
+        .eq('status', 'discharge_approved')
+      await admin
         .from('episodes_of_care')
         .update({ status: 'discharged', end_date: now.split('T')[0] })
         .eq('id', episodeId)

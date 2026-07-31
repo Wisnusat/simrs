@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getCmsLabServices, postCmsLabService, deleteCmsLabService } from '@/lib/api/client'
+import { getCmsLabServices, postCmsLabService, deleteCmsLabService, patchCmsLabServicePrice } from '@/lib/api/client'
 import type { LabService } from '@/lib/types/outpatient'
 
 export function useLabServices() {
@@ -46,6 +46,16 @@ export function useLabServices() {
     }
   }, [])
 
+  const updatePrice = useCallback(async (id: string, price: number): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const updated = await patchCmsLabServicePrice(id, price)
+      setData(prev => prev.map(s => s.id === id ? { ...s, price: updated.price } : s))
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Gagal menyimpan harga' }
+    }
+  }, [])
+
   const addedLoincs = useMemo(() => new Set(data.map(s => s.loinc_code)), [data])
 
   const grouped = useMemo(() =>
@@ -57,5 +67,5 @@ export function useLabServices() {
     [data]
   )
 
-  return { data, loading, actionLoading, refresh, add, remove, addedLoincs, grouped }
+  return { data, loading, actionLoading, refresh, add, remove, updatePrice, addedLoincs, grouped }
 }
