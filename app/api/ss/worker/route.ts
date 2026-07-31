@@ -13,6 +13,9 @@ function authorized(req: NextRequest): boolean {
 }
 
 async function run(req: NextRequest) {
+  if (!process.env.SATUSEHAT_CLIENT_ID || !process.env.SATUSEHAT_CLIENT_SECRET) {
+    return apiResponse.ok({ disabled: true, message: 'SatuSehat credentials not configured' })
+  }
   if (!authorized(req)) return apiResponse.unauthorized()
   const supabase = createAdminClient()
   try {

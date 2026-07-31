@@ -1,5 +1,3 @@
 {
-  "crons": [
-    { "path": "/api/ss/worker", "schedule": "0 13 * * *" }
-  ]
+  "crons": []
 }
