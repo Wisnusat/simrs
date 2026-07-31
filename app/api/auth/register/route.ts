@@ -1,26 +1,21 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
-import { requireAdmin, isGuardError } from '@/lib/api/guards'
 
 const ORGANIZATION_ID = '28b360d2-93a2-4c97-a032-83af396be6ba'
 
-const VALID_ROLES = ['doctor', 'nurse', 'pharmacist', 'cashier', 'lab_nurse', 'nutritionist', 'admin']
+// Admin and owner roles cannot be self-registered — created by existing admins only
+const VALID_ROLES = ['doctor', 'nurse', 'pharmacist', 'cashier', 'lab_nurse', 'nutritionist']
 
 /**
  * POST /api/auth/register
- * Register a new practitioner — creates Supabase Auth user + practitioners record.
+ * Self-registration for staff. Account starts inactive — admin must approve.
  * organization_id is hardcoded (single-org deployment).
  */
 export async function POST(request: NextRequest) {
     const rl = await rateLimit(request, 'auth:register', RATE_LIMITS.auth)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
-
-    const supabase = await createClient()
-    const auth = await requireAdmin(supabase)
-    if (isGuardError(auth)) return auth
 
     try {
         const body = await request.json()
@@ -85,7 +80,7 @@ export async function POST(request: NextRequest) {
                 specialization: specialization?.trim() || null,
                 str_number: str_number?.trim() || null,
                 sip_number: sip_number?.trim() || null,
-                is_active: true,
+                is_active: false,
             })
             .select('id, full_name, role')
             .single()
