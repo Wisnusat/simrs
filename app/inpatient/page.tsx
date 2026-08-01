@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
+import { useAdmissionRequestCount } from "@/hooks/use-admission-request-count"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
@@ -38,11 +39,11 @@ import { StatusBadge } from "@/components/shared/status-badge"
 
 import type { InpatientAdmission, ClinicalNote, VitalSigns as VitalSignsType, LabOrder, SurgeryRequest, EpisodeOfCare, Location, InpatientRoomClass } from "@/lib/types/outpatient"
 
-const SIDEBAR = (active: string, set: (v: string) => void) => [
+const SIDEBAR = (active: string, set: (v: string) => void, admissionCount = 0) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: BedDouble, label: "Pasien Rawat Inap", active: active === "patients", onClick: () => set("patients") },
   { icon: ClipboardList, label: "CPPT Harian", active: active === "cppt", onClick: () => set("cppt") },
-  { icon: Activity, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
+  { icon: Activity, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions"), badge: admissionCount || undefined },
   { icon: LogOut, label: "Pulang Hari Ini", active: active === "discharged", onClick: () => set("discharged") },
 ]
 
@@ -71,6 +72,7 @@ export default function InpatientNurseDashboard() {
   const [assignForm, setAssignForm] = useState({ room_location_id: '', bed_number: '', room_class: 'kelas_3' as InpatientRoomClass })
   const [assignSubmitting, setAssignSubmitting] = useState(false)
 
+  const admissionRequestCount = useAdmissionRequestCount()
   const { data: admissions, loading: admLoading, refresh: refreshAdm, stats } = useAdmissions()
   const { data: dischargedToday, loading: dischargedLoading, refresh: refreshDischarged } = useAdmissions({ status: 'discharged' })
 
@@ -231,7 +233,7 @@ export default function InpatientNurseDashboard() {
     : 0
 
   return (
-    <DashboardLayout title="Rawat Inap" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
+    <DashboardLayout title="Rawat Inap" role="nurse" sidebarItems={SIDEBAR(view, setView, admissionRequestCount)}>
       {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">

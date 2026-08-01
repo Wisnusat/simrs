@@ -55,6 +55,7 @@ interface DashboardLayoutProps {
     href?: string
     onClick?: () => void
     active?: boolean
+    badge?: number
   }>
   hideSidebar?: boolean
 }
@@ -187,6 +188,11 @@ export default function DashboardLayout({
                           <Link href={item.href} onClick={item.onClick}>
                             <Icon />
                             <span>{item.label}</span>
+                            {!!item.badge && (
+                              <span className="ml-auto text-[10px] font-bold leading-none bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center group-data-[collapsible=icon]:hidden">
+                                {item.badge > 99 ? "99+" : item.badge}
+                              </span>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                       ) : (
@@ -198,6 +204,11 @@ export default function DashboardLayout({
                         >
                           <Icon />
                           <span>{item.label}</span>
+                          {!!item.badge && (
+                            <span className="ml-auto text-[10px] font-bold leading-none bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center group-data-[collapsible=icon]:hidden">
+                              {item.badge > 99 ? "99+" : item.badge}
+                            </span>
+                          )}
                         </SidebarMenuButton>
                       )}
                     </SidebarMenuItem>

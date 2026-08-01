@@ -22,17 +22,18 @@ import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
 import { announcePatient } from "@/lib/utils"
 import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
+import { useSurgeryCount } from "@/hooks/use-surgery-count"
 
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
-const SIDEBAR = (active: string, set: (v: string) => void) => [
+const SIDEBAR = (active: string, set: (v: string) => void, surgeryCount = 0) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users, label: "Antrian Pasien", active: active === "queue", onClick: () => set("queue") },
   // { icon: UserPlus, label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
   { icon: BedDouble, label: "Rawat Inap", href: "/inpatient" },
   { icon: AlertTriangle, label: "IGD", href: "/emergency" },
-  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery"), badge: surgeryCount || undefined },
   { icon: Clock, label: "Riwayat", active: active === "history", onClick: () => set("history") },
 ]
 
@@ -41,6 +42,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
 // ---------------------------------------------------------------------------
 export default function NurseDashboard() {
   const [view, setView] = useState("dashboard")
+  const surgeryCount = useSurgeryCount()
   /** Entry selected for vital signs input (status: "called", encounter exists) */
   const [selected, setSelected] = useState<QueueEntry | null>(null)
   /** ID of entry currently being "called" (disables button during async ops) */
@@ -132,7 +134,7 @@ export default function NurseDashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <DashboardLayout title="Perawat" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
+    <DashboardLayout title="Perawat" role="nurse" sidebarItems={SIDEBAR(view, setView, surgeryCount)}>
       {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">

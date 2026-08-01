@@ -25,13 +25,14 @@ import { InpatientPatientList } from "@/components/inpatient/patient-list"
 import { InpatientVisitForm } from "@/components/doctor/inpatient-visit-form"
 import type { QueueEntry, InpatientAdmission } from "@/lib/types/outpatient"
 import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
+import { useSurgeryCount } from "@/hooks/use-surgery-count"
 
-const SIDEBAR = (active: string, set: (v: string) => void) => [
+const SIDEBAR = (active: string, set: (v: string) => void, surgeryCount = 0) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users, label: "Pasien Hari Ini", active: active === "patients", onClick: () => set("patients") },
   // { icon: FlaskConical,    label: "Permintaan Lab",         active: active === "lab",           onClick: () => set("lab") },
   { icon: AlertTriangle, label: "IGD", href: "/emergency" },
-  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery"), badge: surgeryCount || undefined },
   { icon: BedDouble, label: "Rawat Inap", active: active === "inpatient", onClick: () => set("inpatient") },
   { icon: Pill, label: "Resep Obat", active: active === "prescriptions", onClick: () => set("prescriptions") },
   { icon: History, label: "Riwayat Pemeriksaan", active: active === "history", onClick: () => set("history") },
@@ -39,6 +40,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
 
 export default function DoctorDashboard() {
   const [view, setView] = useState("dashboard")
+  const surgeryCount = useSurgeryCount()
   const [examEntry, setExamEntry] = useState<QueueEntry | null>(null)
   const [labEntry, setLabEntry] = useState<QueueEntry | null>(null)
   const [inpatientVisit, setInpatientVisit] = useState<InpatientAdmission | null>(null)
@@ -120,7 +122,7 @@ export default function DoctorDashboard() {
   }
 
   return (
-    <DashboardLayout title="Dokter" role="doctor" sidebarItems={SIDEBAR(view, setView)}>
+    <DashboardLayout title="Dokter" role="doctor" sidebarItems={SIDEBAR(view, setView, surgeryCount)}>
       {/* DASHBOARD */}
       {view === "dashboard" && (
         <div className="space-y-6">
