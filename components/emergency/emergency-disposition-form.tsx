@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, ArrowRightCircle, BedDouble, Info } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Loader2, ArrowRightCircle, BedDouble, Info, Activity } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-import type { EmergencyEncounter } from "@/lib/types/outpatient"
+import type { EmergencyEncounter, ReferralUrgency } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
+import { postReferral } from "@/lib/api/client"
 import { toast } from "sonner"
 
 interface EmergencyDispositionFormProps {
@@ -20,30 +22,55 @@ interface EmergencyDispositionFormProps {
 
 export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDispositionFormProps) {
   const [outcome, setOutcome] = useState<string>("discharged")
-  const [referredTo, setReferredTo] = useState("")
-  const [referralLetter, setReferralLetter] = useState("")
-  const [dischargeSummary, setDischargeSummary] = useState("")
 
-  const { resolveOutcome, actionLoading } = useEmergency()
+  // Referral fields — same as doctor examination form
+  const [referralDestination, setReferralDestination] = useState("")
+  const [referralSpecialty, setReferralSpecialty] = useState("")
+  const [referralReason, setReferralReason] = useState("")
+  const [referralUrgency, setReferralUrgency] = useState<ReferralUrgency>("routine")
+  const [dischargeSummary, setDischargeSummary] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  const { resolveOutcome } = useEmergency()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (outcome === "referred" && !referredTo) {
-      toast.error("Tujuan rujukan harus diisi")
-      return
+    if (outcome === "referred") {
+      if (!referralDestination.trim()) { toast.error("Faskes tujuan wajib diisi"); return }
+      if (!referralReason.trim()) { toast.error("Alasan rujukan wajib diisi"); return }
     }
 
-    const input: Parameters<typeof resolveOutcome>[1] = {
-      outcome: outcome as 'discharged' | 'referred' | 'admitted_inpatient',
-      ...(outcome === "referred" && {
-        referred_to: referredTo,
-        referral_letter_no: referralLetter || undefined,
-      }),
-    }
+    setSubmitting(true)
+    try {
+      const result = await resolveOutcome(encounter.id, {
+        outcome: outcome as 'discharged' | 'referred' | 'admitted_inpatient',
+        ...(outcome === "referred" && {
+          referred_to: referralDestination,
+        }),
+      })
 
-    const result = await resolveOutcome(encounter.id, input)
-    if (result) onSuccess()
+      if (!result) return
+
+      // Create full referral record (same as doctor flow)
+      if (outcome === "referred") {
+        await postReferral({
+          encounter_id: encounter.encounter_id,
+          patient_id: encounter.patient_id,
+          destination_facility_name: referralDestination,
+          destination_specialty: referralSpecialty || undefined,
+          referral_reason: referralReason,
+          urgency: referralUrgency,
+        }).catch(() => {
+          // non-fatal — outcome already saved
+          toast.error("Gagal menyimpan detail rujukan, namun disposisi berhasil.")
+        })
+      }
+
+      onSuccess()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -73,23 +100,47 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
         </div>
 
         {outcome === "referred" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30">
-            <div className="space-y-2">
-              <Label>Tujuan Rujukan (Nama RS) *</Label>
-              <Input
-                value={referredTo}
-                onChange={(e) => setReferredTo(e.target.value)}
-                required
-                placeholder="Mis: RS Pusat..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Nomor Surat Rujukan</Label>
-              <Input
-                value={referralLetter}
-                onChange={(e) => setReferralLetter(e.target.value)}
-                placeholder="Opsional"
-              />
+          <div className="space-y-4 p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
+            <h4 className="font-semibold flex items-center gap-2 text-sm">
+              <Activity className="w-4 h-4 text-purple-500" /> Pengaturan Rujukan Keluar
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Faskes Tujuan *</Label>
+                <Input
+                  value={referralDestination}
+                  onChange={(e) => setReferralDestination(e.target.value)}
+                  placeholder="Ex: RSUD Kota Bandung"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Poli / Spesialisasi</Label>
+                <Input
+                  value={referralSpecialty}
+                  onChange={(e) => setReferralSpecialty(e.target.value)}
+                  placeholder="Ex: Poli Jantung"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Alasan Rujukan *</Label>
+                <Input
+                  value={referralReason}
+                  onChange={(e) => setReferralReason(e.target.value)}
+                  placeholder="Mis. Fasilitas tidak memadai, butuh spesialis"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Urgensi</Label>
+                <Select value={referralUrgency} onValueChange={(v) => setReferralUrgency(v as ReferralUrgency)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="routine">Rutin (Biasa)</SelectItem>
+                    <SelectItem value="urgent">Urgen (Segera)</SelectItem>
+                    <SelectItem value="emergency">Gawat Darurat</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
             </div>
           </div>
         )}
@@ -120,10 +171,10 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
       <div className="flex justify-end">
         <Button
           type="submit"
-          disabled={actionLoading}
+          disabled={submitting}
           className="bg-blue-600 hover:bg-blue-700"
         >
-          {actionLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Memproses...</> : "Selesaikan Kunjungan IGD"}
+          {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Memproses...</> : "Selesaikan Kunjungan IGD"}
         </Button>
       </div>
     </form>
