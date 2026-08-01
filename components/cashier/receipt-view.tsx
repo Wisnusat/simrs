@@ -17,7 +17,7 @@ export function ReceiptView({ invoice }: ReceiptViewProps) {
       {/* Header */}
       <div className="text-center space-y-1">
         <h2 className="text-base font-bold">BUKTI PEMBAYARAN</h2>
-        <p className="text-xs text-gray-500">Sistem Informasi Manajemen Rumah Sakit</p>
+        <p className="text-xs text-gray-500">Klinik Harapan Bunda</p>
       </div>
 
       <Separator />
