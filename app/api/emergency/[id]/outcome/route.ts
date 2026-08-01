@@ -4,7 +4,6 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
-import { enqueueSync } from '@/lib/satusehat/queue'
 import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -112,16 +111,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             return apiResponse.serverError('Failed to update emergency outcome')
         }
 
-        // Tutup encounter utama
-        const { error: encounterUpdateError } = await supabase
-            .from('encounters')
-            .update({ status: 'finished', finished_at: now.toISOString() })
-            .eq('id', existing.encounter_id)
-
-        if (encounterUpdateError) {
-            console.warn('Encounter close error (outcome):', encounterUpdateError)
-        }
-
         let episodeId: string | null = null
 
         if (outcome === 'admitted_inpatient') {
@@ -154,7 +143,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             }
 
             episodeId = episode.id
-            enqueueSync(supabase, 'EpisodeOfCare', episode.id).catch(() => {})
+            // EpisodeOfCare FHIR sync not yet implemented — wired in task 16
+        }
+
+        // Tutup encounter IGD — link ke episode agar lab orders & clinical notes
+        // tetap ditemukan saat query by episode_of_care_id di rawat inap
+        const { error: encounterUpdateError } = await supabase
+            .from('encounters')
+            .update({
+                status: 'finished',
+                finished_at: now.toISOString(),
+                ...(episodeId ? { episode_of_care_id: episodeId } : {}),
+            })
+            .eq('id', existing.encounter_id)
+
+        if (encounterUpdateError) {
+            console.warn('Encounter close error (outcome):', encounterUpdateError)
         }
 
         // Generate invoice for non-inpatient outcomes (discharged/referred)
