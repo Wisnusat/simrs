@@ -34,6 +34,10 @@ export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeForm
       setError("Nama pasien harus diisi")
       return
     }
+    if (nik && nik.length !== 16) {
+      setError("NIK harus 16 digit")
+      return
+    }
     
     setLoading(true)
     setError("")
@@ -107,14 +111,22 @@ export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeForm
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       <div className="space-y-2">
-        <Label>NIK / Kartu Identitas</Label>
-        <div className="flex gap-2">
-          <Input 
-            value={nik} 
-            onChange={(e) => setNik(e.target.value)} 
-            placeholder="Ketik NIK..." 
-          />
+        <div className="flex items-center justify-between">
+          <Label>NIK / Kartu Identitas</Label>
+          <span className={`text-xs ${nik.length === 16 ? "text-green-600" : "text-foreground/50"}`}>
+            {nik.length}/16 digit
+          </span>
         </div>
+        <Input
+          value={nik}
+          onChange={(e) => setNik(e.target.value.replace(/\D/g, "").slice(0, 16))}
+          placeholder="Masukkan 16 digit NIK (opsional)"
+          maxLength={16}
+          inputMode="numeric"
+        />
+        {nik.length > 0 && nik.length < 16 && (
+          <p className="text-xs text-amber-600">NIK harus tepat 16 digit</p>
+        )}
       </div>
 
       <div className="space-y-2">

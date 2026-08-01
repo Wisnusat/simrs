@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer, BedDouble, Loader2 } from "lucide-react"
+import { AlertTriangle, ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer, BedDouble, Loader2 } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { usePrescriptions } from "@/hooks/outpatient/use-prescriptions"
@@ -30,6 +30,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users, label: "Pasien Hari Ini", active: active === "patients", onClick: () => set("patients") },
   // { icon: FlaskConical,    label: "Permintaan Lab",         active: active === "lab",           onClick: () => set("lab") },
+  { icon: AlertTriangle, label: "IGD", href: "/emergency" },
   { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
   { icon: BedDouble, label: "Rawat Inap", active: active === "inpatient", onClick: () => set("inpatient") },
   { icon: Pill, label: "Resep Obat", active: active === "prescriptions", onClick: () => set("prescriptions") },

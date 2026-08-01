@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
+import { Activity, AlertTriangle, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { createEncounter, patchQueueStatus, postAllergy } from "@/lib/api/client"
@@ -32,6 +32,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: Users, label: "Antrian Pasien", active: active === "queue", onClick: () => set("queue") },
   // { icon: UserPlus, label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
   { icon: BedDouble, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
+  { icon: AlertTriangle, label: "IGD", href: "/emergency" },
   { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
   { icon: Clock, label: "Riwayat", active: active === "history", onClick: () => set("history") },
 ]
