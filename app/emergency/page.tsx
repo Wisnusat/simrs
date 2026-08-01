@@ -57,7 +57,7 @@ export default function EmergencyDashboard() {
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
 
   // Fetch only active ones for main dashboard
-  const { data: encounters, loading: encLoading, refresh: refreshEnc } = useEmergency({ limit: 50 })
+  const { data: encounters, loading: encLoading, refreshing: encRefreshing, refresh: refreshEnc } = useEmergency({ limit: 50 })
   
   const activeEncounters = encounters.filter(e => !["completed", "referred_out", "admitted_to_inpatient"].includes(e.status))
   
@@ -127,8 +127,8 @@ export default function EmergencyDashboard() {
               description="Kelola pasien Gawat Darurat (Triage & Tindakan)"
             />
             <div className="flex gap-2">
-              <Button variant="outline" onClick={refreshEnc} disabled={encLoading}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${encLoading ? "animate-spin" : ""}`} /> Refresh
+              <Button variant="outline" onClick={refreshEnc} disabled={encRefreshing}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${encRefreshing ? "animate-spin" : ""}`} /> Refresh
               </Button>
               <Button onClick={() => setShowIntake(true)} className="bg-orange-600 hover:bg-orange-700">
                 <UserPlus className="w-4 h-4 mr-2" /> Pasien Baru IGD
@@ -193,7 +193,7 @@ export default function EmergencyDashboard() {
             title="Daftar Pasien IGD"
             description="Semua pasien — aktif dan selesai"
             onRefresh={refreshEnc}
-            isRefreshing={encLoading}
+            isRefreshing={encRefreshing}
           />
           {encLoading ? (
             <p className="text-sm text-center py-8 text-muted-foreground">Memuat pasien...</p>

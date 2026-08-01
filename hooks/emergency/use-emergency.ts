@@ -22,13 +22,13 @@ interface UseEmergencyOptions {
 export function useEmergency(opts?: UseEmergencyOptions) {
   const [data, setData] = useState<EmergencyEncounter[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: opts?.limit ?? 20 })
 
   const fetchEncounters = useCallback(async (page = 1) => {
     try {
-      setLoading(true)
       const res = await getEmergencyEncounters({
         status: opts?.status,
         search: opts?.search,
@@ -40,23 +40,27 @@ export function useEmergency(opts?: UseEmergencyOptions) {
       setError(null)
     } catch (e: any) {
       setError(e.message || "Failed to fetch emergency encounters")
-      toast.error(e.message || "Gagal memuat data IGD")
     } finally {
       setLoading(false)
     }
   }, [opts?.status, opts?.search, opts?.limit])
 
-  const refresh = useCallback(() => fetchEncounters(1), [fetchEncounters])
+  // Manual refresh — shows spinner; polling uses fetchEncounters directly (silent)
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    try { await fetchEncounters(1) }
+    finally { setRefreshing(false) }
+  }, [fetchEncounters])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => { fetchEncounters() }, [fetchEncounters])
 
   useRealtimeSync({
     table: 'encounters',
     filter: 'encounter_class=eq.emergency',
-    onchange: refresh,
+    onchange: () => fetchEncounters(1),
   })
 
-  usePolling(refresh, opts?.fallbackPollMs ?? 60_000)
+  usePolling(() => fetchEncounters(1), opts?.fallbackPollMs ?? 60_000)
 
   const create = async (input: {
     patient_id: string
@@ -176,9 +180,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     data,
     meta,
     loading,
+    refreshing,
     actionLoading,
     error,
-    refresh: fetchEncounters,
+    refresh,
     create,
     update,
     triage,
