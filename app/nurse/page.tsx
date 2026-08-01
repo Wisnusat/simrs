@@ -20,7 +20,6 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
 import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
-import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
 import { announcePatient } from "@/lib/utils"
 import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
 
@@ -31,7 +30,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users, label: "Antrian Pasien", active: active === "queue", onClick: () => set("queue") },
   // { icon: UserPlus, label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
-  { icon: BedDouble, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
+  { icon: BedDouble, label: "Rawat Inap", href: "/inpatient" },
   { icon: AlertTriangle, label: "IGD", href: "/emergency" },
   { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
   { icon: Clock, label: "Riwayat", active: active === "history", onClick: () => set("history") },
@@ -289,11 +288,6 @@ export default function NurseDashboard() {
           </Card>
         </div>
       )} */}
-
-      {/* ── ADMISSION REQUESTS ── */}
-      {view === "admissions" && (
-        <AdmissionRequestsView />
-      )}
 
       {/* ── SURGERY DASHBOARD ── */}
       {view === "surgery" && (

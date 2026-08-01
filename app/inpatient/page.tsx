@@ -30,6 +30,7 @@ import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { InpatientPatientList } from "@/components/inpatient/patient-list"
 import { CpptForm } from "@/components/inpatient/cppt-form"
 import { VitalSignsForm } from "@/components/nurse/vital-signs-form"
+import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
 import { AllergyForm } from "@/components/nutritionist/allergy-form"
 import { StatCard } from "@/components/shared/stat-card"
 import { PageHeader } from "@/components/shared/page-header"
@@ -41,6 +42,7 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: BedDouble, label: "Pasien Rawat Inap", active: active === "patients", onClick: () => set("patients") },
   { icon: ClipboardList, label: "CPPT Harian", active: active === "cppt", onClick: () => set("cppt") },
+  { icon: Activity, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
   { icon: LogOut, label: "Pulang Hari Ini", active: active === "discharged", onClick: () => set("discharged") },
 ]
 
@@ -718,6 +720,11 @@ export default function InpatientNurseDashboard() {
             />
           )}
         </div>
+      )}
+
+      {/* ── PERMINTAAN RAWAT INAP ── */}
+      {view === "admissions" && (
+        <AdmissionRequestsView />
       )}
 
       {/* ── PULANG HARI INI ── */}
