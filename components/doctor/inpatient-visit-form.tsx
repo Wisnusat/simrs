@@ -21,7 +21,7 @@ import {
   getClinicalNotesByEpisode, getVitalSigns, getMedications,
   patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
   createEncounter, postInpatientDailyRecord, postSurgeryRequest,
-  postMedicalResume, getMedicalResume,
+  postMedicalResume, getMedicalResume, getEncounters,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
@@ -40,6 +40,18 @@ interface InpatientVisitFormProps {
 export function InpatientVisitForm({ admission, onBack, onDischarge }: InpatientVisitFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (!admission.episode_of_care_id) return
+    getEncounters({ episode_of_care_id: admission.episode_of_care_id })
+      .then((encs: any[]) => {
+        const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
+        const first = outpatient ?? encs[0]
+        if (first?.poli_service_id) setPoliServiceId(first.poli_service_id)
+      })
+      .catch(() => {})
+  }, [admission.episode_of_care_id])
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
   const [discharging, setDischarging] = useState(false)
@@ -70,7 +82,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     admissionId: admission.id,
     episodeOfCareId: admission.episode_of_care_id,
     patientId: admission.patient_id,
-    poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b",
+    poliServiceId,
   })
 
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null

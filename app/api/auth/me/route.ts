@@ -24,6 +24,7 @@ export async function GET() {
         email,
         phone,
         organization_id,
+        poli_service_id,
         organizations (
           id,
           name,
@@ -50,6 +51,7 @@ export async function GET() {
                 specialization: practitioner.specialization,
                 email: practitioner.email,
                 phone: practitioner.phone,
+                poli_service_id: practitioner.poli_service_id ?? null,
                 organization: practitioner.organizations,
             },
         })

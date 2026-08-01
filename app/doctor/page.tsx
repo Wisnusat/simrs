@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -41,8 +41,16 @@ export default function DoctorDashboard() {
   const [examEntry, setExamEntry] = useState<QueueEntry | null>(null)
   const [labEntry, setLabEntry] = useState<QueueEntry | null>(null)
   const [inpatientVisit, setInpatientVisit] = useState<InpatientAdmission | null>(null)
+  const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
 
-  const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({ poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b" })
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => { if (d.success && d.data.poli_service_id) setPoliServiceId(d.data.poli_service_id) })
+      .catch(() => {})
+  }, [])
+
+  const { data: queue, loading: qLoading, refresh: refreshQueue, stats: qStats } = useQueue({ poliServiceId })
   const { create: createLab, actionLoading: labActing, error: labError } = useLabOrders({ today: true })
   const { data: prescriptions, loading: rxLoading, refresh: refreshRx, stats: rxStats } = usePrescriptions({ today: true })
   const { data: inpatientAdmissions, loading: ipLoading, refresh: refreshIp, stats: ipStats } = useAdmissions()

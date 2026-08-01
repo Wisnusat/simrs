@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         if (isGuardError(admin)) return admin
 
         const body = await request.json()
-        const { full_name, email, password, role, specialization, gender, phone, nik, nip, str_number, sip_number } = body
+        const { full_name, email, password, role, specialization, gender, phone, nik, nip, str_number, sip_number, poli_service_id } = body
 
         if (!full_name || !role) {
             return apiResponse.badRequest('full_name and role are required')
@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
             nip: nip ?? null,
             str_number: str_number ?? null,
             sip_number: sip_number ?? null,
+            poli_service_id: poli_service_id ?? null,
             is_active: true,
             ...(userId ? { user_id: userId } : {}),
         }

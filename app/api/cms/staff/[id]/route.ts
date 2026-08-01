@@ -56,15 +56,22 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
         const { id } = await ctx.params
         const body = await request.json()
 
+        if (body.full_name !== undefined && !body.full_name?.trim())
+            return apiResponse.badRequest('Nama lengkap tidak boleh kosong')
+        if (body.role !== undefined && !body.role)
+            return apiResponse.badRequest('Role tidak boleh kosong')
+
         const allowedFields = [
             'full_name', 'role', 'specialization', 'gender', 'phone',
-            'email', 'nik', 'nip', 'str_number', 'sip_number', 'is_active'
+            'email', 'nik', 'nip', 'str_number', 'sip_number', 'is_active',
+            'poli_service_id',
         ]
 
         const updates: Record<string, unknown> = {}
         for (const field of allowedFields) {
             if (body[field] !== undefined) {
-                updates[field] = body[field]
+                // Normalize empty strings to null for optional fields
+                updates[field] = body[field] === '' ? null : body[field]
             }
         }
 

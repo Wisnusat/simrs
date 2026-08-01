@@ -3,15 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 
-const ORGANIZATION_ID = '28b360d2-93a2-4c97-a032-83af396be6ba'
-
 // Admin and owner roles cannot be self-registered — created by existing admins only
 const VALID_ROLES = ['doctor', 'nurse', 'pharmacist', 'cashier', 'lab_nurse', 'nutritionist']
 
 /**
  * POST /api/auth/register
  * Self-registration for staff. Account starts inactive — admin must approve.
- * organization_id is hardcoded (single-org deployment).
  */
 export async function POST(request: NextRequest) {
     const rl = await rateLimit(request, 'auth:register', RATE_LIMITS.auth)
@@ -50,6 +47,17 @@ export async function POST(request: NextRequest) {
 
         const supabaseAdmin = createAdminClient()
 
+        // ── Resolve organization (single-org deployment) ────────────────────
+        const { data: org, error: orgError } = await supabaseAdmin
+            .from('organizations')
+            .select('id')
+            .limit(1)
+            .single()
+
+        if (orgError || !org) {
+            return apiResponse.serverError('Organisasi tidak ditemukan')
+        }
+
         // ── Create Supabase Auth user ───────────────────────────────────────
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email: email.trim().toLowerCase(),
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
             .from('practitioners')
             .insert({
                 user_id: authData.user.id,
-                organization_id: ORGANIZATION_ID,
+                organization_id: org.id,
                 full_name: full_name.trim(),
                 nik: nik.trim(),
                 email: email.trim().toLowerCase(),

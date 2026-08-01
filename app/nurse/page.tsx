@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -46,8 +46,16 @@ export default function NurseDashboard() {
   /** ID of entry currently being "called" (disables button during async ops) */
   const [callingId, setCallingId] = useState<string | null>(null)
   const [callError, setCallError] = useState<string | null>(null)
+  const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
 
-  const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId: '9bba8621-c9b7-4d62-8301-3d0dfa048a6b' })
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => { if (d.success && d.data.poli_service_id) setPoliServiceId(d.data.poli_service_id) })
+      .catch(() => {})
+  }, [])
+
+  const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId })
   const { submit, loading: vsLoading, error: vsError, clearError } = useVitalSigns()
 
   const [preparingEncounter, setPreparingEncounter] = useState<string | null>(null)

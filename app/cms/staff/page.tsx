@@ -61,15 +61,17 @@ interface StaffForm {
     nip: string
     str_number: string
     sip_number: string
+    poli_service_id: string
 }
 
 const emptyForm: StaffForm = {
     full_name: '', email: '', password: '', role: '', specialization: '', gender: '', phone: '',
-    nik: '', nip: '', str_number: '', sip_number: '',
+    nik: '', nip: '', str_number: '', sip_number: '', poli_service_id: '',
 }
 
 export default function StaffPage() {
     const [staff, setStaff] = useState<any[]>([])
+    const [poliServices, setPoliServices] = useState<{ id: string; name: string }[]>([])
     const [loading, setLoading] = useState(true)
     const [showDialog, setShowDialog] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
@@ -79,6 +81,13 @@ export default function StaffPage() {
     const [filterRole, setFilterRole] = useState<string>('')
     const [showInactive, setShowInactive] = useState(false)
     const [search, setSearch] = useState('')
+
+    useEffect(() => {
+        fetch('/api/cms/poli')
+            .then(r => r.json())
+            .then(d => { if (d.success) setPoliServices(d.data ?? []) })
+            .catch(() => {})
+    }, [])
 
     const fetchStaff = useCallback(async () => {
         try {
@@ -119,6 +128,7 @@ export default function StaffPage() {
             nip: member.nip ?? '',
             str_number: member.str_number ?? '',
             sip_number: member.sip_number ?? '',
+            poli_service_id: member.poli_service_id ?? '',
         })
         setEditingId(member.id)
         setShowPassword(false)
@@ -134,10 +144,14 @@ export default function StaffPage() {
         try {
             const url = editingId ? `/api/cms/staff/${editingId}` : '/api/cms/staff'
             const method = editingId ? 'PATCH' : 'POST'
+            const payload = {
+                ...form,
+                poli_service_id: form.poli_service_id || null,
+            }
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
+                body: JSON.stringify(payload),
             })
             const data = await res.json()
             if (data.success) {
@@ -403,6 +417,24 @@ export default function StaffPage() {
                                 </select>
                             </div>
                         </div>
+                        {(form.role === 'doctor' || form.role === 'nurse') && (
+                            <div className="space-y-2">
+                                <Label>
+                                    Poli / Layanan
+                                    <span className="ml-1.5 text-xs font-normal text-foreground/40">— untuk filter antrian pasien</span>
+                                </Label>
+                                <select
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    value={form.poli_service_id}
+                                    onChange={e => setForm(f => ({ ...f, poli_service_id: e.target.value }))}
+                                >
+                                    <option value="">Tidak ditentukan (tampilkan semua antrian)</option>
+                                    {poliServices.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>NIK</Label>
