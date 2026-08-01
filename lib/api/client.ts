@@ -119,7 +119,7 @@ export async function getVitalSigns(encounterId: string): Promise<VitalSigns[]> 
 
 export interface CreateEncounterInput {
   patient_id: string
-  poli_service_id: string
+  poli_service_id: string | null
   appointment_id?: string
   queue_id?: string
   payment_type?: string

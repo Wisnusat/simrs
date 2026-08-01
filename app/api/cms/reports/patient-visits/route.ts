@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
             else if (enc.encounter_class === 'inpatient') existing.inpatient++
             else if (enc.encounter_class === 'emergency') existing.emergency++
 
-            const poliName = (enc.poli_services as any)?.name ?? 'Lainnya'
+            const poliName = (enc.poli_services as any)?.name
+              ?? (enc.encounter_class === 'emergency' ? 'IGD'
+                : enc.encounter_class === 'inpatient' ? 'Rawat Inap'
+                : 'Lainnya')
             existing.by_poli[poliName] = (existing.by_poli[poliName] ?? 0) + 1
             poliTotals.set(poliName, (poliTotals.get(poliName) ?? 0) + 1)
 

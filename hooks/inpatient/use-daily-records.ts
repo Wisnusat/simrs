@@ -52,14 +52,15 @@ export function useDailyRecords(opts: UseDailyRecordsOptions) {
    */
   const createDailyRecord = useCallback(
     async (shift?: InpatientShift): Promise<string | null> => {
-      if (!admissionId || !patientId || !poliServiceId) return null
+      if (!admissionId || !patientId) return null
       setActionLoading(true)
       setError(null)
       try {
         // 1. Create inpatient encounter for this shift
+        // poli_service_id is optional for inpatient — IGD-admitted patients have none
         const encounter = await createEncounter({
           patient_id: patientId,
-          poli_service_id: poliServiceId,
+          poli_service_id: poliServiceId ?? null,
           encounter_class: "inpatient",
           payment_type: "umum",
           organization_id: organizationId,
