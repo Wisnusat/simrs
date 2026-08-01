@@ -9,11 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer, BedDouble } from "lucide-react"
+import { ClipboardList, FlaskConical, History, LayoutDashboard, Pill, Users, Activity, Heart, Thermometer, BedDouble, Loader2 } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { usePrescriptions } from "@/hooks/outpatient/use-prescriptions"
-import { patchEncounter } from "@/lib/api/client"
+import { patchEncounter, getDiagnoses, getClinicalNotes } from "@/lib/api/client"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import ExaminationForm from "@/components/doctor/examination-form"
 import { StatCard } from "@/components/shared/stat-card"
@@ -42,6 +42,8 @@ export default function DoctorDashboard() {
   const [labEntry, setLabEntry] = useState<QueueEntry | null>(null)
   const [inpatientVisit, setInpatientVisit] = useState<InpatientAdmission | null>(null)
   const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
+  const [historyDetail, setHistoryDetail] = useState<{ entry: QueueEntry; diagnoses: any[]; notes: any[] } | null>(null)
+  const [historyDetailLoading, setHistoryDetailLoading] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -63,6 +65,22 @@ export default function DoctorDashboard() {
   )
 
   const handleExamSave = () => { setExamEntry(null); refreshQueue(); setView("patients") }
+
+  const handleOpenHistoryDetail = async (entry: QueueEntry) => {
+    if (!entry.encounter?.id) return
+    setHistoryDetailLoading(entry.id)
+    try {
+      const [diagnoses, notes] = await Promise.all([
+        getDiagnoses(entry.encounter.id),
+        getClinicalNotes(entry.encounter.id),
+      ])
+      setHistoryDetail({ entry, diagnoses, notes })
+    } catch {
+      setHistoryDetail({ entry, diagnoses: [], notes: [] })
+    } finally {
+      setHistoryDetailLoading(null)
+    }
+  }
 
   const handleLabSubmit = async (input: Parameters<typeof createLab>[0]) => {
     const ok = await createLab(input)
@@ -208,12 +226,24 @@ export default function DoctorDashboard() {
           <PageHeader title="Riwayat Pemeriksaan" description="Selesai diperiksa hari ini" onRefresh={refreshQueue} isRefreshing={qLoading} />
           <div className="space-y-3">
             {queue.filter((q) => q.encounter?.status === "finished").map((entry) => (
-              <div key={entry.id} className="flex justify-between items-center p-4 border rounded-lg">
-                <div>
-                  <p className="font-semibold">{entry.patients.full_name}</p>
-                  <p className="text-sm text-foreground/60">{entry.appointments?.chief_complaint ?? "—"}</p>
+              <div key={entry.id} className="flex justify-between items-center p-4 border rounded-lg gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{entry.patients.full_name}</p>
+                  <p className="text-xs text-foreground/50">{entry.patients.medical_record_no ?? "—"} · #{entry.queue_number}</p>
                 </div>
-                <StatusBadge status={entry.encounter?.status ?? entry.status} />
+                <div className="flex items-center gap-2 shrink-0">
+                  <StatusBadge status={entry.encounter?.status ?? entry.status} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={historyDetailLoading === entry.id}
+                    onClick={() => handleOpenHistoryDetail(entry)}
+                  >
+                    {historyDetailLoading === entry.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : "Lihat Detail"}
+                  </Button>
+                </div>
               </div>
             ))}
             {queue.filter((q) => q.encounter?.status === "finished").length === 0 && !qLoading && (
@@ -333,6 +363,68 @@ export default function DoctorDashboard() {
               loading={labActing}
               error={labError}
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* History Detail Dialog */}
+      <Dialog open={!!historyDetail} onOpenChange={(o) => { if (!o) setHistoryDetail(null) }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogTitle>
+            Detail Pemeriksaan — {historyDetail?.entry.patients.full_name}
+          </DialogTitle>
+          {historyDetail && (
+            <div className="space-y-4 text-sm">
+              <p className="text-foreground/50 text-xs">
+                {historyDetail.entry.patients.medical_record_no} · #{historyDetail.entry.queue_number}
+              </p>
+
+              {/* Diagnoses */}
+              <div>
+                <p className="font-semibold mb-1.5">Diagnosis</p>
+                {historyDetail.diagnoses.length === 0 ? (
+                  <p className="text-foreground/50">Tidak ada diagnosis tercatat.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {historyDetail.diagnoses.map((d: any) => (
+                      <div key={d.id} className="flex items-start gap-2">
+                        <Badge variant="outline" className="font-mono text-xs shrink-0">{d.icd10_code}</Badge>
+                        <span className="text-foreground/80">{d.icd10_display}</span>
+                        {d.diagnosis_type === 'primary' && (
+                          <Badge className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 shrink-0">Utama</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SOAP Notes */}
+              {historyDetail.notes.length > 0 && (() => {
+                const note = historyDetail.notes[0]
+                return (
+                  <div className="space-y-2">
+                    <p className="font-semibold">Catatan SOAP</p>
+                    {note.subjective && (
+                      <div><p className="text-xs text-foreground/50 uppercase tracking-wide">Subjektif (Keluhan)</p><p>{note.subjective}</p></div>
+                    )}
+                    {note.objective && (
+                      <div><p className="text-xs text-foreground/50 uppercase tracking-wide">Objektif</p><p>{note.objective}</p></div>
+                    )}
+                    {note.assessment && (
+                      <div><p className="text-xs text-foreground/50 uppercase tracking-wide">Assessment</p><p>{note.assessment}</p></div>
+                    )}
+                    {note.plan && (
+                      <div><p className="text-xs text-foreground/50 uppercase tracking-wide">Plan</p><p>{note.plan}</p></div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {historyDetail.notes.length === 0 && historyDetail.diagnoses.length === 0 && (
+                <p className="text-foreground/50">Belum ada data pemeriksaan yang tercatat.</p>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>
