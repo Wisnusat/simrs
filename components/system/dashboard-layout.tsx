@@ -40,6 +40,7 @@ interface UserProfile {
   role: string
   specialization: string | null
   email: string
+  poli_service_name: string | null
   organization: { id: string; name: string; type: string } | null
 }
 
@@ -236,6 +237,11 @@ export default function DashboardLayout({
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="h-4" />
             <span className="text-sm font-medium text-foreground/70 truncate">{title}</span>
+            {profile?.poli_service_name && (
+              <span className="hidden sm:inline-flex items-center rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground/60">
+                {profile.poli_service_name}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
