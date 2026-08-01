@@ -56,6 +56,7 @@ export default function InpatientNurseDashboard() {
   const [surgeriesLoading, setSurgeriesLoading] = useState(false)
   const [labOpen, setLabOpen] = useState(false)
   const [cpptPoliServiceId, setCpptPoliServiceId] = useState<string | undefined>(undefined)
+  const [cpptPoliLoading, setCpptPoliLoading] = useState(false)
   const [cpptSubmitting, setCpptSubmitting] = useState(false)
 
   // Pending admissions (episodes_of_care without room — waiting for nurse room assignment)
@@ -172,6 +173,7 @@ export default function InpatientNurseDashboard() {
     setLabOrders([])
     setSurgeries([])
     setCpptPoliServiceId(undefined)
+    setCpptPoliLoading(true)
     // Resolve poli_service_id from the episode's outpatient encounter
     getEncounters({ episode_of_care_id: adm.episode_of_care_id })
       .then((encs) => {
@@ -180,6 +182,7 @@ export default function InpatientNurseDashboard() {
         setCpptPoliServiceId(first?.poli_service_id)
       })
       .catch(() => { })
+      .finally(() => setCpptPoliLoading(false))
     // Load previous notes from all encounters in this episode
     try {
       const notes = await getClinicalNotesByEpisode(adm.episode_of_care_id)
@@ -677,8 +680,13 @@ export default function InpatientNurseDashboard() {
 
           <Separator />
 
-          {/* CPPT Form — blocked while patient is in surgery */}
-          {surgeries.some(s => s.status === 'intra_operative') ? (
+          {/* CPPT Form — show loading while resolving poli service */}
+          {cpptPoliLoading ? (
+            <div className="flex items-center justify-center gap-3 py-12 text-foreground/50">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Memuat data pasien...</span>
+            </div>
+          ) : surgeries.some(s => s.status === 'intra_operative') ? (
             <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 text-center">
               <Stethoscope className="w-8 h-8 text-amber-500 animate-pulse" />
               <p className="font-semibold text-amber-700 dark:text-amber-300">Pasien Sedang Dalam Tindakan Operasi</p>

@@ -41,9 +41,11 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
+  const [poliLoading, setPoliLoading] = useState(true)
 
   useEffect(() => {
-    if (!admission.episode_of_care_id) return
+    if (!admission.episode_of_care_id) { setPoliLoading(false); return }
+    setPoliLoading(true)
     getEncounters({ episode_of_care_id: admission.episode_of_care_id })
       .then((encs: any[]) => {
         const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
@@ -51,6 +53,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
         if (first?.poli_service_id) setPoliServiceId(first.poli_service_id)
       })
       .catch(() => {})
+      .finally(() => setPoliLoading(false))
   }, [admission.episode_of_care_id])
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
@@ -259,8 +262,13 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
         </div>
       )}
 
-      {/* Create encounter for today if needed */}
-      {!currentEncounterId && (
+      {/* Loading while poli service resolves */}
+      {poliLoading ? (
+        <div className="flex items-center justify-center gap-3 py-12 text-foreground/50">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Memuat data pasien...</span>
+        </div>
+      ) : !currentEncounterId ? (
         <div className="p-4 rounded-lg border border-dashed border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20">
           <p className="text-sm font-medium mb-2">Mulai Kunjungan Hari Ini</p>
           <Button size="sm" onClick={() => createDailyRecord()} disabled={drAction}>
@@ -268,7 +276,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             Buat Encounter Visite
           </Button>
         </div>
-      )}
+      ) : null}
 
       {error && (
         <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
