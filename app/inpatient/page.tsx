@@ -13,6 +13,7 @@ import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
   FlaskConical, Stethoscope, Clock, Loader2, ChevronDown, ChevronRight, LogOut,
+  Calendar,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -223,6 +224,10 @@ export default function InpatientNurseDashboard() {
     return ok
   }, [createAllergy])
 
+  const daysSince = cpptAdm?.admission_date
+    ? Math.floor((Date.now() - new Date(cpptAdm.admission_date).getTime()) / (1000 * 60 * 60 * 24))
+    : 0
+
   return (
     <DashboardLayout title="Rawat Inap" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
       {/* ── DASHBOARD ── */}
@@ -415,13 +420,18 @@ export default function InpatientNurseDashboard() {
             <Button variant="ghost" size="icon" onClick={() => { setCpptAdm(null); setView("patients") }}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div>
+            <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold">{cpptAdm.patients.full_name}</h2>
-              <p className="text-sm text-foreground/60">
-                MR: {cpptAdm.patients.medical_record_no} · {cpptAdm.locations?.name} · Bed {cpptAdm.bed_number}
-              </p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
+                <span>MR: {cpptAdm.patients.medical_record_no}</span>
+                <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {cpptAdm.locations?.name} · Bed {cpptAdm?.bed_number}</span>
+                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Hari ke-{daysSince + 1}</span>
+              </div>
+              {cpptAdm.episodes_of_care?.diagnosis_primary && (
+                <p className="text-xs text-foreground/40 mt-0.5">Dx: {cpptAdm.episodes_of_care.diagnosis_primary}</p>
+              )}
             </div>
-            <StatusBadge status={cpptAdm.status} className="ml-auto" />
+            <StatusBadge status={cpptAdm.status} />
           </div>
 
           {/* Action buttons */}

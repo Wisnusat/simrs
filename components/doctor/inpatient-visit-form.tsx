@@ -13,23 +13,22 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Loader2, ArrowLeft, Activity, Heart, Thermometer,
-  BedDouble, Calendar, FlaskConical, Pill, FileText,
-  User, Clock,
+  BedDouble, Calendar, FlaskConical, FileText,
+  User, Clock, ChevronDown, ChevronRight,
 } from "lucide-react"
 import {
-  postClinicalNote, postDiagnosis, postPrescription,
-  getClinicalNotesByEpisode, getVitalSigns, getMedications,
-  patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
-  createEncounter, postInpatientDailyRecord, postSurgeryRequest,
+  postClinicalNote,
+  getClinicalNotesByEpisode, getVitalSigns, getLabOrders,
+  patchInpatientAdmission,
+  postSurgeryRequest,
   postMedicalResume, getMedicalResume, getEncounters,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { CpptForm } from "@/components/inpatient/cppt-form"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication, MedicalResume } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns, LabOrder, MedicalResume } from "@/lib/types/outpatient"
 
 interface InpatientVisitFormProps {
   admission: InpatientAdmission
@@ -41,19 +40,25 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
-  const [poliLoading, setPoliLoading] = useState(true)
+  const [labOpen, setLabOpen] = useState(false)
+  const [episodeLabOrders, setEpisodeLabOrders] = useState<LabOrder[]>([])
 
   useEffect(() => {
-    if (!admission.episode_of_care_id) { setPoliLoading(false); return }
-    setPoliLoading(true)
+    if (!admission.episode_of_care_id) return
     getEncounters({ episode_of_care_id: admission.episode_of_care_id })
       .then((encs: any[]) => {
         const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
         const first = outpatient ?? encs[0]
         if (first?.poli_service_id) setPoliServiceId(first.poli_service_id)
       })
-      .catch(() => {})
-      .finally(() => setPoliLoading(false))
+      .catch(() => { })
+  }, [admission.episode_of_care_id])
+
+  useEffect(() => {
+    if (!admission.episode_of_care_id) return
+    getLabOrders({ episode_of_care_id: admission.episode_of_care_id })
+      .then(setEpisodeLabOrders)
+      .catch(() => { })
   }, [admission.episode_of_care_id])
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
@@ -142,7 +147,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     if (!currentEncounterId) return
     getVitalSigns(currentEncounterId)
       .then((vs) => setLatestVitals(vs[0] ?? null))
-      .catch(() => {})
+      .catch(() => { })
     getMedicalResume({ encounter_id: currentEncounterId })
       .then((data) => {
         const r = data[0]
@@ -157,7 +162,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
           setResumeSaved(true)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [currentEncounterId])
 
   const daysSince = Math.floor(
@@ -208,7 +213,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}>
@@ -218,7 +223,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
           <h2 className="text-lg font-bold">{admission.patients.full_name}</h2>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
             <span>MR: {admission.patients.medical_record_no}</span>
-            <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {admission.locations?.name} · Bed {admission.bed_number}</span>
+            <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {admission.locations?.name} · Bed {admission?.bed_number}</span>
             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Hari ke-{daysSince + 1}</span>
           </div>
           {admission.episodes_of_care?.diagnosis_primary && (
@@ -262,13 +267,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
         </div>
       )}
 
-      {/* Loading while poli service resolves */}
-      {poliLoading ? (
-        <div className="flex items-center justify-center gap-3 py-12 text-foreground/50">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm">Memuat data pasien...</span>
-        </div>
-      ) : !currentEncounterId ? (
+      {/* Mulai kunjungan hari ini */}
+      {!currentEncounterId && (
         <div className="p-4 rounded-lg border border-dashed border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20">
           <p className="text-sm font-medium mb-2">Mulai Kunjungan Hari Ini</p>
           <Button size="sm" onClick={() => createDailyRecord()} disabled={drAction}>
@@ -276,7 +276,104 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             Buat Encounter Visite
           </Button>
         </div>
-      ) : null}
+      )}
+
+      <Separator />
+      {/* Pemeriksaan Lab (collapsible, by episode) */}
+      <div className="rounded-lg border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setLabOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-foreground/70">
+            <FlaskConical className="w-4 h-4 text-blue-500" />
+            <span>Pemeriksaan Lab</span>
+            {episodeLabOrders.length > 0 && (
+              <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+                {episodeLabOrders.length} permintaan
+              </span>
+            )}
+          </div>
+          {labOpen ? <ChevronDown className="w-4 h-4 text-foreground/40" /> : <ChevronRight className="w-4 h-4 text-foreground/40" />}
+        </button>
+        {labOpen && (
+          <div className="border-t px-4 py-3">
+            {episodeLabOrders.length === 0 ? (
+              <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
+            ) : (
+              <div className="space-y-3">
+                {episodeLabOrders.map((lo) => (
+                  <div key={lo.id} className="border rounded-md p-3 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-xs text-foreground/60">
+                        <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
+                      </div>
+                      <StatusBadge status={lo.status} />
+                    </div>
+                    <div className="space-y-1">
+                      {(lo.lab_order_items ?? []).map((item: any) => {
+                        let parsed: Array<{ label: string; value: string; unit?: string; reference_range?: string; result_status?: string }> | null = null
+                        if (item.result_value) {
+                          try {
+                            const p = JSON.parse(item.result_value)
+                            if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
+                          } catch { /* plain string */ }
+                        }
+                        return (
+                          <div key={item.id} className="text-xs py-1 border-t border-border/40">
+                            <span className="font-medium">{item.test_name}</span>
+                            {parsed ? (
+                              <table className="w-full mt-1">
+                                <thead>
+                                  <tr className="text-foreground/40">
+                                    <th className="text-left font-normal pb-0.5">Parameter</th>
+                                    <th className="text-left font-normal pb-0.5">Nilai</th>
+                                    <th className="text-left font-normal pb-0.5">Rujukan</th>
+                                    <th className="text-right font-normal pb-0.5">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {parsed.map((p, i) => (
+                                    <tr key={i} className="border-t border-border/20">
+                                      <td className="py-0.5">{p.label || "—"}</td>
+                                      <td className={`py-0.5 font-semibold ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                        {p.value || "—"} {p.unit}
+                                      </td>
+                                      <td className="py-0.5 text-foreground/40">{p.reference_range || "—"}</td>
+                                      <td className="py-0.5 text-right">
+                                        <span className={`font-medium ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                          {p.result_status === "normal" ? "N" : p.result_status === "abnormal_low" ? "↓" : p.result_status === "abnormal_high" ? "↑" : p.result_status === "critical" ? "!" : "—"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : item.result_value ? (
+                              <div className="flex items-center justify-between mt-0.5">
+                                <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' : item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' : 'text-green-700'}`}>
+                                  {item.result_value} {item.result_unit}
+                                </span>
+                                {item.reference_range && <span className="text-foreground/40">Ref: {item.reference_range}</span>}
+                              </div>
+                            ) : (
+                              <span className="text-foreground/40 italic ml-1">Belum ada hasil</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <Separator />
+
 
       {error && (
         <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
@@ -300,8 +397,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                   <Label className="text-xs font-medium uppercase tracking-wide text-foreground/60">
                     {field === "subjective" ? "S — Subjective"
                       : field === "objective" ? "O — Objective"
-                      : field === "assessment" ? "A — Assessment"
-                      : "P — Plan"}
+                        : field === "assessment" ? "A — Assessment"
+                          : "P — Plan"}
                   </Label>
                   <Textarea
                     rows={2}
@@ -325,16 +422,16 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                   {previousNotes.map((note) => {
                     const roleLabel =
                       note.writer_role === "doctor" ? "Dokter" :
-                      note.writer_role === "nurse" ? "Perawat" :
-                      note.writer_role === "nutritionist" ? "Ahli Gizi" :
-                      note.writer_role === "pharmacist" ? "Apoteker" :
-                      note.writer_role ?? "—"
+                        note.writer_role === "nurse" ? "Perawat" :
+                          note.writer_role === "nutritionist" ? "Ahli Gizi" :
+                            note.writer_role === "pharmacist" ? "Apoteker" :
+                              note.writer_role ?? "—"
 
                     const roleColor =
                       note.writer_role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
-                      note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
-                      note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-                      "bg-muted text-foreground/60"
+                        note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+                          note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                            "bg-muted text-foreground/60"
 
                     return (
                       <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
@@ -371,7 +468,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
               encounterId={currentEncounterId}
               patientId={admission.patient_id}
               onSubmit={async (input) => { const ok = await createLab(input); return ok }}
-              onCancel={() => {}}
+              onCancel={() => { }}
               loading={labActing}
               error={labError}
             />
@@ -403,11 +500,11 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
               </div>
 
               {[
-                { key: "chief_complaint",    label: "Keluhan Utama Masuk",         rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
-                { key: "history_of_illness", label: "Riwayat Penyakit",            rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
-                { key: "physical_examination", label: "Pemeriksaan Fisik",         rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
-                { key: "summary",            label: "Ringkasan Perawatan",         rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
-                { key: "follow_up_plan",     label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
+                { key: "chief_complaint", label: "Keluhan Utama Masuk", rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
+                { key: "history_of_illness", label: "Riwayat Penyakit", rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
+                { key: "physical_examination", label: "Pemeriksaan Fisik", rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
+                { key: "summary", label: "Ringkasan Perawatan", rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
+                { key: "follow_up_plan", label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
               ].map(({ key, label, rows, placeholder }) => (
                 <div key={key} className="space-y-1.5">
                   <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">{label}</Label>
@@ -479,7 +576,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 <Activity className="w-4 h-4" /> Form Permintaan Tindakan Operasi (OK)
               </div>
               <p className="text-xs text-foreground/60">
-                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK. 
+                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK.
                 Secara default, pasien ini akan kembali dirawat di bangsal rawat inap pasca-operasi.
               </p>
 
