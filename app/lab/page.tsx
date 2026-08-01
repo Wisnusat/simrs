@@ -3,6 +3,8 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback } from "react"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
+import { usePolling } from "@/hooks/use-polling"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -58,6 +60,9 @@ export default function LabDashboard() {
 
   useEffect(() => { refreshEncounters() }, [refreshEncounters])
 
+  useRealtimeSync({ table: 'encounters', filter: 'status=eq.waiting_lab', onchange: refreshEncounters })
+  usePolling(refreshEncounters, 60_000)
+
   const handleRefreshAll = () => { refresh(); refreshEncounters() }
 
   const filtered = statusFilter === "all" ? orders : orders.filter((lo) => lo.status === statusFilter)
@@ -70,7 +75,7 @@ export default function LabDashboard() {
       // Auto-return outpatient encounter to doctor when results uploaded
       const isWaitingLab = encounters.some(e => e.id === resultOrder.encounter_id)
       if (isWaitingLab) {
-        await patchEncounter(resultOrder.encounter_id, { status: "in_progress" } as any)
+        await patchEncounter(resultOrder.encounter_id, { status: "in_progress" } as any).catch(() => {})
       }
       setResultOrder(null)
       handleRefreshAll()
