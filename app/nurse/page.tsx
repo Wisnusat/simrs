@@ -195,7 +195,7 @@ export default function NurseDashboard() {
         <div className="space-y-6">
           <PageHeader
             title="Antrian Pasien"
-            description="Semua antrian hari ini"
+            description="Antrian aktif hari ini"
             onRefresh={refresh}
             isRefreshing={loading}
           />
@@ -207,17 +207,19 @@ export default function NurseDashboard() {
           )}
 
           <div className="space-y-3">
-            {queue.map((entry) => (
-              <QueueCard
-                key={entry.id}
-                entry={entry}
-                onCallPatient={handleCallPatient}
-                onInputVitalSigns={handleOpenVitalSigns}
-                calling={callingId === entry.id}
-              />
-            ))}
-            {queue.length === 0 && !loading && (
-              <EmptyState message="Tidak ada antrian hari ini." icon={Users} />
+            {queue
+              .filter((q) => q.status === "waiting" || q.status === "called" || q.status === "in_service")
+              .map((entry) => (
+                <QueueCard
+                  key={entry.id}
+                  entry={entry}
+                  onCallPatient={handleCallPatient}
+                  onInputVitalSigns={handleOpenVitalSigns}
+                  calling={callingId === entry.id}
+                />
+              ))}
+            {queue.filter((q) => q.status === "waiting" || q.status === "called" || q.status === "in_service").length === 0 && !loading && (
+              <EmptyState message="Tidak ada antrian aktif hari ini." icon={Users} />
             )}
           </div>
         </div>
