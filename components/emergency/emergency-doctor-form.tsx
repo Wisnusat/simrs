@@ -15,7 +15,7 @@ import {
   getDiagnoses, postDiagnosis, searchICD10,
   getPrescriptions, postPrescription, getMedications,
 } from "@/lib/api/client"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 interface EmergencyDoctorFormProps {
   encounter: EmergencyEncounter
@@ -53,7 +53,6 @@ export function EmergencyDoctorForm({ encounter }: EmergencyDoctorFormProps) {
   const [rxError, setRxError] = useState<string | null>(null)
   const medDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { toast } = useToast()
 
   const load = useCallback(async () => {
     try {
@@ -154,7 +153,7 @@ export function EmergencyDoctorForm({ encounter }: EmergencyDoctorFormProps) {
         })),
       })
       setRxItems([])
-      toast({ title: "Berhasil", description: "Resep disimpan" })
+      toast.success("Resep disimpan")
       const rxs = await getPrescriptions({ encounter_id: encounter.encounter_id })
       setPrescriptions(rxs)
     } catch (err: any) {

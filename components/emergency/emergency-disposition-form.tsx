@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 import type { EmergencyEncounter } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 interface EmergencyDispositionFormProps {
   encounter: EmergencyEncounter
@@ -25,13 +25,12 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
   const [dischargeSummary, setDischargeSummary] = useState("")
 
   const { resolveOutcome, actionLoading } = useEmergency()
-  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (outcome === "referred" && !referredTo) {
-      toast({ title: "Error", description: "Tujuan rujukan harus diisi", variant: "destructive" })
+      toast.error("Tujuan rujukan harus diisi")
       return
     }
 
