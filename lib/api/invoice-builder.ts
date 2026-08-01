@@ -117,16 +117,18 @@ export async function buildInvoiceFromEncounter(
   for (const rx of (prescriptions ?? [])) {
     for (const pi of (rx.prescription_items ?? [])) {
       const med = (pi as any).medications
-      // Fetch unit price from medications / stock_movements or use a fallback
+      // FEFO: use unit_price from the earliest-expiry batch with stock > 0
       const { data: stock } = await supabase
-        .from('stock_movements')
+        .from('medication_stock')
         .select('unit_price')
         .eq('medication_id', pi.medication_id)
-        .order('created_at', { ascending: false })
+        .eq('organization_id', organizationId)
+        .gt('quantity', 0)
+        .order('expiry_date', { ascending: true })
         .limit(1)
         .maybeSingle()
 
-      const unitPrice: number = (stock as any)?.unit_price ?? 5_000
+      const unitPrice: number = (stock as any)?.unit_price ?? 0
       items.push({
         item_type: 'medication',
         item_name: med?.name ?? 'Obat',

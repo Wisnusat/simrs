@@ -161,7 +161,7 @@ export async function PATCH(
           .from('medication_stock')
           .update({ quantity: (batch as any).quantity - deduct })
           .eq('id', (batch as any).id)
-          .gte('quantity', deduct)
+          .eq('quantity', (batch as any).quantity) // optimistic lock: fails if another request already changed this value
           .select('id, unit_price')
           .maybeSingle()
 

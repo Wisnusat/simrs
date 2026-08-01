@@ -4,7 +4,7 @@
  * List + dispense prescriptions. Used by both doctor (create) and pharmacist (dispense).
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { getPrescriptions, postPrescription, dispensePrescription, patchPrescriptionStatus } from "@/lib/api/client"
 import { usePolling } from "@/hooks/use-polling"
 import { useRealtimeSync } from "@/hooks/use-realtime-sync"
@@ -23,6 +23,7 @@ export function usePrescriptions(opts: UsePrescriptionsOptions = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const isDispensingRef = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -66,6 +67,8 @@ export function usePrescriptions(opts: UsePrescriptionsOptions = {}) {
 
   const dispense = useCallback(
     async (prescriptionId: string): Promise<{ dispensed: number; errors: string[] } | null> => {
+      if (isDispensingRef.current) return null
+      isDispensingRef.current = true
       setActionLoading(true)
       setError(null)
       try {
@@ -77,6 +80,7 @@ export function usePrescriptions(opts: UsePrescriptionsOptions = {}) {
         return null
       } finally {
         setActionLoading(false)
+        isDispensingRef.current = false
       }
     },
     [refresh],
