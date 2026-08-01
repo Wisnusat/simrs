@@ -7,16 +7,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { getQueue, patchQueueStatus } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type { QueueEntry, QueueStatus } from "@/lib/types/outpatient"
 
 interface UseQueueOptions {
   date?: string
   poliServiceId?: string
-  pollIntervalMs?: number
+  fallbackPollMs?: number
 }
 
 export function useQueue(opts: UseQueueOptions = {}) {
-  const { date, poliServiceId, pollIntervalMs = 30_000 } = opts
+  const { date, poliServiceId, fallbackPollMs = 60_000 } = opts
 
   const [data, setData] = useState<QueueEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,11 +36,15 @@ export function useQueue(opts: UseQueueOptions = {}) {
     }
   }, [date, poliServiceId])
 
-  useEffect(() => {
-    refresh()
-    const id = setInterval(refresh, pollIntervalMs)
-    return () => clearInterval(id)
-  }, [refresh, pollIntervalMs])
+  useEffect(() => { refresh() }, [refresh])
+
+  useRealtimeSync({
+    table: 'queues',
+    filter: poliServiceId ? `poli_service_id=eq.${poliServiceId}` : undefined,
+    onchange: refresh,
+  })
+
+  usePolling(refresh, fallbackPollMs)
 
   const updateStatus = useCallback(
     async (queueId: string, status: QueueStatus) => {

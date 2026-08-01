@@ -10,16 +10,18 @@ import {
   postInpatientAdmission,
   patchInpatientAdmission,
 } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type { InpatientAdmission, InpatientAdmissionInput, InpatientStatus } from "@/lib/types/outpatient"
 
 interface UseAdmissionsOptions {
   status?: InpatientStatus
   dpjpId?: string
-  pollIntervalMs?: number
+  fallbackPollMs?: number
 }
 
 export function useAdmissions(opts: UseAdmissionsOptions = {}) {
-  const { status, dpjpId, pollIntervalMs = 30_000 } = opts
+  const { status, dpjpId, fallbackPollMs = 60_000 } = opts
 
   const [data, setData] = useState<InpatientAdmission[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,13 +40,11 @@ export function useAdmissions(opts: UseAdmissionsOptions = {}) {
     }
   }, [status, dpjpId])
 
-  useEffect(() => {
-    refresh()
-    if (pollIntervalMs > 0) {
-      const id = setInterval(refresh, pollIntervalMs)
-      return () => clearInterval(id)
-    }
-  }, [refresh, pollIntervalMs])
+  useEffect(() => { refresh() }, [refresh])
+
+  useRealtimeSync({ table: 'inpatient_admissions', onchange: refresh })
+
+  usePolling(refresh, fallbackPollMs)
 
   const admit = useCallback(
     async (input: InpatientAdmissionInput): Promise<boolean> => {

@@ -127,7 +127,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   // Lab orders for current encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
     encounterId: currentEncounterId ?? undefined,
-    pollIntervalMs: 0,
+    fallbackPollMs: 0,
   })
 
   // Load CPPT history

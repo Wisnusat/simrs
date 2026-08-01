@@ -70,7 +70,7 @@ export default function EmergencyDashboard() {
   // Lab orders for selected encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
     encounterId: selectedAdm?.encounter_id ?? undefined,
-    pollIntervalMs: 0,
+    fallbackPollMs: 0,
   })
 
   const getTriageBadge = (triage: string) => {

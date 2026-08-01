@@ -17,7 +17,7 @@ import {
 import { useEffect, useState } from "react"
 
 export default function SurgeryQueuePublic() {
-  const { data: surgeryRequests, loading, refresh } = useSurgeryRequests({ pollIntervalMs: 10_000 })
+  const { data: surgeryRequests, loading, refresh } = useSurgeryRequests()
   const [rooms, setRooms] = useState<Location[]>([])
 
   useEffect(() => {
