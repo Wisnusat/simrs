@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { buildInvoiceFromEncounter } from '@/lib/api/invoice-builder'
+import { buildInvoiceFromEncounter, syncInvoiceForEpisode } from '@/lib/api/invoice-builder'
 
 /**
  * GET /api/invoices
@@ -41,7 +41,20 @@ export async function GET(req: NextRequest) {
       .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
       .eq('episode_of_care_id', episodeId)
       .maybeSingle()
-    if (existing) return apiResponse.ok(existing)
+
+    if (existing) {
+      // Heal race condition: header exists but items missing (sync wrote header before items)
+      if ((existing as any).invoice_items?.length === 0 && Number((existing as any).total_amount) > 0) {
+        await syncInvoiceForEpisode(supabase, episodeId)
+        const { data: healed } = await supabase
+          .from('invoices')
+          .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+          .eq('episode_of_care_id', episodeId)
+          .maybeSingle()
+        return apiResponse.ok(healed ?? existing)
+      }
+      return apiResponse.ok(existing)
+    }
     return apiResponse.notFound('Invoice belum dibuat untuk episode ini')
   }
 
