@@ -101,6 +101,7 @@ export interface QueueEntry {
 export interface EncounterRef {
   id: string
   status: EncounterStatus
+  encounter_class?: EncounterClass
 }
 
 // ---------------------------------------------------------------------------

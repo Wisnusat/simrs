@@ -64,7 +64,8 @@ export default function DoctorDashboard() {
   // Include in_progress and waiting_lab (returned from lab, need re-examination)
   const readyPatients = queue.filter((q) =>
     q.vital_signs_recorded &&
-    q.encounter?.status !== "finished"
+    q.encounter?.status !== "finished" &&
+    q.encounter?.encounter_class !== "inpatient"
   )
 
   const handleExamSave = () => { setExamEntry(null); refreshQueue(); setView("patients") }
