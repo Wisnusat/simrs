@@ -9,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   LayoutDashboard, BedDouble, ClipboardList,
   Activity, ArrowLeft, ShieldAlert, Apple, UtensilsCrossed, AlertTriangle, FileText, Heart,
   FlaskConical, Stethoscope, Clock, Loader2, ChevronDown, ChevronRight, LogOut,
-  Calendar,
+  Calendar, Pill, Thermometer,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -25,7 +26,7 @@ import { useAdmissionRequestCount } from "@/hooks/use-admission-request-count"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { useAllergies } from "@/hooks/inpatient/use-allergies"
 import { useNutritionOrders } from "@/hooks/inpatient/use-nutrition-orders"
-import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations, getEncounters } from "@/lib/api/client"
+import { postClinicalNote, getVitalSigns, getClinicalNotesByEpisode, getLabOrders, getSurgeryRequests, getAdmissionRequests, postInpatientAssignment, getLocations, getEncounters, getMedicationDispenses } from "@/lib/api/client"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 
 import { InpatientPatientList } from "@/components/inpatient/patient-list"
@@ -54,10 +55,16 @@ export default function InpatientNurseDashboard() {
   const [allergyAdm, setAllergyAdm] = useState<InpatientAdmission | null>(null)
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [patientVitals, setPatientVitals] = useState<VitalSignsType[]>([])
+  const [allVitals, setAllVitals] = useState<VitalSignsType[]>([])
+  const [allVitalsLoading, setAllVitalsLoading] = useState(false)
   const [labOrders, setLabOrders] = useState<LabOrder[]>([])
   const [labOrdersLoading, setLabOrdersLoading] = useState(false)
   const [surgeries, setSurgeries] = useState<SurgeryRequest[]>([])
   const [surgeriesLoading, setSurgeriesLoading] = useState(false)
+  const [dispenses, setDispenses] = useState<any[]>([])
+  const [dispensesLoading, setDispensesLoading] = useState(false)
+  const [dispensesOpen, setDispensesOpen] = useState(false)
+  const [cpptInitialLoading, setCpptInitialLoading] = useState(false)
   const [labOpen, setLabOpen] = useState(false)
   const [cpptPoliServiceId, setCpptPoliServiceId] = useState<string | undefined>(undefined)
   const [cpptPoliLoading, setCpptPoliLoading] = useState(false)
@@ -130,6 +137,18 @@ export default function InpatientNurseDashboard() {
     }
   }, [])
 
+  const loadDispenses = useCallback(async (episodeOfCareId: string) => {
+    setDispensesLoading(true)
+    try {
+      const data = await getMedicationDispenses({ episode_of_care_id: episodeOfCareId })
+      setDispenses(data)
+    } catch {
+      setDispenses([])
+    } finally {
+      setDispensesLoading(false)
+    }
+  }, [])
+
   // Load pending admissions (episodes without room)
   const loadPendingAdmissions = useCallback(async () => {
     setPendingLoading(true)
@@ -174,30 +193,38 @@ export default function InpatientNurseDashboard() {
   const handleOpenCppt = useCallback(async (adm: InpatientAdmission) => {
     setCpptAdm(adm)
     setView("cppt")
-    setPatientVitals([]) // reset; will be loaded once encounter is known
+    setCpptInitialLoading(true)
+    setPatientVitals([])
+    setAllVitals([])
+    setAllVitalsLoading(true)
     setLabOrders([])
     setSurgeries([])
+    setDispenses([])
     setCpptPoliServiceId(undefined)
     setCpptPoliLoading(true)
-    // Resolve poli_service_id from the episode's outpatient encounter
-    getEncounters({ episode_of_care_id: adm.episode_of_care_id })
-      .then((encs) => {
-        const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
-        const first = outpatient ?? encs[0]
-        setCpptPoliServiceId(first?.poli_service_id)
-      })
-      .catch(() => { })
-      .finally(() => setCpptPoliLoading(false))
-    // Load previous notes from all encounters in this episode
-    try {
-      const notes = await getClinicalNotesByEpisode(adm.episode_of_care_id)
-      setPreviousNotes(notes)
-    } catch {
-      setPreviousNotes([])
-    }
-    loadLabOrders(adm.episode_of_care_id)
-    loadSurgeries(adm.episode_of_care_id)
-  }, [loadLabOrders, loadSurgeries])
+
+    await Promise.allSettled([
+      getEncounters({ episode_of_care_id: adm.episode_of_care_id })
+        .then((encs) => {
+          const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
+          const first = outpatient ?? encs[0]
+          setCpptPoliServiceId(first?.poli_service_id)
+        })
+        .catch(() => { })
+        .finally(() => setCpptPoliLoading(false)),
+      getClinicalNotesByEpisode(adm.episode_of_care_id)
+        .then(setPreviousNotes)
+        .catch(() => setPreviousNotes([])),
+      loadLabOrders(adm.episode_of_care_id),
+      loadSurgeries(adm.episode_of_care_id),
+      loadDispenses(adm.episode_of_care_id),
+      getVitalSigns(undefined, { episode_of_care_id: adm.episode_of_care_id })
+        .then((v) => { setAllVitals(v); setAllVitalsLoading(false) })
+        .catch(() => { setAllVitals([]); setAllVitalsLoading(false) }),
+    ])
+
+    setCpptInitialLoading(false)
+  }, [loadLabOrders, loadSurgeries, loadDispenses])
 
   // CPPT note submission
   const handleCpptSubmit = useCallback(async (input: any): Promise<boolean> => {
@@ -218,9 +245,16 @@ export default function InpatientNurseDashboard() {
 
   const handleVitalSubmit = useCallback(async (input: any) => {
     const ok = await submitVitals(input)
-    if (ok) { setVitalsAdm(null); refreshDr() }
+    if (ok) {
+      setVitalsAdm(null)
+      refreshDr()
+      if (cpptAdm) {
+        getVitalSigns(undefined, { episode_of_care_id: cpptAdm.episode_of_care_id })
+          .then(setAllVitals).catch(() => {})
+      }
+    }
     return ok
-  }, [submitVitals, refreshDr])
+  }, [submitVitals, refreshDr, cpptAdm])
 
   const handleAllergySubmit = useCallback(async (input: any) => {
     const ok = await createAllergy(input)
@@ -419,7 +453,8 @@ export default function InpatientNurseDashboard() {
 
       {/* ── CPPT VIEW ── */}
       {view === "cppt" && cpptAdm && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* ── Header — always visible ── */}
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => { setCpptAdm(null); setView("patients") }}>
               <ArrowLeft className="w-5 h-5" />
@@ -435,291 +470,433 @@ export default function InpatientNurseDashboard() {
                 <p className="text-xs text-foreground/40 mt-0.5">Dx: {cpptAdm.episodes_of_care.diagnosis_primary}</p>
               )}
             </div>
-            <StatusBadge status={cpptAdm.status} />
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                onClick={() => setAllergyAdm(cpptAdm)}
+              >
+                <ShieldAlert className="w-4 h-4 mr-1" /> Alergi
+              </Button>
+              <StatusBadge status={cpptAdm.status} />
+            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { clearVsError(); setVitalsAdm(cpptAdm) }}
-              disabled={!currentEncounterId}
-            >
-              <Activity className="w-4 h-4 mr-1" /> Input Tanda Vital
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-red-400 text-red-600 hover:bg-red-50"
-              onClick={() => setAllergyAdm(cpptAdm)}
-            >
-              <ShieldAlert className="w-4 h-4 mr-1" /> Tambah Alergi
-            </Button>
-          </div>
-
-          {/* Allergy summary for this patient */}
-          {allergies.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {allergies.map((al) => (
-                <span
-                  key={al.id}
-                  className={`text-xs px-2 py-1 rounded-full border font-medium ${al.criticality === "high"
+          {/* ── Allergy strip — always visible ── */}
+          {(allergies.length > 0 || alLoading) && (
+            <div className="flex flex-wrap gap-1.5">
+              {alLoading
+                ? <p className="text-xs text-foreground/40">Memuat alergi...</p>
+                : allergies.map((al) => (
+                  <span key={al.id} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${al.criticality === "high"
                     ? "bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                    : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-                    }`}
-                >
-                  <AlertTriangle className="w-3 h-3 inline mr-0.5" />
-                  {al.substance_display}
-                  {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
-                </span>
-              ))}
-            </div>
-          )}
-          {alLoading && <p className="text-xs text-foreground/40">Memuat data alergi...</p>}
-
-          {/* Nutrition Plan Card — from nutritionist, read-only */}
-          {nutritionOrder && (
-            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Apple className="w-4 h-4 text-green-600" />
-                  <span className="font-semibold text-sm">Rencana Nutrisi</span>
-                  <span className="text-xs text-foreground/50">
-                    oleh {nutritionOrder.practitioners?.full_name ?? "Ahli Gizi"}
+                    : "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"}`}>
+                    <AlertTriangle className="w-3 h-3 inline mr-0.5" />
+                    {al.substance_display}
+                    {al.category === "food" ? " (Makanan)" : al.category === "medication" ? " (Obat)" : " (Lingkungan)"}
                   </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {nutritionOrder.nutritional_status && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium border border-green-200 dark:border-green-700">
-                      {nutritionOrder.nutritional_status === "baik" ? "Status Gizi Baik" :
-                        nutritionOrder.nutritional_status === "kurang" ? "Gizi Kurang" :
-                          nutritionOrder.nutritional_status === "lebih" ? "Gizi Lebih" : "Gizi Buruk"}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                {nutritionOrder.energy_needs_kcal && (
-                  <div className="bg-background/70 rounded-md p-2 border">
-                    <p className="text-foreground/50">Kebutuhan Energi</p>
-                    <p className="font-semibold">{nutritionOrder.energy_needs_kcal} kkal</p>
-                  </div>
-                )}
-                {nutritionOrder.protein_needs_g && (
-                  <div className="bg-background/70 rounded-md p-2 border">
-                    <p className="text-foreground/50">Kebutuhan Protein</p>
-                    <p className="font-semibold">{nutritionOrder.protein_needs_g} g</p>
-                  </div>
-                )}
-                {nutritionOrder.dietary_restrictions && (
-                  <div className="bg-background/70 rounded-md p-2 border col-span-2 sm:col-span-1">
-                    <p className="text-foreground/50">Pantangan / Restriksi</p>
-                    <p className="font-semibold">{nutritionOrder.dietary_restrictions}</p>
-                  </div>
-                )}
-              </div>
-              {nutritionOrder.meal_plan && Object.keys(nutritionOrder.meal_plan).length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-foreground/60 flex items-center gap-1">
-                    <UtensilsCrossed className="w-3 h-3" /> Rencana Makan
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {Object.entries(nutritionOrder.meal_plan).map(([waktu, menu]) => (
-                      <div key={waktu} className="bg-background/70 rounded-md p-2 border text-xs">
-                        <span className="font-semibold capitalize">{waktu}:</span>{" "}
-                        <span className="text-foreground/70">{menu || "—"}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {nutritionOrder.notes && (
-                <p className="text-xs text-foreground/60 italic border-t pt-2 flex items-start gap-1">
-                  <FileText className="w-3 h-3 mt-0.5 shrink-0" />
-                  {nutritionOrder.notes}
-                </p>
-              )}
+                ))}
             </div>
           )}
 
-          <Separator />
-
-          {/* ── Pemeriksaan Lab (collapsible) ── */}
-          <div className="rounded-lg border overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setLabOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors"
-            >
-              <div className="flex items-center gap-2 text-foreground/70">
-                <FlaskConical className="w-4 h-4 text-blue-500" />
-                <span>Pemeriksaan Lab</span>
-                {labOrders.length > 0 && (
-                  <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
-                    {labOrders.length} permintaan
-                  </span>
-                )}
+          {/* ── Tabs ── */}
+          {cpptInitialLoading ? (
+            <div className="space-y-4 animate-pulse">
+              <div className="grid grid-cols-4 gap-1.5 bg-muted/50 p-1 rounded-lg h-10">
+                {[0, 1, 2, 3].map((i) => <div key={i} className="rounded-md bg-muted/80" />)}
               </div>
-              {labOpen
-                ? <ChevronDown className="w-4 h-4 text-foreground/40" />
-                : <ChevronRight className="w-4 h-4 text-foreground/40" />
-              }
-            </button>
-
-            {labOpen && (
-              <div className="border-t px-4 py-3">
-                {labOrdersLoading ? (
-                  <p className="text-xs text-foreground/40">Memuat data lab...</p>
-                ) : labOrders.length === 0 ? (
-                  <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {labOrders.map((lo) => (
-                      <div key={lo.id} className="border rounded-md p-3 space-y-2">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2 text-xs text-foreground/60">
-                            <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                            <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
-                          </div>
-                          <StatusBadge status={lo.status} />
-                        </div>
-                        <div className="space-y-1">
-                          {(lo.lab_order_items ?? []).map((item: any) => {
-                            let parsed: Array<{ label: string; value: string; unit?: string; reference_range?: string; result_status?: string }> | null = null
-                            if (item.result_value) {
-                              try {
-                                const p = JSON.parse(item.result_value)
-                                if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
-                              } catch { /* plain string */ }
-                            }
-                            return (
-                              <div key={item.id} className="text-xs py-1 border-t border-border/40">
-                                <span className="font-medium">{item.test_name}</span>
-                                {parsed ? (
-                                  <table className="w-full mt-1">
-                                    <thead>
-                                      <tr className="text-foreground/40">
-                                        <th className="text-left font-normal pb-0.5">Parameter</th>
-                                        <th className="text-left font-normal pb-0.5">Nilai</th>
-                                        <th className="text-left font-normal pb-0.5">Rujukan</th>
-                                        <th className="text-right font-normal pb-0.5">Status</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {parsed.map((p, i) => (
-                                        <tr key={i} className="border-t border-border/20">
-                                          <td className="py-0.5">{p.label || "—"}</td>
-                                          <td className={`py-0.5 font-semibold ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
-                                            {p.value || "—"} {p.unit}
-                                          </td>
-                                          <td className="py-0.5 text-foreground/40">{p.reference_range || "—"}</td>
-                                          <td className="py-0.5 text-right">
-                                            <span className={`font-medium ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
-                                              {p.result_status === "normal" ? "N" : p.result_status === "abnormal_low" ? "↓" : p.result_status === "abnormal_high" ? "↑" : p.result_status === "critical" ? "!" : "—"}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                ) : item.result_value ? (
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' : item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' : 'text-green-700'}`}>
-                                      {item.result_value} {item.result_unit}
-                                    </span>
-                                    {item.reference_range && <span className="text-foreground/40">Ref: {item.reference_range}</span>}
-                                  </div>
-                                ) : (
-                                  <span className="text-foreground/40 italic ml-1">Belum ada hasil</span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-3 pt-2">
+                <div className="h-20 rounded-xl bg-muted/60" />
+                <div className="h-4 rounded bg-muted/50 w-3/4" />
+                <div className="h-4 rounded bg-muted/50 w-1/2" />
+                <div className="h-4 rounded bg-muted/50 w-2/3" />
+                <div className="h-4 rounded bg-muted/50 w-5/6" />
               </div>
-            )}
-          </div>
-
-          {/* ── Riwayat Operasi ── */}
-          {(surgeriesLoading || surgeries.length > 0) && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Stethoscope className="w-4 h-4 text-purple-500" />
-                  <CardTitle className="text-base">Riwayat Operasi</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {surgeriesLoading ? (
-                  <p className="text-xs text-foreground/40">Memuat data operasi...</p>
-                ) : (
-                  <div className="space-y-3">
-                    {surgeries.map((sr) => {
-                      const start = sr.surgery_start_at ? new Date(sr.surgery_start_at) : null
-                      const end = sr.surgery_end_at ? new Date(sr.surgery_end_at) : null
-                      const durationMin = start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : null
-                      return (
-                        <div key={sr.id} className="border rounded-md p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="font-semibold text-sm">{sr.surgery_type}</span>
-                            <StatusBadge status={sr.status} />
-                          </div>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-foreground/60">
-                            {(sr as any).surgeon?.full_name && (
-                              <span>Dokter Bedah: <span className="text-foreground/80 font-medium">{(sr as any).surgeon.full_name}</span></span>
-                            )}
-                            {sr.anesthesia_type && (
-                              <span>Anestesi: <span className="text-foreground/80">{sr.anesthesia_type}</span></span>
-                            )}
-                            {start && (
-                              <span>Tgl Operasi: <span className="text-foreground/80">{start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span></span>
-                            )}
-                            {durationMin !== null && (
-                              <span>Durasi: <span className="text-foreground/80">{durationMin} menit</span></span>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          <Separator />
-
-          {/* CPPT Form — show loading while resolving poli service */}
-          {cpptPoliLoading ? (
-            <div className="flex items-center justify-center gap-3 py-12 text-foreground/50">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">Memuat data pasien...</span>
-            </div>
-          ) : surgeries.some(s => s.status === 'intra_operative') ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 text-center">
-              <Stethoscope className="w-8 h-8 text-amber-500 animate-pulse" />
-              <p className="font-semibold text-amber-700 dark:text-amber-300">Pasien Sedang Dalam Tindakan Operasi</p>
-              <p className="text-sm text-amber-600/80 dark:text-amber-400/70 max-w-sm">
-                CPPT tidak dapat diinput selama operasi berlangsung. Input akan tersedia kembali setelah pasien dikembalikan ke bangsal.
-              </p>
             </div>
           ) : (
-            <CpptForm
-              encounterId={currentEncounterId}
-              patientId={cpptAdm.patient_id}
-              onSubmit={handleCpptSubmit}
-              onCreateShift={createDailyRecord}
-              loading={cpptSubmitting}
-              error={null}
-              previousNotes={previousNotes}
-              todayShiftExists={todayRecords.length > 0}
-              vitalSigns={patientVitals}
-            />
+          <Tabs defaultValue="summary" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="summary"><Heart className="w-4 h-4 mr-1" /> Ringkasan</TabsTrigger>
+              <TabsTrigger value="vitals"><Activity className="w-4 h-4 mr-1" /> Tanda Vital</TabsTrigger>
+              <TabsTrigger value="cppt"><FileText className="w-4 h-4 mr-1" /> Catatan CPPT</TabsTrigger>
+              <TabsTrigger value="meds"><Pill className="w-4 h-4 mr-1" /> Obat & Lab</TabsTrigger>
+            </TabsList>
+
+            {/* ── TAB: Ringkasan ── */}
+            <TabsContent value="summary" className="space-y-4 mt-4">
+              {/* Latest vitals strip */}
+              {patientVitals[0] && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  {patientVitals[0].systolic_bp && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Heart className="w-4 h-4 text-red-500" />
+                      <span className="text-foreground/60">TD:</span>
+                      <span className="font-medium">{patientVitals[0].systolic_bp}/{patientVitals[0].diastolic_bp}</span>
+                    </div>
+                  )}
+                  {patientVitals[0].heart_rate && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-pink-500" />
+                      <span className="text-foreground/60">Nadi:</span>
+                      <span className="font-medium">{patientVitals[0].heart_rate} bpm</span>
+                    </div>
+                  )}
+                  {patientVitals[0].temperature && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Thermometer className="w-4 h-4 text-orange-500" />
+                      <span className="text-foreground/60">Suhu:</span>
+                      <span className="font-medium">{patientVitals[0].temperature}°C</span>
+                    </div>
+                  )}
+                  {patientVitals[0].oxygen_saturation && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-blue-500" />
+                      <span className="text-foreground/60">SpO₂:</span>
+                      <span className="font-medium">{patientVitals[0].oxygen_saturation}%</span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-foreground/40 col-span-full">
+                    Direkam: {new Date(patientVitals[0].recorded_at ?? '').toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              )}
+
+              {/* Nutrition plan */}
+              {nutritionOrder && (
+                <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Apple className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold text-sm">Rencana Nutrisi</span>
+                      <span className="text-xs text-foreground/50">oleh {nutritionOrder.practitioners?.full_name ?? "Ahli Gizi"}</span>
+                    </div>
+                    {nutritionOrder.nutritional_status && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium border border-green-200 dark:border-green-700">
+                        {nutritionOrder.nutritional_status === "baik" ? "Status Gizi Baik" :
+                          nutritionOrder.nutritional_status === "kurang" ? "Gizi Kurang" :
+                            nutritionOrder.nutritional_status === "lebih" ? "Gizi Lebih" : "Gizi Buruk"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    {nutritionOrder.energy_needs_kcal && (
+                      <div className="bg-background/70 rounded-md p-2 border">
+                        <p className="text-foreground/50">Kebutuhan Energi</p>
+                        <p className="font-semibold">{nutritionOrder.energy_needs_kcal} kkal</p>
+                      </div>
+                    )}
+                    {nutritionOrder.protein_needs_g && (
+                      <div className="bg-background/70 rounded-md p-2 border">
+                        <p className="text-foreground/50">Kebutuhan Protein</p>
+                        <p className="font-semibold">{nutritionOrder.protein_needs_g} g</p>
+                      </div>
+                    )}
+                    {nutritionOrder.dietary_restrictions && (
+                      <div className="bg-background/70 rounded-md p-2 border col-span-2 sm:col-span-1">
+                        <p className="text-foreground/50">Pantangan / Restriksi</p>
+                        <p className="font-semibold">{nutritionOrder.dietary_restrictions}</p>
+                      </div>
+                    )}
+                  </div>
+                  {nutritionOrder.meal_plan && Object.keys(nutritionOrder.meal_plan).length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {Object.entries(nutritionOrder.meal_plan).map(([waktu, menu]) => (
+                        <div key={waktu} className="bg-background/70 rounded-md p-2 border text-xs">
+                          <span className="font-semibold capitalize">{waktu}:</span>{" "}
+                          <span className="text-foreground/70">{menu || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {nutritionOrder.notes && (
+                    <p className="text-xs text-foreground/60 italic border-t pt-2 flex items-start gap-1">
+                      <FileText className="w-3 h-3 mt-0.5 shrink-0" />{nutritionOrder.notes}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Surgery history */}
+              {(surgeriesLoading || surgeries.length > 0) && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <Stethoscope className="w-4 h-4 text-purple-500" />
+                      <CardTitle className="text-base">Riwayat Operasi</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {surgeriesLoading ? (
+                      <p className="text-xs text-foreground/40">Memuat data operasi...</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {surgeries.map((sr) => {
+                          const start = sr.surgery_start_at ? new Date(sr.surgery_start_at) : null
+                          const end = sr.surgery_end_at ? new Date(sr.surgery_end_at) : null
+                          const durationMin = start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : null
+                          return (
+                            <div key={sr.id} className="border rounded-md p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="font-semibold text-sm">{sr.surgery_type}</span>
+                                <StatusBadge status={sr.status} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-foreground/60">
+                                {(sr as any).surgeon?.full_name && <span>Dokter Bedah: <span className="text-foreground/80 font-medium">{(sr as any).surgeon.full_name}</span></span>}
+                                {sr.anesthesia_type && <span>Anestesi: <span className="text-foreground/80">{sr.anesthesia_type}</span></span>}
+                                {start && <span>Tgl: <span className="text-foreground/80">{start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span></span>}
+                                {durationMin !== null && <span>Durasi: <span className="text-foreground/80">{durationMin} menit</span></span>}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {!patientVitals[0] && !nutritionOrder && surgeries.length === 0 && !surgeriesLoading && (
+                <p className="text-sm text-center text-foreground/40 py-8">Belum ada data ringkasan untuk pasien ini.</p>
+              )}
+            </TabsContent>
+
+            {/* ── TAB: Tanda Vital ── */}
+            <TabsContent value="vitals" className="space-y-4 mt-4">
+              <Button
+                size="sm"
+                onClick={() => { clearVsError(); setVitalsAdm(cpptAdm) }}
+                disabled={!currentEncounterId}
+              >
+                <Activity className="w-4 h-4 mr-1" /> Input Tanda Vital
+              </Button>
+              {!currentEncounterId && (
+                <p className="text-xs text-foreground/50">Buat encounter hari ini terlebih dahulu di tab Catatan CPPT.</p>
+              )}
+
+              <Separator />
+
+              {allVitalsLoading ? (
+                <div className="flex items-center gap-2 py-6 text-foreground/40 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat riwayat tanda vital...
+                </div>
+              ) : allVitals.length === 0 ? (
+                <p className="text-sm text-center text-foreground/40 py-8">Belum ada tanda vital yang dicatat.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-foreground/50 border-b">
+                        <th className="text-left pb-2 font-medium">Waktu</th>
+                        <th className="text-center pb-2 font-medium">TD (mmHg)</th>
+                        <th className="text-center pb-2 font-medium">Nadi</th>
+                        <th className="text-center pb-2 font-medium">Suhu</th>
+                        <th className="text-center pb-2 font-medium">SpO₂</th>
+                        <th className="text-center pb-2 font-medium">RR</th>
+                        <th className="text-right pb-2 font-medium">Dicatat oleh</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {allVitals.map((vs) => (
+                        <tr key={vs.id} className="hover:bg-muted/20">
+                          <td className="py-2 text-xs text-foreground/60 whitespace-nowrap">
+                            {new Date(vs.recorded_at ?? '').toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="py-2 text-center font-mono tabular-nums">
+                            {vs.systolic_bp && vs.diastolic_bp ? `${vs.systolic_bp}/${vs.diastolic_bp}` : '—'}
+                          </td>
+                          <td className="py-2 text-center font-mono tabular-nums">
+                            {vs.heart_rate ? `${vs.heart_rate}` : '—'}
+                          </td>
+                          <td className="py-2 text-center font-mono tabular-nums">
+                            {vs.temperature ? `${vs.temperature}°` : '—'}
+                          </td>
+                          <td className="py-2 text-center font-mono tabular-nums">
+                            {vs.oxygen_saturation ? `${vs.oxygen_saturation}%` : '—'}
+                          </td>
+                          <td className="py-2 text-center font-mono tabular-nums">
+                            {vs.respiratory_rate ? `${vs.respiratory_rate}` : '—'}
+                          </td>
+                          <td className="py-2 text-right text-xs text-foreground/50">
+                            {(vs as any).practitioners?.full_name ?? '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── TAB: Catatan CPPT ── */}
+            <TabsContent value="cppt" className="mt-4">
+              {cpptPoliLoading ? (
+                <div className="flex items-center justify-center gap-3 py-12 text-foreground/50">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Memuat data pasien...</span>
+                </div>
+              ) : surgeries.some(s => s.status === 'intra_operative') ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 text-center">
+                  <Stethoscope className="w-8 h-8 text-amber-500 animate-pulse" />
+                  <p className="font-semibold text-amber-700 dark:text-amber-300">Pasien Sedang Dalam Tindakan Operasi</p>
+                  <p className="text-sm text-amber-600/80 dark:text-amber-400/70 max-w-sm">
+                    CPPT tidak dapat diinput selama operasi berlangsung.
+                  </p>
+                </div>
+              ) : (
+                <CpptForm
+                  encounterId={currentEncounterId}
+                  patientId={cpptAdm.patient_id}
+                  onSubmit={handleCpptSubmit}
+                  onCreateShift={createDailyRecord}
+                  loading={cpptSubmitting}
+                  error={null}
+                  previousNotes={previousNotes}
+                  todayShiftExists={todayRecords.length > 0}
+                  vitalSigns={patientVitals}
+                />
+              )}
+            </TabsContent>
+
+            {/* ── TAB: Obat & Lab ── */}
+            <TabsContent value="meds" className="space-y-3 mt-4">
+              {/* Dispensed meds */}
+              <div className="rounded-lg border overflow-hidden">
+                <button type="button" onClick={() => setDispensesOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
+                  <div className="flex items-center gap-2 text-foreground/70">
+                    <Pill className="w-4 h-4 text-purple-500" />
+                    <span>Obat Diserahkan Apotek</span>
+                    {dispenses.length > 0 && (
+                      <span className="text-[11px] bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-semibold">
+                        {dispenses.length} item
+                      </span>
+                    )}
+                  </div>
+                  {dispensesOpen ? <ChevronDown className="w-4 h-4 text-foreground/40" /> : <ChevronRight className="w-4 h-4 text-foreground/40" />}
+                </button>
+                {dispensesOpen && (
+                  <div className="border-t px-4 py-3">
+                    {dispensesLoading ? (
+                      <p className="text-xs text-foreground/40">Memuat data obat...</p>
+                    ) : dispenses.length === 0 ? (
+                      <p className="text-xs text-foreground/40">Belum ada obat yang diserahkan apotek.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {dispenses.map((d: any) => (
+                          <div key={d.id} className="flex items-start justify-between gap-3 py-2 border-b border-border/30 last:border-0">
+                            <div className="text-sm">
+                              <p className="font-medium">{d.medications?.name ?? '—'}</p>
+                              <p className="text-xs text-foreground/50">
+                                {d.medications?.form} {d.medications?.strength}{d.medications?.unit ? ` · ${d.medications.unit}` : ''} · Qty: <span className="font-semibold text-foreground/80">{d.quantity_dispensed}</span>
+                              </p>
+                              <p className="text-xs text-foreground/40 mt-0.5">
+                                {d.dispensed_by?.full_name ?? '—'} · {new Date(d.dispensed_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 font-medium">Diserahkan</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Lab orders */}
+              <div className="rounded-lg border overflow-hidden">
+                <button type="button" onClick={() => setLabOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
+                  <div className="flex items-center gap-2 text-foreground/70">
+                    <FlaskConical className="w-4 h-4 text-blue-500" />
+                    <span>Pemeriksaan Lab</span>
+                    {labOrders.length > 0 && (
+                      <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+                        {labOrders.length} permintaan
+                      </span>
+                    )}
+                  </div>
+                  {labOpen ? <ChevronDown className="w-4 h-4 text-foreground/40" /> : <ChevronRight className="w-4 h-4 text-foreground/40" />}
+                </button>
+                {labOpen && (
+                  <div className="border-t px-4 py-3">
+                    {labOrdersLoading ? (
+                      <p className="text-xs text-foreground/40">Memuat data lab...</p>
+                    ) : labOrders.length === 0 ? (
+                      <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {labOrders.map((lo) => (
+                          <div key={lo.id} className="border rounded-md p-3 space-y-2">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2 text-xs text-foreground/60">
+                                <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
+                              </div>
+                              <StatusBadge status={lo.status} />
+                            </div>
+                            <div className="space-y-1">
+                              {(lo.lab_order_items ?? []).map((item: any) => {
+                                let parsed: Array<{ label: string; value: string; unit?: string; reference_range?: string; result_status?: string }> | null = null
+                                if (item.result_value) {
+                                  try {
+                                    const p = JSON.parse(item.result_value)
+                                    if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
+                                  } catch { /* plain string */ }
+                                }
+                                return (
+                                  <div key={item.id} className="text-xs py-1 border-t border-border/40">
+                                    <span className="font-medium">{item.test_name}</span>
+                                    {parsed ? (
+                                      <table className="w-full mt-1">
+                                        <thead>
+                                          <tr className="text-foreground/40">
+                                            <th className="text-left font-normal pb-0.5">Parameter</th>
+                                            <th className="text-left font-normal pb-0.5">Nilai</th>
+                                            <th className="text-left font-normal pb-0.5">Rujukan</th>
+                                            <th className="text-right font-normal pb-0.5">Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {parsed.map((p, i) => (
+                                            <tr key={i} className="border-t border-border/20">
+                                              <td className="py-0.5">{p.label || "—"}</td>
+                                              <td className={`py-0.5 font-semibold ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                                {p.value || "—"} {p.unit}
+                                              </td>
+                                              <td className="py-0.5 text-foreground/40">{p.reference_range || "—"}</td>
+                                              <td className="py-0.5 text-right">
+                                                <span className={`font-medium ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                                  {p.result_status === "normal" ? "N" : p.result_status === "abnormal_low" ? "↓" : p.result_status === "abnormal_high" ? "↑" : p.result_status === "critical" ? "!" : "—"}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : item.result_value ? (
+                                      <div className="flex items-center justify-between mt-0.5">
+                                        <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' : item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' : 'text-green-700'}`}>
+                                          {item.result_value} {item.result_unit}
+                                        </span>
+                                        {item.reference_range && <span className="text-foreground/40">Ref: {item.reference_range}</span>}
+                                      </div>
+                                    ) : (
+                                      <span className="text-foreground/40 italic ml-1">Belum ada hasil</span>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
           )}
         </div>
       )}

@@ -109,8 +109,11 @@ export async function postVitalSigns(input: VitalSignsInput): Promise<VitalSigns
   })
 }
 
-export async function getVitalSigns(encounterId: string): Promise<VitalSigns[]> {
-  return fetchJson(`/api/vital-signs${qs({ encounter_id: encounterId })}`)
+export async function getVitalSigns(encounterId?: string, opts?: { episode_of_care_id?: string }): Promise<VitalSigns[]> {
+  const params = opts?.episode_of_care_id
+    ? { episode_of_care_id: opts.episode_of_care_id }
+    : { encounter_id: encounterId }
+  return fetchJson(`/api/vital-signs${qs(params)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +336,12 @@ export async function dispensePrescription(
     method: 'PATCH',
     body: JSON.stringify({ dispense: true }),
   })
+}
+
+export async function getMedicationDispenses(opts: {
+  episode_of_care_id: string
+}): Promise<any[]> {
+  return fetchJson(`/api/medication-dispenses${qs(opts)}`)
 }
 
 // ---------------------------------------------------------------------------

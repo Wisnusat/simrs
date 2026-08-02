@@ -116,6 +116,7 @@ export async function GET(req: NextRequest) {
       *,
       patients ( full_name, medical_record_no ),
       practitioners ( full_name ),
+      encounters ( encounter_class ),
       prescription_items (
         *,
         medications ( id, name, generic_name, form, strength, unit )
@@ -151,6 +152,8 @@ export async function GET(req: NextRequest) {
   return apiResponse.ok(
     (data ?? []).map((rx: any) => ({
       ...rx,
+      encounter_class: rx.encounters?.encounter_class ?? null,
+      encounters: undefined,
       prescription_items: (rx.prescription_items ?? []).map((item: any) => ({
         ...item,
         stock_available: stockMap.get(item.medication_id) ?? 0,

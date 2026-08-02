@@ -55,9 +55,11 @@ export default function PharmacistDashboard() {
   }, [selected])
 
   const isPaid = invoice?.status === "paid" || invoice?.status === "bpjs_claim_pending"
+  const isInpatient = selected?.encounter_class === "inpatient"
+  const canDispense = isPaid || isInpatient
 
   const handleDispense = async (id: string) => {
-    if (!isPaid) return false
+    if (!canDispense) return false
     setDispenseErrors([])
     const result = await dispense(id)
     if (result) {
@@ -225,7 +227,14 @@ export default function PharmacistDashboard() {
           <DialogTitle>Detail Resep</DialogTitle>
           {selected && (
             <div className="space-y-4">
-              {invLoading ? (
+              {isInpatient ? (
+                <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                  <CheckCircle className="w-4 h-4 text-blue-600" />
+                  <AlertDescription className="text-blue-700 dark:text-blue-400">
+                    <strong>Pasien Rawat Inap</strong> — Obat dapat langsung diserahkan. Tagihan diakumulasi ke running bill.
+                  </AlertDescription>
+                </Alert>
+              ) : invLoading ? (
                 <Alert><AlertDescription>Memeriksa status pembayaran...</AlertDescription></Alert>
               ) : isPaid ? (
                 <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20">
@@ -263,7 +272,7 @@ export default function PharmacistDashboard() {
                 onClose={() => { setSelected(null); setDispenseErrors([]) }}
                 loading={dispensing}
                 error={rxError}
-                disableDispense={!isPaid}
+                disableDispense={!canDispense}
               />
             </div>
           )}
