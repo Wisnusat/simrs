@@ -25,6 +25,7 @@ export const FHIR = {
   participationType: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType',
   obsCategory: 'http://terminology.hl7.org/CodeSystem/observation-category',
   conditionClinical: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+  conditionVerStatus: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
   conditionCategory: 'http://terminology.hl7.org/CodeSystem/condition-category',
   allergyClinical: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical',
   allergyVerification: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-verification',

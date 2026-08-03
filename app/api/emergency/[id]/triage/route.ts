@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { enqueueSync } from '@/lib/satusehat/queue'
 import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -134,6 +135,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             console.warn('Encounter status sync error (triage):', encounterUpdateError)
         }
 
+        enqueueSync(supabase, 'Encounter', existing.encounter_id, 'PUT').catch(() => {})
+
         // Jika ada vital signs yang dikirim, rekam ke tabel vital_signs
         const hasVitals =
             systolic_bp !== undefined ||
@@ -142,7 +145,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             oxygen_saturation !== undefined
 
         if (hasVitals) {
-            const { error: vitalsError } = await supabase
+            const { data: vsRow, error: vitalsError } = await supabase
                 .from('vital_signs')
                 .insert({
                     encounter_id: existing.encounter_id,
@@ -155,9 +158,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                     temperature: temperature ?? null,
                     oxygen_saturation: oxygen_saturation ?? null,
                 })
+                .select('id')
+                .single()
 
             if (vitalsError) {
                 console.warn('Vital signs insert error (triage):', vitalsError)
+            } else if (vsRow) {
+                enqueueSync(supabase, 'Observation', vsRow.id).catch(() => {})
             }
         }
 

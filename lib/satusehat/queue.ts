@@ -4,6 +4,7 @@ export type SsResourceType =
   | 'Patient' | 'Encounter' | 'Observation' | 'Condition' | 'AllergyIntolerance'
   | 'ClinicalImpression' | 'Medication' | 'MedicationRequest' | 'MedicationDispense'
   | 'Procedure' | 'Composition' | 'ServiceRequest' | 'DiagnosticReport'
+  | 'NutritionOrder' | 'EpisodeOfCare'
 
 /**
  * Enqueue an outbox job. Idempotent: re-enqueueing an existing
