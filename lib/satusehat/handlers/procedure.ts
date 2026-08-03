@@ -82,7 +82,8 @@ export const procedureHandler: SyncHandler = async (supabase, fhir, job) => {
       performers = [{ ihs, name: undefined, snomedCode: '304292004', snomedDisplay: 'Responsible observer' }]
     }
   } else {
-    await ensurePractitionerIhs(supabase, fhir, (proc.performer as any).id)
+    const ihs = await ensurePractitionerIhs(supabase, fhir, (proc.performer as any).id)
+    performers = [{ ihs, snomedCode: null, snomedDisplay: null }]
   }
 
   const payload = buildProcedure({
@@ -92,7 +93,6 @@ export const procedureHandler: SyncHandler = async (supabase, fhir, job) => {
     performedEnd,
     notes: proc.notes,
     patientIhs, patientName: (proc.patients as any).full_name,
-    practitionerIhs: proc.is_surgery ? undefined : (proc.performer as any).id,
     ssEncounterId: enc.ss_encounter_id,
     performers,
   })

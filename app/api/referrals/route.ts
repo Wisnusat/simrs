@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
         destination_specialty: destination_specialty || null,
         referral_reason,
         urgency: urgency || 'routine',
-        ss_sync_status: 'pending' // For Satu Sehat FHIR ServiceRequest sync
+        ss_sync_status: 'not_required'
       })
       .select()
       .single()

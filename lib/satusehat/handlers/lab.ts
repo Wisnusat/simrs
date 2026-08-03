@@ -84,9 +84,12 @@ export const diagnosticReportHandler: SyncHandler = async (supabase, fhir, job) 
     http_status: res.status, status: res.ok ? 'success' : 'failed',
     ...(res.ok ? {} : { error_message: JSON.stringify(res.body).slice(0, 1000) }),
   })
-  if (!res.ok) throw new Error(`DiagnosticReport sync failed ${res.status}: ${JSON.stringify(res.body)}`)
+  if (!res.ok) {
+    await supabase.from('lab_orders').update({ ss_sync_status: 'failed' }).eq('id', order.id)
+    throw new Error(`DiagnosticReport sync failed ${res.status}: ${JSON.stringify(res.body)}`)
+  }
   const { error: updateErr } = await supabase.from('lab_orders')
-    .update({ ss_diagnostic_report_id: res.body.id })
+    .update({ ss_diagnostic_report_id: res.body?.id, ss_sync_status: 'synced' })
     .eq('id', order.id)
   if (updateErr) throw new Error(`Failed to persist ss_diagnostic_report_id for lab_order ${order.id}: ${updateErr.message}`)
 }

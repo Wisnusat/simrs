@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import type { FhirClient } from './client'
 import { FHIR } from './config'
+import { DeferSync } from './worker'
 
 /**
  * Returns the practitioner's IHS number, looking it up on SATUSEHAT by NIK
@@ -18,12 +19,12 @@ export async function ensurePractitionerIhs(
     .single()
   if (error || !prac) throw new Error(`practitioner ${practitionerId} not found: ${error?.message}`)
   if (prac.ss_ihs_number) return prac.ss_ihs_number
-  if (!prac.nik) throw new Error(`practitioner ${prac.full_name} has no NIK — cannot resolve IHS`)
+  if (!prac.nik) throw new DeferSync(`practitioner ${prac.full_name} has no NIK — awaiting data entry`)
 
   const res = await fhir.get(`/Practitioner?identifier=${encodeURIComponent(`${FHIR.nik}|${prac.nik}`)}`)
   if (!res.ok) throw new Error(`Practitioner lookup failed ${res.status}: ${JSON.stringify(res.body)}`)
   const ihs = res.body?.entry?.[0]?.resource?.id
-  if (!ihs) throw new Error(`SATUSEHAT has no Practitioner for NIK of ${prac.full_name}`)
+  if (!ihs) throw new DeferSync(`SATUSEHAT has no Practitioner for NIK of ${prac.full_name} — retry after registration`)
 
   const { error: updateErr } = await supabase.from('practitioners')
     .update({ ss_practitioner_id: ihs, ss_ihs_number: ihs })
