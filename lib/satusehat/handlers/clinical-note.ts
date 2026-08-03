@@ -8,7 +8,12 @@ import { logSync } from './helpers'
 export const clinicalNoteHandler: SyncHandler = async (supabase, fhir, job) => {
   const { data: note, error } = await supabase
     .from('clinical_notes')
-    .select(`*, patients:patient_id ( id, full_name ), encounters:encounter_id ( id, ss_encounter_id ), writer:written_by ( id )`)
+    .select(`
+      id, subjective, objective, assessment, plan, note_date, ss_clinical_impression_id,
+      patients:patient_id ( id, full_name ),
+      encounters:encounter_id ( id, ss_encounter_id ),
+      writer:written_by ( id )
+    `)
     .eq('id', job.local_id)
     .single()
   if (error || !note) throw new Error(`clinical_note ${job.local_id} not found: ${error?.message}`)
@@ -19,25 +24,37 @@ export const clinicalNoteHandler: SyncHandler = async (supabase, fhir, job) => {
   const practitionerIhs = await ensurePractitionerIhs(supabase, fhir, (note.writer as any).id)
 
   const payload = buildClinicalImpression({
-    subjective: note.subjective, objective: note.objective, assessment: note.assessment, plan: note.plan,
+    subjective: note.subjective,
+    objective: note.objective,
+    assessment: note.assessment,
+    plan: note.plan,
     noteDate: note.note_date,
-    patientIhs, patientName: (note.patients as any).full_name,
-    practitionerIhs, ssEncounterId: enc.ss_encounter_id,
+    patientIhs,
+    patientName: (note.patients as any).full_name,
+    practitionerIhs,
+    ssEncounterId: enc.ss_encounter_id,
   })
-  const res = await fhir.post('/ClinicalImpression', payload)
+
+  const existingId = (note as any).ss_clinical_impression_id as string | null
+  const action = existingId ? 'PUT' : 'POST'
+  const res = existingId
+    ? await fhir.put(`/ClinicalImpression/${existingId}`, { ...payload, id: existingId })
+    : await fhir.post('/ClinicalImpression', payload)
+
   await logSync(supabase, {
-    resource_type: 'ClinicalImpression', local_id: note.id, ss_resource_id: res.body?.id,
-    action: 'POST', request_payload: payload, response_payload: res.body ?? {},
+    resource_type: 'ClinicalImpression', local_id: note.id, ss_resource_id: res.body?.id ?? existingId ?? undefined,
+    action, request_payload: payload, response_payload: res.body ?? {},
     http_status: res.status, status: res.ok ? 'success' : 'failed',
     ...(res.ok ? {} : { error_message: JSON.stringify(res.body).slice(0, 1000) }),
   })
+
   if (!res.ok) {
-    const { error: updateErr } = await supabase.from('clinical_notes').update({ ss_sync_status: 'failed' }).eq('id', note.id)
-    if (updateErr) console.error('Failed to persist clinical note failed status:', updateErr.message)
+    await supabase.from('clinical_notes').update({ ss_sync_status: 'failed' }).eq('id', note.id)
     throw new Error(`ClinicalImpression sync failed ${res.status}: ${JSON.stringify(res.body)}`)
   }
+
   const { error: updateErr } = await supabase.from('clinical_notes')
-    .update({ ss_clinical_impression_id: res.body.id, ss_sync_status: 'synced' })
+    .update({ ss_clinical_impression_id: res.body?.id ?? existingId, ss_sync_status: 'synced' })
     .eq('id', note.id)
   if (updateErr) throw new Error(`Failed to persist ss_clinical_impression_id for clinical_note ${note.id}: ${updateErr.message}`)
 }
