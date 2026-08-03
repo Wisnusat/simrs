@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   LayoutDashboard, BedDouble, UtensilsCrossed, AlertTriangle,
   ArrowLeft, ShieldAlert, Apple, Clock, User, Loader2,
+  Calendar,
 } from "lucide-react"
 
 import { useAdmissions } from "@/hooks/inpatient/use-admissions"
@@ -32,7 +33,7 @@ import type { InpatientAdmission, ClinicalNote } from "@/lib/types/outpatient"
 
 const SIDEBAR = (active: string, set: (v: string) => void) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: BedDouble,       label: "Pasien",    active: active === "patients",  onClick: () => set("patients") },
+  { icon: BedDouble, label: "Pasien", active: active === "patients", onClick: () => set("patients") },
 ]
 
 const SOAP_FIELDS = [
@@ -79,19 +80,24 @@ export default function NutritionistDashboard() {
     setView("detail")
     setCurrentEncounterId(null)
     setNotes([])
-    // Get latest active encounter for this episode
-    try {
-      const encounters = await getEncounters({ episode_of_care_id: adm.episode_of_care_id } as any)
-      const latest = encounters.sort((a, b) =>
-        new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
-      )[0]
-      setCurrentEncounterId(latest?.id ?? null)
-    } catch { setCurrentEncounterId(null) }
-    // Load CPPT history
-    try {
-      const n = await getClinicalNotesByEpisode(adm.episode_of_care_id)
-      setNotes(n)
-    } catch { setNotes([]) }
+
+    const [encounters, notes] = await Promise.allSettled([
+      getEncounters({ episode_of_care_id: adm.episode_of_care_id }),
+      getClinicalNotesByEpisode(adm.episode_of_care_id),
+    ])
+
+    if (notes.status === "fulfilled") setNotes(notes.value)
+
+    if (encounters.status === "fulfilled") {
+      // Only inpatient visite encounters — excludes linked IGD/outpatient encounters
+      const inpatient = encounters.value.filter((e) => (e as any).encounter_class === "inpatient")
+      // Prefer in_progress (today's active shift), fall back to most recent
+      const active = inpatient.find((e) => e.status === "in_progress")
+        ?? inpatient.sort((a, b) =>
+          new Date(b.started_at ?? 0).getTime() - new Date(a.started_at ?? 0).getTime()
+        )[0]
+      setCurrentEncounterId(active?.id ?? null)
+    }
   }, [])
 
   const handleNutritionSubmit = useCallback(async (input: any) => {
@@ -120,22 +126,22 @@ export default function NutritionistDashboard() {
     }
   }
 
-  const daysSince = (dateStr: string) =>
-    Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
-
   const roleLabel = (role: string | undefined) =>
     role === "doctor" ? "Dokter" : role === "nurse" ? "Perawat" :
-    role === "nutritionist" ? "Ahli Gizi" : role === "pharmacist" ? "Apoteker" : role ?? "—"
+      role === "nutritionist" ? "Ahli Gizi" : role === "pharmacist" ? "Apoteker" : role ?? "—"
 
   const roleColor = (role: string | undefined) =>
-    role === "doctor"       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
-    role === "nurse"        ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
-    role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-    "bg-muted text-foreground/60"
+    role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+      role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+        role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+          "bg-muted text-foreground/60"
+
+  const daysSince = selectedAdm?.admission_date
+    ? Math.floor((Date.now() - new Date(selectedAdm.admission_date).getTime()) / (1000 * 60 * 60 * 24))
+    : 0
 
   return (
     <DashboardLayout title="Nutrisi & Gizi" role="nutritionist" sidebarItems={SIDEBAR(view, setView)}>
-
       {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">
@@ -146,9 +152,9 @@ export default function NutritionistDashboard() {
             isRefreshing={admLoading}
           />
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <StatCard label="Total Pasien"    value={stats.total}          icon={BedDouble}       colorClass="text-blue-600" />
-            <StatCard label="Dalam Perawatan" value={stats.inCare}         icon={UtensilsCrossed} colorClass="text-green-600" />
-            <StatCard label="Siap Pulang"     value={stats.dischargeReady} icon={AlertTriangle}   colorClass="text-orange-600" />
+            <StatCard label="Total Pasien" value={stats.total} icon={BedDouble} colorClass="text-blue-600" />
+            <StatCard label="Dalam Perawatan" value={stats.inCare} icon={UtensilsCrossed} colorClass="text-green-600" />
+            <StatCard label="Siap Pulang" value={stats.dischargeReady} icon={AlertTriangle} colorClass="text-orange-600" />
           </div>
           <Card>
             <CardHeader>
@@ -172,7 +178,7 @@ export default function NutritionistDashboard() {
 
       {/* ── PATIENT DETAIL ── */}
       {view === "detail" && selectedAdm && (
-        <div className="space-y-6 max-w-4xl">
+        <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => { setSelectedAdm(null); setView("patients") }}>
@@ -180,10 +186,11 @@ export default function NutritionistDashboard() {
             </Button>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold">{selectedAdm.patients.full_name}</h2>
-              <p className="text-sm text-foreground/60">
-                MR: {selectedAdm.patients.medical_record_no} · {selectedAdm.locations?.name} · Bed {selectedAdm.bed_number}
-                · Hari ke-{daysSince(selectedAdm.admission_date) + 1}
-              </p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
+                <span>MR: {selectedAdm.patients.medical_record_no}</span>
+                <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {selectedAdm.locations?.name} · Bed {selectedAdm?.bed_number}</span>
+                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Hari ke-{daysSince + 1}</span>
+              </div>
               {selectedAdm.episodes_of_care?.diagnosis_primary && (
                 <p className="text-xs text-foreground/40 mt-0.5">Dx: {selectedAdm.episodes_of_care.diagnosis_primary}</p>
               )}
@@ -326,10 +333,10 @@ export default function NutritionistDashboard() {
                           })}
                         </span>
                       </div>
-                      {note.subjective  && <p><span className="font-semibold text-foreground/60 text-xs">S:</span> {note.subjective}</p>}
-                      {note.objective   && <p><span className="font-semibold text-foreground/60 text-xs">O:</span> {note.objective}</p>}
-                      {note.assessment  && <p><span className="font-semibold text-foreground/60 text-xs">A:</span> {note.assessment}</p>}
-                      {note.plan        && <p><span className="font-semibold text-foreground/60 text-xs">P:</span> {note.plan}</p>}
+                      {note.subjective && <p><span className="font-semibold text-foreground/60 text-xs">S:</span> {note.subjective}</p>}
+                      {note.objective && <p><span className="font-semibold text-foreground/60 text-xs">O:</span> {note.objective}</p>}
+                      {note.assessment && <p><span className="font-semibold text-foreground/60 text-xs">A:</span> {note.assessment}</p>}
+                      {note.plan && <p><span className="font-semibold text-foreground/60 text-xs">P:</span> {note.plan}</p>}
                     </div>
                   ))}
                 </div>

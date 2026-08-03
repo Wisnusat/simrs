@@ -39,6 +39,7 @@ export default function PharmacistDashboard() {
   const [selected, setSelected] = useState<Prescription | null>(null)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [invLoading, setInvLoading] = useState(false)
+  const [dispenseErrors, setDispenseErrors] = useState<string[]>([])
 
   const { data: prescriptions, loading, refresh, stats, dispense, actionLoading: dispensing, error: rxError } =
     usePrescriptions({ today: true })
@@ -54,11 +55,21 @@ export default function PharmacistDashboard() {
   }, [selected])
 
   const isPaid = invoice?.status === "paid" || invoice?.status === "bpjs_claim_pending"
+  const isInpatient = selected?.encounter_class === "inpatient"
+  const canDispense = isPaid || isInpatient
 
   const handleDispense = async (id: string) => {
-    if (!isPaid) return false
+    if (!canDispense) return false
+    setDispenseErrors([])
     const result = await dispense(id)
-    if (result) setSelected(null)
+    if (result) {
+      if (result.errors.length > 0) {
+        // Partial failure — keep modal open so pharmacist sees which items failed
+        setDispenseErrors(result.errors)
+      } else {
+        setSelected(null)
+      }
+    }
     return result
   }
 
@@ -211,12 +222,19 @@ export default function PharmacistDashboard() {
       )}
 
       {/* ── Prescription Detail Dialog ── */}
-      <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null) }}>
+      <Dialog open={!!selected} onOpenChange={open => { if (!open) { setSelected(null); setDispenseErrors([]) } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Detail Resep</DialogTitle>
           {selected && (
             <div className="space-y-4">
-              {invLoading ? (
+              {isInpatient ? (
+                <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                  <CheckCircle className="w-4 h-4 text-blue-600" />
+                  <AlertDescription className="text-blue-700 dark:text-blue-400">
+                    <strong>Pasien Rawat Inap</strong> — Obat dapat langsung diserahkan. Tagihan diakumulasi ke running bill.
+                  </AlertDescription>
+                </Alert>
+              ) : invLoading ? (
                 <Alert><AlertDescription>Memeriksa status pembayaran...</AlertDescription></Alert>
               ) : isPaid ? (
                 <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20">
@@ -237,13 +255,24 @@ export default function PharmacistDashboard() {
                   </AlertDescription>
                 </Alert>
               )}
+              {dispenseErrors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription>
+                    <strong>Sebagian obat gagal diserahkan — stok tidak mencukupi:</strong>
+                    <ul className="mt-1 list-disc list-inside text-sm">
+                      {dispenseErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
               <PrescriptionDetail
                 prescription={selected}
                 onDispense={handleDispense}
-                onClose={() => setSelected(null)}
+                onClose={() => { setSelected(null); setDispenseErrors([]) }}
                 loading={dispensing}
                 error={rxError}
-                disableDispense={!isPaid}
+                disableDispense={!canDispense}
               />
             </div>
           )}

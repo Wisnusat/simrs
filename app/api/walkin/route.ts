@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
-import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { requirePractitioner, isGuardError } from '@/lib/api/guards'
+import { getVClaimClient } from '@/lib/bpjs/vclaim'
+import * as Sentry from '@sentry/nextjs'
 
 function generateBookingCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -30,7 +32,7 @@ function formatDate(date: Date) {
 export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient()
-        const auth = await requireAuth(supabase)
+        const auth = await requirePractitioner(supabase)
         if (isGuardError(auth)) return auth
 
         const body = await req.json()
@@ -45,6 +47,19 @@ export async function POST(req: NextRequest) {
         const timeStr = formatTime(now)
         const bookingCode = generateBookingCode()
 
+        // BPJS eligibility check (synchronous, required before check-in)
+        if (paymentMethod === 'bpjs') {
+            const { data: patient } = await supabase
+                .from('patients').select('bpjs_no').eq('id', patientId).single()
+            if (!patient?.bpjs_no) {
+                return apiResponse.badRequest('Pasien belum memiliki nomor BPJS terdaftar')
+            }
+            const elig = await getVClaimClient().checkEligibility(patient.bpjs_no, dateStr)
+            if (!elig.eligible) {
+                return apiResponse.badRequest(`Verifikasi BPJS gagal: ${elig.reason ?? 'peserta tidak aktif'}`)
+            }
+        }
+
         // 1. Create Appointment
         const { data: appointmentData, error: appointmentError } = await supabase.rpc('create_appointment', {
             p_patient_id: patientId,
@@ -58,7 +73,8 @@ export async function POST(req: NextRequest) {
 
         if (appointmentError) {
             console.error('Walk-in create_appointment RPC error:', appointmentError)
-            
+            Sentry.captureException(appointmentError)
+
             if (appointmentError.message?.includes('POLI_NOT_FOUND')) {
                 return apiResponse.notFound('Poli service not found or inactive')
             }
@@ -80,8 +96,11 @@ export async function POST(req: NextRequest) {
         })
 
         if (checkinError) {
+            // Rollback: delete the appointment to avoid orphaned walk-in appointments
+            await supabase.from('appointments').delete().eq('id', appointmentId)
             console.error('Walk-in checkin_appointment RPC error:', checkinError)
-            return apiResponse.serverError('Appointment created but check-in failed')
+            Sentry.captureException(checkinError)
+            return apiResponse.serverError('Gagal check-in otomatis, silakan coba lagi')
         }
 
         return apiResponse.created({
@@ -92,6 +111,7 @@ export async function POST(req: NextRequest) {
 
     } catch (e) {
         console.error('Walk-in POST error:', e)
+        Sentry.captureException(e)
         return apiResponse.serverError()
     }
 }

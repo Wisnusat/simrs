@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('Insert referral error:', error)
+      Sentry.captureException(error)
       return apiResponse.serverError(error.message)
     }
 
@@ -47,6 +49,7 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error('Referrals POST error:', err)
+    Sentry.captureException(err)
     return apiResponse.serverError(err.message)
   }
 }

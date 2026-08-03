@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncVitalSigns } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/vital-signs
@@ -77,9 +77,7 @@ export async function POST(req: NextRequest) {
       .eq('id', queue_id)
   }
 
-  syncVitalSigns(supabase, (vs as any).id, {
-    encounter_id, systolic_bp, diastolic_bp, heart_rate, temperature, weight_kg, height_cm,
-  }).catch(() => { })
+  enqueueSync(supabase, 'Observation', (vs as any).id).catch(() => {})
 
   return apiResponse.created(vs)
 }
@@ -92,13 +90,30 @@ export async function GET(req: NextRequest) {
   const auth = await requirePractitioner(supabase)
   if (isGuardError(auth)) return auth
 
-  const encounterId = new URL(req.url).searchParams.get('encounter_id')
-  if (!encounterId) return apiResponse.badRequest('encounter_id is required')
+  const { searchParams } = new URL(req.url)
+  const encounterId = searchParams.get('encounter_id')
+  const episodeOfCareId = searchParams.get('episode_of_care_id')
+
+  if (!encounterId && !episodeOfCareId)
+    return apiResponse.badRequest('encounter_id or episode_of_care_id required')
+
+  let encounterIds: string[] = []
+
+  if (episodeOfCareId) {
+    const { data: encs } = await supabase
+      .from('encounters')
+      .select('id')
+      .eq('episode_of_care_id', episodeOfCareId)
+    encounterIds = (encs ?? []).map((e: any) => e.id)
+    if (encounterIds.length === 0) return apiResponse.ok([])
+  } else {
+    encounterIds = [encounterId!]
+  }
 
   const { data, error } = await supabase
     .from('vital_signs')
     .select('*, practitioners ( full_name, role )')
-    .eq('encounter_id', encounterId)
+    .in('encounter_id', encounterIds)
     .order('recorded_at', { ascending: false })
 
   if (error) return apiResponse.serverError(error.message)

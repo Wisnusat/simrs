@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/encounters
@@ -96,8 +97,12 @@ export async function POST(req: NextRequest) {
     encounter_class,
   } = await req.json()
 
-  if (!patient_id || !poli_service_id || !payment_type || !encounter_class) {
-    return apiResponse.badRequest('patient_id, poli_service_id, payment_type and encounter_class are required')
+  // poli_service_id is required for outpatient but optional for inpatient (IGD-admitted patients have none)
+  if (!patient_id || !payment_type || !encounter_class) {
+    return apiResponse.badRequest('patient_id, payment_type and encounter_class are required')
+  }
+  if (encounter_class !== 'inpatient' && !poli_service_id) {
+    return apiResponse.badRequest('poli_service_id is required for non-inpatient encounters')
   }
 
   // Guard: don't create a duplicate encounter for the same appointment today
@@ -140,6 +145,8 @@ export async function POST(req: NextRequest) {
       .update({ status: 'called' })
       .eq('id', queue_id)
   }
+
+  enqueueSync(supabase, 'Encounter', (encounter as any).id).catch(() => {})
 
   return apiResponse.created(encounter)
 }

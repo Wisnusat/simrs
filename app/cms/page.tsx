@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Calendar, DollarSign, Activity, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Users, Calendar, DollarSign, Activity, TrendingUp, AlertTriangle, MonitorDot } from 'lucide-react'
 
 interface DashboardStats {
     totalStaff: number
@@ -30,9 +30,13 @@ export default function CmsDashboardPage() {
                     fetch('/api/cms/staff'),
                 ])
 
+                let actualRole = 'admin'
                 if (meRes.ok) {
                     const meData = await meRes.json()
-                    if (meData.success) setUserRole(meData.data.role)
+                    if (meData.success) {
+                        actualRole = meData.data.role
+                        setUserRole(actualRole)
+                    }
                 }
 
                 const staffData = staffRes.ok ? await staffRes.json() : { data: [] }
@@ -43,7 +47,7 @@ export default function CmsDashboardPage() {
                 }))
 
                 // Only owner can access reports
-                if (userRole === 'owner') {
+                if (actualRole === 'owner') {
                     try {
                         const now = new Date()
                         const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
@@ -177,6 +181,13 @@ export default function CmsDashboardPage() {
                     description="Atur konten halaman utama website klinik"
                     href="/cms/landing-page"
                     color="text-violet-500"
+                />
+                <QuickActionCard
+                    icon={MonitorDot}
+                    title="System Monitor"
+                    description="Status layanan, antrian SATUSEHAT, dan log error Sentry"
+                    href="/cms/monitoring"
+                    color="text-cyan-500"
                 />
             </div>
         </div>

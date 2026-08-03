@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import {
   getEmergencyEncounters,
   getEmergencyEncounter,
@@ -8,27 +8,27 @@ import {
   patchEmergencyTriage,
   patchEmergencyOutcome,
 } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type { EmergencyEncounter } from "@/lib/types/outpatient"
 
 interface UseEmergencyOptions {
   status?: string
   search?: string
-  pollIntervalMs?: number
+  fallbackPollMs?: number
   limit?: number
 }
 
 export function useEmergency(opts?: UseEmergencyOptions) {
   const [data, setData] = useState<EmergencyEncounter[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: opts?.limit ?? 20 })
 
-  const { toast } = useToast()
-
   const fetchEncounters = useCallback(async (page = 1) => {
     try {
-      setLoading(true)
       const res = await getEmergencyEncounters({
         status: opts?.status,
         search: opts?.search,
@@ -40,20 +40,27 @@ export function useEmergency(opts?: UseEmergencyOptions) {
       setError(null)
     } catch (e: any) {
       setError(e.message || "Failed to fetch emergency encounters")
-      toast({ title: "Error", description: e.message, variant: "destructive" })
     } finally {
       setLoading(false)
     }
-  }, [opts?.status, opts?.search, opts?.limit, toast])
+  }, [opts?.status, opts?.search, opts?.limit])
 
-  // Initial fetch and polling
-  useEffect(() => {
-    fetchEncounters(1)
-    if (opts?.pollIntervalMs) {
-      const interval = setInterval(() => fetchEncounters(meta.page), opts.pollIntervalMs)
-      return () => clearInterval(interval)
-    }
-  }, [fetchEncounters, opts?.pollIntervalMs, meta.page])
+  // Manual refresh — shows spinner; polling uses fetchEncounters directly (silent)
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    try { await fetchEncounters(1) }
+    finally { setRefreshing(false) }
+  }, [fetchEncounters])
+
+  useEffect(() => { fetchEncounters() }, [fetchEncounters])
+
+  useRealtimeSync({
+    table: 'encounters',
+    filter: 'encounter_class=eq.emergency',
+    onchange: () => fetchEncounters(1),
+  })
+
+  usePolling(() => fetchEncounters(1), opts?.fallbackPollMs ?? 60_000)
 
   const create = async (input: {
     patient_id: string
@@ -66,10 +73,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     try {
       const result = await postEmergencyEncounter(input)
       await fetchEncounters(1)
-      toast({ title: "Berhasil", description: "Pasien IGD berhasil didaftarkan." })
+      toast.success("Pasien IGD berhasil didaftarkan.")
       return result
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+      toast.error(e.message || "Gagal mendaftarkan pasien IGD")
       return false
     } finally {
       setActionLoading(false)
@@ -94,10 +101,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     try {
       const result = await patchEmergencyEncounter(id, updateData)
       await fetchEncounters(meta.page)
-      toast({ title: "Berhasil", description: "Data IGD berhasil diupdate." })
+      toast.success("Data IGD berhasil diupdate.")
       return result
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+      toast.error(e.message || "Gagal update data IGD")
       return false
     } finally {
       setActionLoading(false)
@@ -108,7 +115,7 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     try {
       return await getEmergencyEncounter(id)
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+      toast.error(e.message || "Gagal memuat detail IGD")
       return null
     }
   }
@@ -131,10 +138,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     try {
       const result = await patchEmergencyTriage(id, input)
       await fetchEncounters(meta.page)
-      toast({ title: "Berhasil", description: "Data triage berhasil disimpan." })
+      toast.success("Data triage berhasil disimpan.")
       return result
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+      toast.error(e.message || "Gagal simpan data triage")
       return false
     } finally {
       setActionLoading(false)
@@ -159,10 +166,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     try {
       const result = await patchEmergencyOutcome(id, input)
       await fetchEncounters(meta.page)
-      toast({ title: "Berhasil", description: "Disposisi IGD berhasil disimpan." })
+      toast.success("Disposisi IGD berhasil disimpan.")
       return result
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+      toast.error(e.message || "Gagal simpan disposisi IGD")
       return false
     } finally {
       setActionLoading(false)
@@ -173,9 +180,10 @@ export function useEmergency(opts?: UseEmergencyOptions) {
     data,
     meta,
     loading,
+    refreshing,
     actionLoading,
     error,
-    refresh: fetchEncounters,
+    refresh,
     create,
     update,
     triage,

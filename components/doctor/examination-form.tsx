@@ -130,7 +130,7 @@ export default function ExaminationForm({
   }, [encounterId])
 
   // ── Lab Orders ──
-  const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, pollIntervalMs: 0 })
+  const { data: labOrders, loading: labLoading } = useLabOrders({ encounterId, fallbackPollMs: 0 })
 
   // ── Patient Allergies ──
   const { data: allergies } = useAllergies(patient.id)

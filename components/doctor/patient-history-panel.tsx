@@ -168,7 +168,11 @@ function TimelineNode({
       })
     : "—"
 
-  const poliName = (encounter as any).poli_services?.name ?? "—"
+  const encounterClass = (encounter as any).encounter_class
+  const poliName = (encounter as any).poli_services?.name
+    ?? (encounterClass === 'emergency' ? 'IGD'
+      : encounterClass === 'inpatient' ? 'Rawat Inap'
+      : '—')
 
   return (
     <div className="relative pl-7">

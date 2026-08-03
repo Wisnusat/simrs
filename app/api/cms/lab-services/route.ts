@@ -103,3 +103,33 @@ export async function DELETE(req: NextRequest) {
     if (error) return apiResponse.serverError(error.message)
     return apiResponse.ok({ deleted: true })
 }
+
+/**
+ * PATCH /api/cms/lab-services
+ * Update price for a lab service.
+ * Body: { id: string, price: number }
+ */
+export async function PATCH(req: NextRequest) {
+    const rl = await rateLimit(req, 'cms:lab-services:patch', RATE_LIMITS.write)
+    if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter!)
+
+    const supabase = await createClient()
+    const auth = await requireAdmin(supabase)
+    if (isGuardError(auth)) return auth
+
+    const body = await req.json().catch(() => null)
+    if (!body?.id) return apiResponse.badRequest('id is required')
+    const price = Number(body.price)
+    if (isNaN(price) || price < 0) return apiResponse.badRequest('price tidak valid')
+
+    const { data, error } = await supabase
+        .from('lab_services')
+        .update({ price })
+        .eq('id', body.id)
+        .eq('organization_id', auth.practitioner.organization_id)
+        .select()
+        .single()
+
+    if (error) return apiResponse.serverError(error.message)
+    return apiResponse.ok(data)
+}

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET  /api/allergies?patient_id=...
@@ -65,5 +66,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+
+  enqueueSync(supabase, 'AllergyIntolerance', (data as any).id).catch(() => {})
+
   return apiResponse.created(data)
 }

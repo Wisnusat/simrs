@@ -1,14 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, UserPlus, Search } from "lucide-react"
-
-// Assuming we have a way to search patients or we just create a minimal one.
-// Since the prompt instructed to make it simple: "fill minimal data, check nik if exist"
+import { Loader2, UserPlus, CheckCircle2, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
 
@@ -17,70 +14,98 @@ interface EmergencyIntakeFormProps {
   onCancel: () => void
 }
 
+type NikStatus = "idle" | "checking" | "found" | "not_found"
+
 export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeFormProps) {
   const [nik, setNik] = useState("")
   const [name, setName] = useState("")
   const [isCritical, setIsCritical] = useState(false)
-  
+  const [nikStatus, setNikStatus] = useState<NikStatus>("idle")
+  const [foundPatientId, setFoundPatientId] = useState<string | null>(null)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  
+
   const { create } = useEmergency()
   const supabase = createClient()
 
+  // Auto-lookup when NIK reaches 16 digits
+  useEffect(() => {
+    if (nik.length !== 16) {
+      setNikStatus("idle")
+      setFoundPatientId(null)
+      setName("")
+      return
+    }
+
+    let cancelled = false
+    setNikStatus("checking")
+
+    supabase
+      .from("patients")
+      .select("id, full_name")
+      .eq("nik", nik)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        if (data) {
+          setFoundPatientId(data.id)
+          setName(data.full_name)
+          setNikStatus("found")
+        } else {
+          setFoundPatientId(null)
+          setName("")
+          setNikStatus("not_found")
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [nik]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleNikChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 16)
+    setNik(val)
+    if (val.length < 16) {
+      setError("")
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name) {
+    if (!name.trim()) {
       setError("Nama pasien harus diisi")
       return
     }
-    
+    if (nik.length > 0 && nik.length < 16) {
+      setError("NIK harus tepat 16 digit")
+      return
+    }
+
     setLoading(true)
     setError("")
-    
+
     try {
-      let patientId: string | null = null
-      
-      // 1. Try to find patient by NIK if provided
-      if (nik) {
-        const { data: existingPatient } = await supabase
-          .from("patients")
-          .select("id")
-          .eq("nik", nik)
-          .maybeSingle()
-          
-        if (existingPatient) {
-          patientId = existingPatient.id
-        }
-      }
-      
-      // 2. If no patient found or no NIK, create a minimal patient record
+      let patientId = foundPatientId
+
       if (!patientId) {
-        // Generate random MR No if standard function not available
         const randMr = `MR-IGD-${Date.now().toString().slice(-6)}`
-        
         const { data: newPatient, error: newError } = await supabase
           .from("patients")
           .insert({
             nik: nik || null,
-            full_name: name,
+            full_name: name.trim(),
             medical_record_no: randMr,
-            gender: "unknown", // can be updated later
-            date_of_birth: new Date().toISOString().split('T')[0] // dummy
+            gender: "unknown",
+            date_of_birth: new Date().toISOString().split("T")[0],
           })
           .select("id")
           .single()
-          
+
         if (newError || !newPatient) throw new Error("Gagal membuat data pasien baru: " + newError?.message)
         patientId = newPatient.id
       }
-      
-      // 3. Create Emergency Encounter
-      const result = await create({
-        patient_id: patientId,
-        is_critical: isCritical
-      })
-      
+
+      const result = await create({ patient_id: patientId!, is_critical: isCritical })
       if (result) {
         onSuccess()
       } else {
@@ -92,6 +117,8 @@ export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeForm
       setLoading(false)
     }
   }
+
+  const nikIsPartial = nik.length > 0 && nik.length < 16
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -106,31 +133,63 @@ export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeForm
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <div className="space-y-2">
-        <Label>NIK / Kartu Identitas</Label>
-        <div className="flex gap-2">
-          <Input 
-            value={nik} 
-            onChange={(e) => setNik(e.target.value)} 
-            placeholder="Ketik NIK..." 
-          />
+      {/* NIK */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label>NIK / Kartu Identitas</Label>
+          <span className={`text-xs ${nik.length === 16 ? "text-green-600" : "text-foreground/50"}`}>
+            {nik.length}/16 digit
+          </span>
         </div>
+        <Input
+          value={nik}
+          onChange={handleNikChange}
+          placeholder="Masukkan 16 digit NIK (opsional)"
+          maxLength={16}
+          inputMode="numeric"
+        />
+        {nikIsPartial && (
+          <p className="text-xs text-amber-600">NIK harus tepat 16 digit</p>
+        )}
+        {nikStatus === "checking" && (
+          <p className="text-xs text-foreground/50 flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> Mengecek data pasien...
+          </p>
+        )}
+        {nikStatus === "found" && (
+          <p className="text-xs text-green-600 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Pasien ditemukan — data diisi otomatis
+          </p>
+        )}
+        {nikStatus === "not_found" && (
+          <p className="text-xs text-amber-600 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> NIK belum terdaftar — pasien baru akan dibuat
+          </p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label>Nama Pasien *</Label>
-        <Input 
-          value={name} 
-          onChange={(e) => setName(e.target.value)} 
-          placeholder="Mis: Mr. X atau Nama Lengkap" 
-          required 
+      {/* Nama */}
+      <div className="space-y-1.5">
+        <Label>
+          Nama Pasien *
+          {nikStatus === "found" && (
+            <span className="ml-2 text-xs font-normal text-foreground/50">(dari data terdaftar, tidak dapat diubah)</span>
+          )}
+        </Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={nikStatus === "idle" || nik.length === 0 ? "Mis: Mr. X atau Nama Lengkap" : "Terisi otomatis setelah cek NIK"}
+          disabled={nikStatus === "found"}
+          required
         />
       </div>
 
-      <div className="space-y-2 pt-2">
+      {/* Kondisi */}
+      <div className="space-y-1.5 pt-1">
         <Label>Kondisi saat tiba</Label>
-        <Select 
-          value={isCritical ? "true" : "false"} 
+        <Select
+          value={isCritical ? "true" : "false"}
           onValueChange={(v) => setIsCritical(v === "true")}
         >
           <SelectTrigger className="w-full">
@@ -147,7 +206,7 @@ export function EmergencyIntakeForm({ onSuccess, onCancel }: EmergencyIntakeForm
         <Button variant="outline" type="button" onClick={onCancel} disabled={loading}>
           Batal
         </Button>
-        <Button type="submit" disabled={loading} className="bg-orange-600 hover:bg-orange-700">
+        <Button type="submit" disabled={loading || nikStatus === "checking"} className="bg-orange-600 hover:bg-orange-700">
           {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Memproses...</> : "Daftarkan ke IGD"}
         </Button>
       </div>

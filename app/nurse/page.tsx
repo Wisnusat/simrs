@@ -2,13 +2,13 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Activity, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
+import { Activity, AlertTriangle, CheckCircle, Clock, LayoutDashboard, Users, UserPlus, BedDouble } from "lucide-react"
 import { useQueue } from "@/hooks/outpatient/use-queue"
 import { useVitalSigns } from "@/hooks/outpatient/use-vital-signs"
 import { createEncounter, patchQueueStatus, postAllergy } from "@/lib/api/client"
@@ -20,19 +20,20 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
 import type { QueueEntry } from "@/lib/types/outpatient"
 import { WalkinRegistrationForm } from "@/components/nurse/walkin-registration-form"
-import { AdmissionRequestsView } from "@/components/nurse/admission-requests-view"
 import { announcePatient } from "@/lib/utils"
 import { SurgeryDashboard } from "@/components/doctor/surgery-dashboard"
+import { useSurgeryCount } from "@/hooks/use-surgery-count"
 
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
-const SIDEBAR = (active: string, set: (v: string) => void) => [
+const SIDEBAR = (active: string, set: (v: string) => void, surgeryCount = 0) => [
   { icon: LayoutDashboard, label: "Dashboard", active: active === "dashboard", onClick: () => set("dashboard") },
   { icon: Users, label: "Antrian Pasien", active: active === "queue", onClick: () => set("queue") },
   // { icon: UserPlus, label: "Registrasi Walk-In", active: active === "walkin", onClick: () => set("walkin") },
-  { icon: BedDouble, label: "Permintaan Rawat Inap", active: active === "admissions", onClick: () => set("admissions") },
-  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery") },
+  { icon: BedDouble, label: "Rawat Inap", href: "/inpatient" },
+  { icon: AlertTriangle, label: "IGD", href: "/emergency" },
+  { icon: Activity, label: "Dashboard Operasi (OK)", active: active === "surgery", onClick: () => set("surgery"), badge: surgeryCount || undefined },
   { icon: Clock, label: "Riwayat", active: active === "history", onClick: () => set("history") },
 ]
 
@@ -41,13 +42,22 @@ const SIDEBAR = (active: string, set: (v: string) => void) => [
 // ---------------------------------------------------------------------------
 export default function NurseDashboard() {
   const [view, setView] = useState("dashboard")
+  const surgeryCount = useSurgeryCount()
   /** Entry selected for vital signs input (status: "called", encounter exists) */
   const [selected, setSelected] = useState<QueueEntry | null>(null)
   /** ID of entry currently being "called" (disables button during async ops) */
   const [callingId, setCallingId] = useState<string | null>(null)
   const [callError, setCallError] = useState<string | null>(null)
+  const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
 
-  const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId: '9bba8621-c9b7-4d62-8301-3d0dfa048a6b' })
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => { if (d.success && d.data.poli_service_id) setPoliServiceId(d.data.poli_service_id) })
+      .catch(() => {})
+  }, [])
+
+  const { data: queue, loading, refresh, stats } = useQueue({ poliServiceId })
   const { submit, loading: vsLoading, error: vsError, clearError } = useVitalSigns()
 
   const [preparingEncounter, setPreparingEncounter] = useState<string | null>(null)
@@ -124,7 +134,7 @@ export default function NurseDashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <DashboardLayout title="Perawat" role="nurse" sidebarItems={SIDEBAR(view, setView)}>
+    <DashboardLayout title="Perawat" role="nurse" sidebarItems={SIDEBAR(view, setView, surgeryCount)}>
       {/* ── DASHBOARD ── */}
       {view === "dashboard" && (
         <div className="space-y-6">
@@ -187,7 +197,7 @@ export default function NurseDashboard() {
         <div className="space-y-6">
           <PageHeader
             title="Antrian Pasien"
-            description="Semua antrian hari ini"
+            description="Antrian aktif hari ini"
             onRefresh={refresh}
             isRefreshing={loading}
           />
@@ -199,17 +209,19 @@ export default function NurseDashboard() {
           )}
 
           <div className="space-y-3">
-            {queue.map((entry) => (
-              <QueueCard
-                key={entry.id}
-                entry={entry}
-                onCallPatient={handleCallPatient}
-                onInputVitalSigns={handleOpenVitalSigns}
-                calling={callingId === entry.id}
-              />
-            ))}
-            {queue.length === 0 && !loading && (
-              <EmptyState message="Tidak ada antrian hari ini." icon={Users} />
+            {queue
+              .filter((q) => q.status === "waiting" || q.status === "called" || q.status === "in_service")
+              .map((entry) => (
+                <QueueCard
+                  key={entry.id}
+                  entry={entry}
+                  onCallPatient={handleCallPatient}
+                  onInputVitalSigns={handleOpenVitalSigns}
+                  calling={callingId === entry.id}
+                />
+              ))}
+            {queue.filter((q) => q.status === "waiting" || q.status === "called" || q.status === "in_service").length === 0 && !loading && (
+              <EmptyState message="Tidak ada antrian aktif hari ini." icon={Users} />
             )}
           </div>
         </div>
@@ -278,11 +290,6 @@ export default function NurseDashboard() {
           </Card>
         </div>
       )} */}
-
-      {/* ── ADMISSION REQUESTS ── */}
-      {view === "admissions" && (
-        <AdmissionRequestsView />
-      )}
 
       {/* ── SURGERY DASHBOARD ── */}
       {view === "surgery" && (

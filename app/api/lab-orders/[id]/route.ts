@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * GET /api/lab-orders/[id]
@@ -61,6 +62,11 @@ export async function PATCH(
 
   // ── Status update ───────────────────────────────────────────────────────
   if (body.status) {
+    const VALID_STATUSES = ['sample_taken', 'processing', 'result_uploaded', 'verified', 'cancelled']
+    if (!VALID_STATUSES.includes(body.status)) {
+      return apiResponse.badRequest(`Status tidak valid: ${body.status}`)
+    }
+
     const { data, error } = await supabase
       .from('lab_orders')
       .update({
@@ -94,6 +100,7 @@ export async function PATCH(
             notes: item.notes ?? null,
           })
           .eq('id', item.item_id)
+          .eq('lab_order_id', id)
           .select()
           .single()
       )
@@ -104,6 +111,8 @@ export async function PATCH(
 
     // Auto-advance to result_uploaded
     await supabase.from('lab_orders').update({ status: 'result_uploaded' }).eq('id', id)
+
+    enqueueSync(supabase, 'DiagnosticReport', id).catch(() => {})
 
     return apiResponse.ok({ updated: updates.length })
   }

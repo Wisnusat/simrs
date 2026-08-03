@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 interface RouteContext {
     params: Promise<{ id: string }>
@@ -55,6 +56,7 @@ export async function PATCH(
 
         if (updateError) {
             console.error('Poli update error:', updateError)
+            Sentry.captureException(updateError)
             if (updateError.code === '23505') {
                 return apiResponse.conflict('Code already exists')
             }
@@ -64,6 +66,7 @@ export async function PATCH(
         return apiResponse.ok(updatedPoli)
     } catch (e) {
         console.error('Poli PATCH error:', e)
+        Sentry.captureException(e)
         return apiResponse.serverError()
     }
 }
@@ -93,12 +96,14 @@ export async function DELETE(
 
         if (deleteError) {
             console.error('Poli delete error:', deleteError)
+            Sentry.captureException(deleteError)
             return apiResponse.serverError('Failed to delete poli service')
         }
 
         return apiResponse.ok({ message: 'Poli service deleted successfully' })
     } catch (e) {
         console.error('Poli DELETE error:', e)
+        Sentry.captureException(e)
         return apiResponse.serverError()
     }
 }

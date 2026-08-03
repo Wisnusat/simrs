@@ -17,6 +17,7 @@ import {
     FlaskConical,
     Activity,
     BedDouble,
+    Clock,
 } from 'lucide-react'
 
 export default function CmsLayout({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,13 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
             href: '/cms/staff',
             onClick: () => navigateTo('/cms/staff'),
             active: pathname === '/cms/staff',
+        },
+        {
+            icon: Clock,
+            label: 'Persetujuan Akun',
+            href: '/cms/approvals',
+            onClick: () => navigateTo('/cms/approvals'),
+            active: pathname === '/cms/approvals',
         },
         {
             icon: Globe,

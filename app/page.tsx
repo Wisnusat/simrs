@@ -36,12 +36,12 @@ export default function SystemLoginPage() {
               Daftar sebagai staf
             </Link>
           </p>
-          <p>
+          {/* <p>
             Bukan staf?{' '}
             <Link href="https://klinik-eta.vercel.app/" className="text-primary hover:text-primary/80 transition-colors font-medium">
               Kembali ke beranda
             </Link>
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

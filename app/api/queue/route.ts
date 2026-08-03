@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
   const { data: encounters } = await supabase
     .from('encounters')
-    .select('id, patient_id, status, queue_id')
+    .select('id, patient_id, status, encounter_class, queue_id')
     .in('queue_id', queueIds.length > 0 ? queueIds : ['__none__'])
 
   const encounterMap = new Map((encounters ?? []).map((e: any) => [e.queue_id, e]))

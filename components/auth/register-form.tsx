@@ -159,11 +159,14 @@ export default function RegisterForm() {
                 </div>
                 <h2 className="text-xl font-bold text-foreground">Pendaftaran Berhasil</h2>
                 <p className="text-foreground/60 text-sm">
-                    Akun untuk <span className="font-semibold text-foreground">{registeredName}</span> telah dibuat.
-                    Silakan masuk menggunakan email dan password yang telah didaftarkan.
+                    Akun untuk <span className="font-semibold text-foreground">{registeredName}</span> telah didaftarkan.
+                    Akun Anda akan aktif setelah disetujui oleh administrator klinik.
                 </p>
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-700 dark:text-amber-300 text-left">
+                    Hubungi administrator jika membutuhkan akses segera.
+                </div>
                 <Button className="w-full mt-2" onClick={() => router.push('/')}>
-                    Masuk Sekarang
+                    Kembali ke Login
                 </Button>
             </div>
         )

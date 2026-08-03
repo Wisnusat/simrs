@@ -370,9 +370,15 @@ export function SurgeryDashboard({ role }: { role: string }) {
                           <div className="text-[10px] text-foreground/40">{formattedPacuOut}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="border-green-500 text-green-600 bg-green-500/5 font-mono text-[10px]">
-                            ✔️ Synced (FHIR Procedure)
-                          </Badge>
+                          {item.ss_sync_status === 'synced' ? (
+                            <Badge variant="outline" className="border-green-500 text-green-600 bg-green-500/5 font-mono text-[10px]">✔ Synced</Badge>
+                          ) : item.ss_sync_status === 'failed' ? (
+                            <Badge variant="outline" className="border-red-500 text-red-600 bg-red-500/5 font-mono text-[10px]">✗ Failed</Badge>
+                          ) : item.ss_sync_status === 'dead' ? (
+                            <Badge variant="outline" className="border-zinc-400 text-zinc-500 font-mono text-[10px]">Dead</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-amber-400 text-amber-600 bg-amber-500/5 font-mono text-[10px]">Pending</Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     )

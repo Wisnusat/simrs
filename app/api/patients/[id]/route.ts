@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -148,6 +149,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
         if (updateError) {
             console.error('Patient update error:', updateError)
+            Sentry.captureException(updateError)
             if (updateError.code === '23505') {
                 return apiResponse.conflict('A patient with this BPJS number already exists')
             }

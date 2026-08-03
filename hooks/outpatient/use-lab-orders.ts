@@ -11,6 +11,8 @@ import {
   patchLabOrderStatus,
   patchLabResults,
 } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type {
   LabOrder,
   LabOrderInput,
@@ -22,11 +24,11 @@ interface UseLabOrdersOptions {
   encounterId?: string
   status?: string
   today?: boolean
-  pollIntervalMs?: number
+  fallbackPollMs?: number
 }
 
 export function useLabOrders(opts: UseLabOrdersOptions = {}) {
-  const { encounterId, status, today, pollIntervalMs = 30_000 } = opts
+  const { encounterId, status, today, fallbackPollMs = 60_000 } = opts
 
   const [data, setData] = useState<LabOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,13 +47,15 @@ export function useLabOrders(opts: UseLabOrdersOptions = {}) {
     }
   }, [encounterId, status, today])
 
-  useEffect(() => {
-    refresh()
-    if (pollIntervalMs > 0) {
-      const id = setInterval(refresh, pollIntervalMs)
-      return () => clearInterval(id)
-    }
-  }, [refresh, pollIntervalMs])
+  useEffect(() => { refresh() }, [refresh])
+
+  useRealtimeSync({
+    table: 'lab_orders',
+    filter: encounterId ? `encounter_id=eq.${encounterId}` : undefined,
+    onchange: refresh,
+  })
+
+  usePolling(refresh, fallbackPollMs)
 
   const create = useCallback(
     async (input: LabOrderInput): Promise<boolean> => {

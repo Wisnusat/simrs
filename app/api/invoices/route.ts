@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { buildInvoiceFromEncounter } from '@/lib/api/invoice-builder'
-import { syncInvoice } from '@/lib/api/satu-sehat'
+import { buildInvoiceFromEncounter, syncInvoiceForEpisode } from '@/lib/api/invoice-builder'
 
 /**
  * GET /api/invoices
@@ -31,8 +30,33 @@ export async function GET(req: NextRequest) {
   const { practitioner } = auth
   const { searchParams } = new URL(req.url)
   const encounterId = searchParams.get('encounter_id')
+  const episodeId = searchParams.get('episode_of_care_id')
   const status = searchParams.get('status')
   const today = searchParams.get('today')
+
+  // ── Single episode — return episode-level invoice ───────────────────────
+  if (episodeId) {
+    const { data: existing } = await supabase
+      .from('invoices')
+      .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+      .eq('episode_of_care_id', episodeId)
+      .maybeSingle()
+
+    if (existing) {
+      // Heal race condition: header exists but items missing (sync wrote header before items)
+      if ((existing as any).invoice_items?.length === 0 && Number((existing as any).total_amount) > 0) {
+        await syncInvoiceForEpisode(supabase, episodeId)
+        const { data: healed } = await supabase
+          .from('invoices')
+          .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+          .eq('episode_of_care_id', episodeId)
+          .maybeSingle()
+        return apiResponse.ok(healed ?? existing)
+      }
+      return apiResponse.ok(existing)
+    }
+    return apiResponse.notFound('Invoice belum dibuat untuk episode ini')
+  }
 
   // ── Single encounter — return or auto-generate ──────────────────────────
   if (encounterId) {
@@ -69,11 +93,23 @@ export async function GET(req: NextRequest) {
         tax_amount: built.tax_amount,
         total_amount: built.total_amount,
         status: 'unpaid',
+        ss_sync_status: 'not_required',
       })
       .select()
       .single()
 
-    if (invError) return apiResponse.serverError(invError.message)
+    if (invError) {
+      // 23505 = unique_violation: a concurrent request already created the invoice
+      if ((invError as any).code === '23505') {
+        const { data: raceInv } = await supabase
+          .from('invoices')
+          .select('*, invoice_items(*), patients(full_name, medical_record_no, phone)')
+          .eq('encounter_id', encounterId)
+          .single()
+        if (raceInv) return apiResponse.ok(raceInv)
+      }
+      return apiResponse.serverError(invError.message)
+    }
 
     await supabase.from('invoice_items').insert(
       built.items.map((item) => ({

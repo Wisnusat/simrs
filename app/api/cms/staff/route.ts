@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/staff
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Staff list error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch staff')
         }
 
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
         if (isGuardError(admin)) return admin
 
         const body = await request.json()
-        const { full_name, email, password, role, specialization, gender, phone, nik, nip, str_number, sip_number } = body
+        const { full_name, email, password, role, specialization, gender, phone, nik, nip, str_number, sip_number, poli_service_id } = body
 
         if (!full_name || !role) {
             return apiResponse.badRequest('full_name and role are required')
@@ -106,6 +108,7 @@ export async function POST(request: NextRequest) {
             nip: nip ?? null,
             str_number: str_number ?? null,
             sip_number: sip_number ?? null,
+            poli_service_id: poli_service_id ?? null,
             is_active: true,
             ...(userId ? { user_id: userId } : {}),
         }
@@ -123,6 +126,7 @@ export async function POST(request: NextRequest) {
                 await supabaseAdmin.auth.admin.deleteUser(userId)
             }
             console.error('Staff insert error:', insertError)
+            Sentry.captureException(insertError)
             if (insertError.code === '23505') {
                 return apiResponse.conflict('Staff member with this NIK/NIP already exists')
             }

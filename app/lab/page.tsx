@@ -3,6 +3,8 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback } from "react"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
+import { usePolling } from "@/hooks/use-polling"
 import DashboardLayout from "@/components/system/dashboard-layout"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,17 +48,25 @@ export default function LabDashboard() {
 
   const { data: orders, loading, refresh, stats, advanceStatus, submitResults, actionLoading, error } = useLabOrders({ today: true })
 
-  // Fetch encounters in waiting_lab status
-  const refreshEncounters = useCallback(async () => {
-    setEncLoading(true)
+  // Silent fetch — used by polling & realtime
+  const fetchEncounters = useCallback(async () => {
     try {
       const enc = await getEncounters({ status: "waiting_lab", today: true })
       setEncounters(enc)
     } catch { /* silent */ }
-    finally { setEncLoading(false) }
   }, [])
 
-  useEffect(() => { refreshEncounters() }, [refreshEncounters])
+  // Manual refresh — shows spinner on button
+  const refreshEncounters = useCallback(async () => {
+    setEncLoading(true)
+    try { await fetchEncounters() }
+    finally { setEncLoading(false) }
+  }, [fetchEncounters])
+
+  useEffect(() => { fetchEncounters() }, [fetchEncounters])
+
+  useRealtimeSync({ table: 'encounters', filter: 'status=eq.waiting_lab', onchange: fetchEncounters })
+  usePolling(fetchEncounters, 60_000)
 
   const handleRefreshAll = () => { refresh(); refreshEncounters() }
 
@@ -70,7 +80,7 @@ export default function LabDashboard() {
       // Auto-return outpatient encounter to doctor when results uploaded
       const isWaitingLab = encounters.some(e => e.id === resultOrder.encounter_id)
       if (isWaitingLab) {
-        await patchEncounter(resultOrder.encounter_id, { status: "in_progress" } as any)
+        await patchEncounter(resultOrder.encounter_id, { status: "in_progress" } as any).catch(() => {})
       }
       setResultOrder(null)
       handleRefreshAll()

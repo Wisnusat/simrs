@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -119,6 +120,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
         if (updateError || !updated) {
             console.error('Emergency triage update error:', updateError)
+            Sentry.captureException(updateError)
             return apiResponse.serverError('Failed to update triage data')
         }
 

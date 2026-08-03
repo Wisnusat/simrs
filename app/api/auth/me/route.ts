@@ -24,10 +24,15 @@ export async function GET() {
         email,
         phone,
         organization_id,
+        poli_service_id,
         organizations (
           id,
           name,
           type
+        ),
+        poli_services (
+          id,
+          name
         )
       `)
             .eq('user_id', user.id)
@@ -50,6 +55,8 @@ export async function GET() {
                 specialization: practitioner.specialization,
                 email: practitioner.email,
                 phone: practitioner.phone,
+                poli_service_id: practitioner.poli_service_id ?? null,
+                poli_service_name: (practitioner.poli_services as any)?.name ?? null,
                 organization: practitioner.organizations,
             },
         })

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * PATCH /api/pharmacist/po/[id]
@@ -131,6 +132,7 @@ export async function PATCH(
         return apiResponse.badRequest('Unknown action')
     } catch (err) {
         console.error('PO update error:', err)
+        Sentry.captureException(err)
         return apiResponse.serverError()
     }
 }

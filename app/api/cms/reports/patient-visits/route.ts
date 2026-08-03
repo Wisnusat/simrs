@@ -5,6 +5,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireOwner, isGuardError } from '@/lib/api/guards'
 import { generateExcelResponse } from '@/lib/api/excel-export'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/reports/patient-visits
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Visit report error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch visit data')
         }
 
@@ -58,7 +60,10 @@ export async function GET(request: NextRequest) {
             else if (enc.encounter_class === 'inpatient') existing.inpatient++
             else if (enc.encounter_class === 'emergency') existing.emergency++
 
-            const poliName = (enc.poli_services as any)?.name ?? 'Lainnya'
+            const poliName = (enc.poli_services as any)?.name
+              ?? (enc.encounter_class === 'emergency' ? 'IGD'
+                : enc.encounter_class === 'inpatient' ? 'Rawat Inap'
+                : 'Lainnya')
             existing.by_poli[poliName] = (existing.by_poli[poliName] ?? 0) + 1
             poliTotals.set(poliName, (poliTotals.get(poliName) ?? 0) + 1)
 

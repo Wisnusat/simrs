@@ -9,13 +9,69 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { FlaskConical, Plus, Loader2, Trash2, Search, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { FlaskConical, Plus, Loader2, Trash2, Search, ChevronLeft, ChevronRight, CheckCircle2, Pencil, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLabServices } from '@/hooks/cms/use-lab-services'
 import { useMasterLabServices } from '@/hooks/cms/use-master-lab-services'
 
+function PriceCell({ id, price, onSave }: { id: string; price: number; onSave: (id: string, price: number) => Promise<void> }) {
+    const [editing, setEditing] = useState(false)
+    const [value, setValue] = useState(String(price))
+    const [saving, setSaving] = useState(false)
+
+    const handleSave = async () => {
+        const num = Number(value)
+        if (isNaN(num) || num < 0) { toast.error('Harga tidak valid'); return }
+        setSaving(true)
+        await onSave(id, num)
+        setSaving(false)
+        setEditing(false)
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleSave()
+        if (e.key === 'Escape') { setValue(String(price)); setEditing(false) }
+    }
+
+    if (editing) {
+        return (
+            <div className="flex items-center gap-1">
+                <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/50">Rp</span>
+                    <Input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        className="pl-7 h-7 w-32 text-xs"
+                        value={value}
+                        onChange={e => setValue(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                    />
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSave} disabled={saving}>
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3 text-emerald-600" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setValue(String(price)); setEditing(false) }}>
+                    <X className="w-3 h-3 text-destructive/70" />
+                </Button>
+            </div>
+        )
+    }
+
+    return (
+        <button
+            onClick={() => setEditing(true)}
+            className="group flex items-center gap-1.5 text-sm text-foreground/80 hover:text-foreground"
+        >
+            <span>{price > 0 ? `Rp ${price.toLocaleString('id-ID')}` : <span className="text-foreground/40 italic text-xs">Belum diset</span>}</span>
+            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+        </button>
+    )
+}
+
 export default function LabServicesPage() {
-    const { grouped, loading, actionLoading, add, remove, addedLoincs, refresh } = useLabServices()
+    const { grouped, loading, actionLoading, add, remove, updatePrice, addedLoincs, refresh } = useLabServices()
     const master = useMasterLabServices()
 
     const [showDialog, setShowDialog] = useState(false)
@@ -30,6 +86,12 @@ export default function LabServicesPage() {
         if (ok) toast.success(`${item.name} berhasil ditambahkan`)
         else toast.error(error ?? 'Gagal menambahkan layanan')
         setAddingId(null)
+    }
+
+    const handlePriceUpdate = async (id: string, price: number) => {
+        const { ok, error } = await updatePrice(id, price)
+        if (ok) toast.success('Harga berhasil disimpan')
+        else toast.error(error ?? 'Gagal menyimpan harga')
     }
 
     const handleDelete = async (id: string, name: string) => {
@@ -83,8 +145,9 @@ export default function LabServicesPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className='w-[60%]'>Nama Pemeriksaan</TableHead>
+                                        <TableHead className='w-[50%]'>Nama Pemeriksaan</TableHead>
                                         <TableHead>LOINC</TableHead>
+                                        <TableHead>Harga</TableHead>
                                         <TableHead className="w-16 text-right">Hapus</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -94,6 +157,9 @@ export default function LabServicesPage() {
                                             <TableCell className="font-medium">{svc.name}</TableCell>
                                             <TableCell>
                                                 <Badge variant="outline" className="font-mono text-xs">{svc.loinc_code}</Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <PriceCell id={svc.id} price={svc.price ?? 0} onSave={handlePriceUpdate} />
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button

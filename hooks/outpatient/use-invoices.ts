@@ -6,16 +6,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { getInvoices, payInvoice, cancelInvoice } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type { Invoice, InvoiceStatus, PaymentMethod } from "@/lib/types/outpatient"
 
 interface UseInvoicesOptions {
   status?: InvoiceStatus | "all"
   today?: boolean
-  pollIntervalMs?: number
+  fallbackPollMs?: number
 }
 
 export function useInvoices(opts: UseInvoicesOptions = {}) {
-  const { status, today, pollIntervalMs = 30_000 } = opts
+  const { status, today, fallbackPollMs = 60_000 } = opts
 
   const [data, setData] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,13 +36,11 @@ export function useInvoices(opts: UseInvoicesOptions = {}) {
     }
   }, [status, today])
 
-  useEffect(() => {
-    refresh()
-    if (pollIntervalMs > 0) {
-      const id = setInterval(refresh, pollIntervalMs)
-      return () => clearInterval(id)
-    }
-  }, [refresh, pollIntervalMs])
+  useEffect(() => { refresh() }, [refresh])
+
+  useRealtimeSync({ table: 'invoices', onchange: refresh })
+
+  usePolling(refresh, fallbackPollMs)
 
   const pay = useCallback(
     async (

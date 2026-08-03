@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncPrescription } from '@/lib/api/satu-sehat'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/prescriptions
@@ -51,10 +51,6 @@ export async function POST(req: NextRequest) {
 
   if (rxError) return apiResponse.serverError(rxError.message)
 
-  const { data, error } = await supabase.rpc('get_current_practitioner_role')
-
-  console.log('RPC role result:', data)
-  console.log('RPC error:', error)
   // Insert items
   const { data: rxItems, error: itemsError } = await supabase
     .from('prescription_items')
@@ -72,7 +68,11 @@ export async function POST(req: NextRequest) {
     )
     .select()
 
-  if (itemsError) return apiResponse.serverError(itemsError.message)
+  if (itemsError) {
+    // Rollback: delete orphaned prescription header
+    await supabase.from('prescriptions').delete().eq('id', (prescription as any).id)
+    return apiResponse.serverError(itemsError.message)
+  }
 
   // Stock check — warn only, never block
   const { data: stocks } = await supabase
@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
     .filter((item) => (stockMap.get(item.medication_id) ?? 0) < item.quantity)
     .map((item) => `Stok obat ID ${item.medication_id} tidak mencukupi`)
 
-  syncPrescription(supabase, (prescription as any).id, { encounter_id, patient_id }).catch(() => { })
+  for (const item of (rxItems ?? [])) {
+    enqueueSync(supabase, 'MedicationRequest', (item as any).id).catch(() => {})
+  }
 
   return apiResponse.created({
     prescription: { ...prescription, prescription_items: rxItems },
@@ -114,6 +116,7 @@ export async function GET(req: NextRequest) {
       *,
       patients ( full_name, medical_record_no ),
       practitioners ( full_name ),
+      encounters ( encounter_class ),
       prescription_items (
         *,
         medications ( id, name, generic_name, form, strength, unit )
@@ -149,6 +152,8 @@ export async function GET(req: NextRequest) {
   return apiResponse.ok(
     (data ?? []).map((rx: any) => ({
       ...rx,
+      encounter_class: rx.encounters?.encounter_class ?? null,
+      encounters: undefined,
       prescription_items: (rx.prescription_items ?? []).map((item: any) => ({
         ...item,
         stock_available: stockMap.get(item.medication_id) ?? 0,

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/content
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('CMS content fetch error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch CMS content')
         }
 
@@ -83,6 +85,7 @@ export async function PUT(request: NextRequest) {
 
         if (error) {
             console.error('CMS content upsert error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to save CMS content')
         }
 

@@ -101,6 +101,7 @@ export interface QueueEntry {
 export interface EncounterRef {
   id: string
   status: EncounterStatus
+  encounter_class?: EncounterClass
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +254,7 @@ export interface LabService {
   loinc_code: string
   category: string
   is_active: boolean
+  price: number
 }
 
 export interface LabOrderItem {
@@ -342,6 +344,7 @@ export interface Prescription {
   prescribed_by: string
   prescription_date: string
   status: PrescriptionStatus
+  encounter_class?: EncounterClass | null
   patients: Pick<Patient, "full_name" | "medical_record_no">
   practitioners: Pick<Practitioner, "full_name">
   prescription_items: PrescriptionItem[]

@@ -37,14 +37,15 @@ export async function buildInvoiceFromEncounter(
 ): Promise<BuiltInvoice> {
   const items: InvoiceLineItem[] = []
 
-  // ── 1. Consultation fee ────────────────────────────────────────────────
+  // ── 1. Consultation fee + action fee ──────────────────────────────────
   const { data: org } = await supabase
     .from('organizations')
-    .select('medical_fee')
+    .select('medical_fee, action_fee')
     .eq('id', organizationId)
     .single()
 
   const consultationFee: number = (org as any)?.medical_fee ?? 50_000
+  const actionFee: number = (org as any)?.action_fee ?? 50_000
   items.push({
     item_type: 'consultation',
     item_name: 'Biaya Konsultasi Dokter',
@@ -65,12 +66,22 @@ export async function buildInvoiceFromEncounter(
       item_name: proc.procedure_display,
       item_code: proc.procedure_code,
       quantity: 1,
-      unit_price: 50_000,
+      unit_price: actionFee,
       reference_id: proc.id,
     })
   }
 
   // ── 3. Lab orders ──────────────────────────────────────────────────────
+  // Pre-fetch lab service prices for this org (keyed by loinc_code)
+  const { data: labServicePrices } = await supabase
+    .from('lab_services')
+    .select('loinc_code, price')
+    .eq('organization_id', organizationId)
+
+  const labPriceMap = new Map<string, number>(
+    (labServicePrices ?? []).map((s: any) => [s.loinc_code, Number(s.price)])
+  )
+
   const { data: labOrders } = await supabase
     .from('lab_orders')
     .select('id, lab_order_items(id, test_name, loinc_code)')
@@ -78,12 +89,13 @@ export async function buildInvoiceFromEncounter(
 
   for (const lo of (labOrders ?? [])) {
     for (const item of (lo.lab_order_items ?? [])) {
+      const labPrice = labPriceMap.get(item.loinc_code) ?? 75_000
       items.push({
         item_type: 'lab',
         item_name: item.test_name,
         item_code: item.loinc_code,
         quantity: 1,
-        unit_price: 75_000,
+        unit_price: labPrice,
         reference_id: lo.id,
       })
     }
@@ -105,16 +117,18 @@ export async function buildInvoiceFromEncounter(
   for (const rx of (prescriptions ?? [])) {
     for (const pi of (rx.prescription_items ?? [])) {
       const med = (pi as any).medications
-      // Fetch unit price from medications / stock_movements or use a fallback
+      // FEFO: use unit_price from the earliest-expiry batch with stock > 0
       const { data: stock } = await supabase
-        .from('stock_movements')
+        .from('medication_stock')
         .select('unit_price')
         .eq('medication_id', pi.medication_id)
-        .order('created_at', { ascending: false })
+        .eq('organization_id', organizationId)
+        .gt('quantity', 0)
+        .order('expiry_date', { ascending: true })
         .limit(1)
         .maybeSingle()
 
-      const unitPrice: number = (stock as any)?.unit_price ?? 5_000
+      const unitPrice: number = (stock as any)?.unit_price ?? 0
       items.push({
         item_type: 'medication',
         item_name: med?.name ?? 'Obat',
@@ -139,11 +153,23 @@ export async function syncInvoiceForEncounter(
 ): Promise<void> {
   const { data: enc } = await supabase
     .from('encounters')
-    .select('patient_id, organization_id, payment_type')
+    .select('patient_id, organization_id, payment_type, episode_of_care_id')
     .eq('id', encounterId)
     .single()
 
   if (!enc) return
+
+  // This encounter belongs to an inpatient episode — billing is handled entirely by
+  // syncInvoiceForEpisode (one consolidated episode invoice). Delete any encounter-level
+  // invoice that may have been created before the admission was confirmed, then bail.
+  if ((enc as any).episode_of_care_id) {
+    await supabase
+      .from('invoices')
+      .delete()
+      .eq('encounter_id', encounterId)
+      .is('episode_of_care_id', null)
+    return
+  }
 
   const orgId = (enc as any).organization_id
   const built = await buildInvoiceFromEncounter(supabase, encounterId, orgId)
@@ -253,40 +279,25 @@ export async function syncInvoiceForEpisode(
     .limit(1)
     .maybeSingle()
 
-  // Fetch all encounters in this episode
+  // Fetch all encounters in this episode (with class so we can bill correctly)
   const { data: encounters } = await supabase
     .from('encounters')
-    .select('id')
+    .select('id, encounter_class')
     .eq('episode_of_care_id', episodeOfCareId)
 
   const encounterIds = (encounters ?? []).map((e: any) => e.id)
+  // Only the initial outpatient encounter gets a consultation fee.
+  // Inpatient daily encounters are covered by the room rate.
+  const outpatientEncounterIds = new Set(
+    (encounters ?? [])
+      .filter((e: any) => e.encounter_class === 'outpatient')
+      .map((e: any) => e.id)
+  )
 
   const allItems: InvoiceLineItem[] = []
 
-  // 1. Room charges
-  if (admission) {
-    const startDate = new Date(admission.admission_date)
-    const endDate = admission.discharge_date ? new Date(admission.discharge_date) : new Date()
-    const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
-
-    const { data: rateRow } = await supabase
-      .from('room_rates')
-      .select('daily_rate')
-      .eq('organization_id', (episode as any).organization_id ?? '')
-      .eq('room_class', admission.room_class)
-      .maybeSingle()
-    const dailyRate: number = (rateRow as any)?.daily_rate ?? ROOM_RATES_FALLBACK[admission.room_class] ?? ROOM_RATES_FALLBACK.kelas_3
-
-    allItems.push({
-      item_type: 'room' as any,
-      item_name: `Biaya Kamar (${admission.room_class.replace('_', ' ').toUpperCase()}) × ${days} hari`,
-      quantity: days,
-      unit_price: dailyRate,
-      reference_id: admission.id,
-    })
-  }
-
-  // 2. Running bill manual charges
+  // 1. Running bill charges (room per-day, procedures, medications — all auto-inserted
+  //    by their respective routes). This is the single source of truth for these types.
   const { data: runningBills } = await supabase
     .from('running_bills')
     .select('item_type, item_name, item_code, quantity, unit_price, reference_id')
@@ -303,26 +314,80 @@ export async function syncInvoiceForEpisode(
     })
   }
 
-  // 3. Aggregate charges from all encounters
+  // 2. Consultation and lab charges per encounter (not tracked in running_bills)
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('medical_fee')
+    .eq('id', (episode as any).organization_id)
+    .single()
+  const consultationFee: number = (org as any)?.medical_fee ?? 50_000
+
+  const { data: labServicePrices } = await supabase
+    .from('lab_services')
+    .select('loinc_code, price')
+    .eq('organization_id', (episode as any).organization_id)
+
+  const labPriceMap = new Map<string, number>(
+    (labServicePrices ?? []).map((s: any) => [s.loinc_code, Number(s.price)])
+  )
+
   for (const encId of encounterIds) {
-    const built = await buildInvoiceFromEncounter(
-      supabase,
-      encId,
-      (episode as any).organization_id,
-    )
-    allItems.push(...built.items)
+    if (outpatientEncounterIds.has(encId)) {
+      allItems.push({
+        item_type: 'consultation',
+        item_name: 'Biaya Konsultasi Dokter',
+        quantity: 1,
+        unit_price: consultationFee,
+      })
+    }
+
+    const { data: labOrders } = await supabase
+      .from('lab_orders')
+      .select('id, lab_order_items(id, test_name, loinc_code)')
+      .eq('encounter_id', encId)
+
+    for (const lo of (labOrders ?? [])) {
+      for (const item of ((lo as any).lab_order_items ?? [])) {
+        const labPrice = labPriceMap.get(item.loinc_code) ?? 75_000
+        allItems.push({
+          item_type: 'lab',
+          item_name: item.test_name,
+          item_code: item.loinc_code,
+          quantity: 1,
+          unit_price: labPrice,
+          reference_id: lo.id,
+        })
+      }
+    }
   }
 
   const subtotal = allItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
   const total_amount = subtotal
 
-  // Upsert episode-level invoice — onConflict on episode_of_care_id prevents duplicates
+  // Upsert episode-level invoice — use select-then-insert/update to avoid overwriting
+  // payment status when the invoice already exists and has been paid.
   const firstEncounterId = encounterIds[0] ?? null
   const invoiceNumber = `INV-IP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-  const { data: invoice } = await supabase
+
+  const { data: existingInv } = await supabase
     .from('invoices')
-    .upsert(
-      {
+    .select('id')
+    .eq('episode_of_care_id', episodeOfCareId)
+    .maybeSingle()
+
+  let invoice: { id: string } | null = null
+
+  if (existingInv) {
+    // Update amounts only — never touch status to avoid resetting a paid invoice
+    await supabase
+      .from('invoices')
+      .update({ subtotal, discount_amount: 0, tax_amount: 0, total_amount })
+      .eq('id', (existingInv as any).id)
+    invoice = existingInv as any
+  } else {
+    const { data: inserted } = await supabase
+      .from('invoices')
+      .insert({
         encounter_id: firstEncounterId,
         episode_of_care_id: episodeOfCareId,
         patient_id: (episode as any).patient_id,
@@ -334,14 +399,11 @@ export async function syncInvoiceForEpisode(
         tax_amount: 0,
         total_amount,
         status: 'unpaid',
-      },
-      {
-        onConflict: 'episode_of_care_id',
-        ignoreDuplicates: false,
-      }
-    )
-    .select('id')
-    .single()
+      })
+      .select('id')
+      .single()
+    invoice = inserted as any
+  }
 
   // Rewrite line items
   if (invoice) {

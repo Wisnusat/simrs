@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Save, Loader2, Building2 } from 'lucide-react'
+import { Save, Loader2, Building2, Banknote } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function HospitalInfoPage() {
@@ -21,6 +21,8 @@ export default function HospitalInfoPage() {
         phone: '',
         email: '',
         head_name: '',
+        medical_fee: '50000',
+        action_fee: '50000',
         operational_hours: {
             senin_jumat: { open: '08:00', close: '15:00' },
             sabtu: { open: '08:00', close: '12:00' },
@@ -43,6 +45,8 @@ export default function HospitalInfoPage() {
                             phone: data.data.phone ?? '',
                             email: data.data.email ?? '',
                             head_name: data.data.head_name ?? '',
+                            medical_fee: String(data.data.medical_fee ?? 50000),
+                            action_fee: String(data.data.action_fee ?? 50000),
                             operational_hours: data.data.operational_hours ?? form.operational_hours,
                         })
                     }
@@ -63,7 +67,11 @@ export default function HospitalInfoPage() {
             const res = await fetch('/api/cms/organization', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
+                body: JSON.stringify({
+                    ...form,
+                    medical_fee: Number(form.medical_fee),
+                    action_fee: Number(form.action_fee),
+                }),
             })
             const data = await res.json()
             if (data.success) {
@@ -206,6 +214,52 @@ export default function HospitalInfoPage() {
                             }))}
                             placeholder="24 Jam"
                         />
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border border-border/40">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Banknote className="w-5 h-5 text-primary" />
+                        Tarif Layanan
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <p className="text-sm text-foreground/60">
+                        Tarif default yang digunakan saat membuat tagihan otomatis. Kasir tetap dapat menyesuaikan tiap item.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="medical_fee">Biaya Konsultasi Dokter (per kunjungan)</Label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">Rp</span>
+                                <Input
+                                    id="medical_fee"
+                                    type="number"
+                                    min={0}
+                                    step={1000}
+                                    className="pl-9"
+                                    value={form.medical_fee}
+                                    onChange={e => setForm(f => ({ ...f, medical_fee: e.target.value }))}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="action_fee">Biaya Tindakan Default (per tindakan)</Label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">Rp</span>
+                                <Input
+                                    id="action_fee"
+                                    type="number"
+                                    min={0}
+                                    step={1000}
+                                    className="pl-9"
+                                    value={form.action_fee}
+                                    onChange={e => setForm(f => ({ ...f, action_fee: e.target.value }))}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

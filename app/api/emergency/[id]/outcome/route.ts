@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
+import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -106,17 +107,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
         if (updateEmergencyError || !updatedEmergency) {
             console.error('Emergency outcome update error:', updateEmergencyError)
+            Sentry.captureException(updateEmergencyError)
             return apiResponse.serverError('Failed to update emergency outcome')
-        }
-
-        // Tutup encounter utama
-        const { error: encounterUpdateError } = await supabase
-            .from('encounters')
-            .update({ status: 'finished', finished_at: now.toISOString() })
-            .eq('id', existing.encounter_id)
-
-        if (encounterUpdateError) {
-            console.warn('Encounter close error (outcome):', encounterUpdateError)
         }
 
         let episodeId: string | null = null
@@ -125,6 +117,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             const orgId: string | undefined = encounterCtx?.organization_id
             if (!orgId) {
                 console.error('Missing organization_id for inpatient admission')
+                Sentry.captureMessage('Missing organization_id for inpatient admission', 'error')
                 return apiResponse.serverError('Organization context not found for inpatient admission')
             }
 
@@ -145,16 +138,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
             if (episodeError || !episode) {
                 console.error('Episode of care create error:', episodeError)
+                Sentry.captureException(episodeError)
                 return apiResponse.serverError('Failed to create episode of care')
             }
 
             episodeId = episode.id
+            // EpisodeOfCare FHIR sync not yet implemented — wired in task 16
+        }
+
+        // Tutup encounter IGD — link ke episode agar lab orders & clinical notes
+        // tetap ditemukan saat query by episode_of_care_id di rawat inap
+        const { error: encounterUpdateError } = await supabase
+            .from('encounters')
+            .update({
+                status: 'finished',
+                finished_at: now.toISOString(),
+                ...(episodeId ? { episode_of_care_id: episodeId } : {}),
+            })
+            .eq('id', existing.encounter_id)
+
+        if (encounterUpdateError) {
+            console.warn('Encounter close error (outcome):', encounterUpdateError)
         }
 
         // Generate invoice for non-inpatient outcomes (discharged/referred)
         if (outcome !== 'admitted_inpatient') {
             syncInvoiceForEncounter(supabase, existing.encounter_id).catch(err => {
                 console.error('Invoice sync error on emergency outcome:', err)
+                Sentry.captureException(err)
             })
         }
 

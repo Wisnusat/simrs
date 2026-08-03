@@ -40,6 +40,7 @@ interface UserProfile {
   role: string
   specialization: string | null
   email: string
+  poli_service_name: string | null
   organization: { id: string; name: string; type: string } | null
 }
 
@@ -54,6 +55,7 @@ interface DashboardLayoutProps {
     href?: string
     onClick?: () => void
     active?: boolean
+    badge?: number
   }>
   hideSidebar?: boolean
 }
@@ -186,6 +188,11 @@ export default function DashboardLayout({
                           <Link href={item.href} onClick={item.onClick}>
                             <Icon />
                             <span>{item.label}</span>
+                            {!!item.badge && (
+                              <span className="ml-auto text-[10px] font-bold leading-none bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center group-data-[collapsible=icon]:hidden">
+                                {item.badge > 99 ? "99+" : item.badge}
+                              </span>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                       ) : (
@@ -197,6 +204,11 @@ export default function DashboardLayout({
                         >
                           <Icon />
                           <span>{item.label}</span>
+                          {!!item.badge && (
+                            <span className="ml-auto text-[10px] font-bold leading-none bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center group-data-[collapsible=icon]:hidden">
+                              {item.badge > 99 ? "99+" : item.badge}
+                            </span>
+                          )}
                         </SidebarMenuButton>
                       )}
                     </SidebarMenuItem>
@@ -220,6 +232,9 @@ export default function DashboardLayout({
               <p className="text-xs text-sidebar-foreground/50">{label}</p>
             </div>
           </div>
+          <p className="px-2 pb-2 text-[10px] text-sidebar-foreground/30 group-data-[collapsible=icon]:hidden">
+            v{process.env.NEXT_PUBLIC_APP_VERSION ?? '—'}
+          </p>
         </SidebarFooter>
 
         <SidebarRail />
@@ -233,6 +248,11 @@ export default function DashboardLayout({
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="h-4" />
             <span className="text-sm font-medium text-foreground/70 truncate">{title}</span>
+            {profile?.poli_service_name && (
+              <span className="hidden sm:inline-flex items-center rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground/60">
+                {profile.poli_service_name}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

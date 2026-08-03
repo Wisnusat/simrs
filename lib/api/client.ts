@@ -24,6 +24,7 @@
  */
 
 import type {
+  Patient,
   QueueEntry, QueueStatus,
   VitalSigns, VitalSignsInput,
   Encounter, EncounterStatus,
@@ -108,8 +109,11 @@ export async function postVitalSigns(input: VitalSignsInput): Promise<VitalSigns
   })
 }
 
-export async function getVitalSigns(encounterId: string): Promise<VitalSigns[]> {
-  return fetchJson(`/api/vital-signs${qs({ encounter_id: encounterId })}`)
+export async function getVitalSigns(encounterId?: string, opts?: { episode_of_care_id?: string }): Promise<VitalSigns[]> {
+  const params = opts?.episode_of_care_id
+    ? { episode_of_care_id: opts.episode_of_care_id }
+    : { encounter_id: encounterId }
+  return fetchJson(`/api/vital-signs${qs(params)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +122,7 @@ export async function getVitalSigns(encounterId: string): Promise<VitalSigns[]> 
 
 export interface CreateEncounterInput {
   patient_id: string
-  poli_service_id: string
+  poli_service_id: string | null
   appointment_id?: string
   queue_id?: string
   payment_type?: string
@@ -334,12 +338,19 @@ export async function dispensePrescription(
   })
 }
 
+export async function getMedicationDispenses(opts: {
+  episode_of_care_id: string
+}): Promise<any[]> {
+  return fetchJson(`/api/medication-dispenses${qs(opts)}`)
+}
+
 // ---------------------------------------------------------------------------
 // Invoices  /api/invoices
 // ---------------------------------------------------------------------------
 
 export async function getInvoices(opts?: {
   encounter_id?: string
+  episode_of_care_id?: string
   status?: InvoiceStatus | 'all'
   today?: boolean
 }): Promise<Invoice | Invoice[]> {
@@ -728,6 +739,13 @@ export async function deleteCmsLabService(id: string): Promise<{ deleted: boolea
   })
 }
 
+export async function patchCmsLabServicePrice(id: string, price: number): Promise<LabService> {
+  return fetchJson('/api/cms/lab-services', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, price }),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // CMS — Master Lab Services  /api/cms/master-lab-services
 // ---------------------------------------------------------------------------
@@ -768,6 +786,26 @@ export async function postMedicalResume(input: MedicalResumeInput): Promise<Medi
   return fetchJson('/api/medical-resumes', {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Patient NIK Verification  /api/patients/verify
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify a 16-digit NIK against local DB and SATUSEHAT.
+ * Returns one of three statuses:
+ *  - found_local  — patient exists in local DB (IHS refreshed if missing)
+ *  - found_ihs    — not local but SATUSEHAT found them; a local patient row was auto-created
+ *  - not_found    — neither source recognises the NIK; open full registration form
+ */
+export async function verifyPatientNik(
+  nik: string,
+): Promise<{ status: 'found_local' | 'found_ihs' | 'not_found'; patient?: Patient }> {
+  return fetchJson('/api/patients/verify', {
+    method: 'POST',
+    body: JSON.stringify({ nik }),
   })
 }
 

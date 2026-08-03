@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/cms/poli
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Poli services fetch error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch poli services')
         }
 
@@ -87,6 +89,7 @@ export async function POST(request: NextRequest) {
 
         if (insertError) {
             console.error('Poli insert error:', insertError)
+            Sentry.captureException(insertError)
             if (insertError.code === '23505') {
                 return apiResponse.conflict('Code already exists')
             }

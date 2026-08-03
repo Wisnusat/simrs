@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   LayoutDashboard, AlertTriangle, Activity, UserPlus,
-  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope, Loader2, RefreshCw
+  ArrowLeft, Clock, BedDouble, FlaskConical, Stethoscope, Loader2, RefreshCw, History
 } from "lucide-react"
 
 import { useEmergency } from "@/hooks/emergency/use-emergency"
@@ -32,9 +32,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
+const ACTIVE_STATUSES = ["emergency_admitted", "in_triage"]
+const HISTORY_STATUSES = ["completed", "referred_out", "admitted_to_inpatient"]
+
 const SIDEBAR = (active: string, set: (v: string) => void) => [
-  { icon: LayoutDashboard, label: "Dashboard IGD", active: active === "dashboard", onClick: () => set("dashboard") },
-  { icon: Activity,        label: "Daftar Pasien", active: active === "patients",  onClick: () => set("patients") },
+  { icon: LayoutDashboard, label: "Dashboard IGD",  active: active === "dashboard", onClick: () => set("dashboard") },
+  { icon: Activity,        label: "Pasien Aktif",   active: active === "patients",  onClick: () => set("patients") },
+  { icon: History,         label: "Riwayat Pasien", active: active === "history",   onClick: () => set("history") },
 ]
 
 export default function EmergencyDashboard() {
@@ -57,9 +61,10 @@ export default function EmergencyDashboard() {
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" })
 
   // Fetch only active ones for main dashboard
-  const { data: encounters, loading: encLoading, refresh: refreshEnc } = useEmergency({ limit: 50 })
-  
-  const activeEncounters = encounters.filter(e => !["completed", "referred_out", "admitted_to_inpatient"].includes(e.status))
+  const { data: encounters, loading: encLoading, refreshing: encRefreshing, refresh: refreshEnc } = useEmergency({ limit: 200 })
+
+  const activeEncounters  = encounters.filter(e => ACTIVE_STATUSES.includes(e.status))
+  const historyEncounters = encounters.filter(e => HISTORY_STATUSES.includes(e.status))
   
   const stats = {
     total: activeEncounters.length,
@@ -70,7 +75,7 @@ export default function EmergencyDashboard() {
   // Lab orders for selected encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
     encounterId: selectedAdm?.encounter_id ?? undefined,
-    pollIntervalMs: 0,
+    fallbackPollMs: 0,
   })
 
   const getTriageBadge = (triage: string) => {
@@ -127,8 +132,8 @@ export default function EmergencyDashboard() {
               description="Kelola pasien Gawat Darurat (Triage & Tindakan)"
             />
             <div className="flex gap-2">
-              <Button variant="outline" onClick={refreshEnc} disabled={encLoading}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${encLoading ? "animate-spin" : ""}`} /> Refresh
+              <Button variant="outline" onClick={refreshEnc} disabled={encRefreshing}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${encRefreshing ? "animate-spin" : ""}`} /> Refresh
               </Button>
               <Button onClick={() => setShowIntake(true)} className="bg-orange-600 hover:bg-orange-700">
                 <UserPlus className="w-4 h-4 mr-2" /> Pasien Baru IGD
@@ -186,22 +191,22 @@ export default function EmergencyDashboard() {
         </div>
       )}
 
-      {/* ── PATIENT LIST ── */}
+      {/* ── PASIEN AKTIF ── */}
       {view === "patients" && (
         <div className="space-y-6">
           <PageHeader
-            title="Daftar Pasien IGD"
-            description="Semua pasien — aktif dan selesai"
+            title="Pasien Aktif IGD"
+            description="Pasien yang sedang dalam penanganan (triage & observasi)"
             onRefresh={refreshEnc}
-            isRefreshing={encLoading}
+            isRefreshing={encRefreshing}
           />
           {encLoading ? (
             <p className="text-sm text-center py-8 text-muted-foreground">Memuat pasien...</p>
-          ) : encounters.length === 0 ? (
-            <p className="text-sm text-center py-8 text-muted-foreground">Belum ada pasien IGD.</p>
+          ) : activeEncounters.length === 0 ? (
+            <p className="text-sm text-center py-8 text-muted-foreground">Tidak ada pasien IGD aktif saat ini.</p>
           ) : (
             <div className="grid gap-3">
-              {encounters.map((enc) => (
+              {activeEncounters.map((enc) => (
                 <button
                   key={enc.id}
                   className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between text-left hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/10 transition-colors"
@@ -225,6 +230,57 @@ export default function EmergencyDashboard() {
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── RIWAYAT PASIEN ── */}
+      {view === "history" && (
+        <div className="space-y-6">
+          <PageHeader
+            title="Riwayat Pasien IGD"
+            description="Pasien yang sudah pulang, dirujuk, atau pindah rawat inap"
+            onRefresh={refreshEnc}
+            isRefreshing={encRefreshing}
+          />
+          {encLoading ? (
+            <p className="text-sm text-center py-8 text-muted-foreground">Memuat riwayat...</p>
+          ) : historyEncounters.length === 0 ? (
+            <p className="text-sm text-center py-8 text-muted-foreground">Belum ada riwayat pasien IGD.</p>
+          ) : (
+            <div className="grid gap-3">
+              {historyEncounters.map((enc) => {
+                const outcomeLabel =
+                  enc.status === "completed" ? { label: "Pulang", cls: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" } :
+                  enc.status === "referred_out" ? { label: "Dirujuk", cls: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" } :
+                  { label: "Rawat Inap", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" }
+                return (
+                  <button
+                    key={enc.id}
+                    className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between text-left hover:bg-muted/40 transition-colors"
+                    onClick={() => handleSelectPatient(enc)}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold">{enc.patients.full_name}</h4>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${outcomeLabel.cls}`}>
+                          {outcomeLabel.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground/60 mb-1">
+                        MR: {enc.patients.medical_record_no} · Masuk: {new Date(enc.created_at).toLocaleString("id-ID")}
+                      </p>
+                      {enc.triage_complaint && (
+                        <p className="text-sm text-foreground/60 line-clamp-1">Keluhan: {enc.triage_complaint}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 mt-2 md:mt-0 min-w-[120px]">
+                      {getTriageBadge(enc.triage_category as string)}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * PATCH /api/nutrition-orders/[id] — update nutrition order
@@ -39,5 +40,6 @@ export async function PATCH(
     .single()
 
   if (error) return apiResponse.serverError(error.message)
+  enqueueSync(supabase, 'NutritionOrder', id).catch(() => {})
   return apiResponse.ok(data)
 }

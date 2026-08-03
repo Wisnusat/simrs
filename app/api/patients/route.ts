@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
+import { enqueueSync } from '@/lib/satusehat/queue'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * GET /api/patients
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error('Patients fetch error:', error)
+            Sentry.captureException(error)
             return apiResponse.serverError('Failed to fetch patients')
         }
 
@@ -140,11 +143,14 @@ export async function POST(request: NextRequest) {
 
         if (insertError) {
             console.error('Patient insert error:', insertError)
+            Sentry.captureException(insertError)
             if (insertError.code === '23505') {
                 return apiResponse.conflict('A patient with this NIK or BPJS number already exists')
             }
             return apiResponse.serverError('Failed to register patient')
         }
+
+        enqueueSync(supabase, 'Patient', (newPatient as any).id).catch(() => {})
 
         return apiResponse.created(newPatient)
     } catch {

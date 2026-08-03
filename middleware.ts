@@ -57,11 +57,23 @@ export async function middleware(request: NextRequest) {
         // Fetch their role once (cached by the cookie — fast)
         const { data: practitioner } = await supabase
             .from('practitioners')
-            .select('role')
+            .select('role, is_active')
             .eq('user_id', user.id)
             .single()
 
         const userRole = practitioner?.role
+        const isActive = practitioner?.is_active ?? false
+
+        // Inactive account — only allow /pending page
+        if (!isActive && pathname !== '/pending') {
+            return NextResponse.redirect(new URL('/pending', request.url))
+        }
+        if (isActive && pathname === '/pending') {
+            const ownRoute = Object.entries(ROLE_ROUTE_MAP).find(
+                ([, rules]) => Array.isArray(rules) ? rules.includes(userRole) : rules === userRole
+            )?.[0] ?? '/admin'
+            return NextResponse.redirect(new URL(ownRoute, request.url))
+        }
 
         // If on login or register page, redirect to their own dashboard
         if (pathname === '/' || pathname === '/register') {

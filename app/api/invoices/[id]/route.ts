@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
-import { syncInvoice } from '@/lib/api/satu-sehat'
 
 /**
  * GET /api/invoices/[id]
@@ -25,6 +25,7 @@ export async function GET(
   const auth = await requirePractitioner(supabase)
   if (isGuardError(auth)) return auth
 
+  const { practitioner } = auth
   const { id } = await params
   const { data, error } = await supabase
     .from('invoices')
@@ -41,6 +42,7 @@ export async function GET(
       )
     `)
     .eq('id', id)
+    .eq('organization_id', practitioner.organization_id)
     .single()
 
   if (error || !data) return apiResponse.notFound('Invoice not found')
@@ -84,12 +86,13 @@ export async function PATCH(
   if (action === 'pay') {
     const { data: invoice } = await supabase
       .from('invoices')
-      .select('total_amount, payment_type, status')
+      .select('total_amount, payment_type, status, episode_of_care_id')
       .eq('id', id)
       .single()
 
     if (!invoice) return apiResponse.notFound('Invoice not found')
     if ((invoice as any).status === 'paid') return apiResponse.conflict('Invoice already paid')
+    if ((invoice as any).status === 'cancelled') return apiResponse.badRequest('Invoice sudah dibatalkan')
 
     // BPJS path
     if ((invoice as any).payment_type === 'bpjs' || payment_method === 'bpjs') {
@@ -105,11 +108,16 @@ export async function PATCH(
     }
 
     // Cash / card / transfer
+    const finalAmount = paid_amount ?? (invoice as any).total_amount
+    if (typeof finalAmount !== 'number' || finalAmount <= 0) {
+      return apiResponse.badRequest('paid_amount harus lebih dari 0')
+    }
+
     const { data, error } = await supabase
       .from('invoices')
       .update({
         status: 'paid',
-        paid_amount: paid_amount ?? (invoice as any).total_amount,
+        paid_amount: finalAmount,
         paid_at: new Date().toISOString(),
         cashier_id: practitioner.id,
       })
@@ -118,7 +126,6 @@ export async function PATCH(
       .single()
 
     if (error) return apiResponse.serverError(error.message)
-    syncInvoice(supabase, id, { payment_method }).catch(() => {})
 
     // Cascade: mark the encounter as finished
     if ((data as any).encounter_id) {
@@ -126,6 +133,23 @@ export async function PATCH(
         .from('encounters')
         .update({ status: 'finished', finished_at: new Date().toISOString() })
         .eq('id', (data as any).encounter_id)
+    }
+
+    // Inpatient: auto-discharge admission + close episode when invoice paid.
+    // Must use admin client — cashier role is blocked by RLS from writing to these tables.
+    const episodeId = (invoice as any).episode_of_care_id
+    if (episodeId) {
+      const admin = createAdminClient()
+      const now = new Date().toISOString()
+      await admin
+        .from('inpatient_admissions')
+        .update({ status: 'discharged', discharge_date: now })
+        .eq('episode_of_care_id', episodeId)
+        .eq('status', 'discharge_approved')
+      await admin
+        .from('episodes_of_care')
+        .update({ status: 'discharged', end_date: now.split('T')[0] })
+        .eq('id', episodeId)
     }
 
     return apiResponse.ok(data)

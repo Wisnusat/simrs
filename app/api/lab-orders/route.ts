@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
 import { RATE_LIMITS, rateLimit } from '@/lib/api/rate-limit'
+import { enqueueSync } from '@/lib/satusehat/queue'
 
 /**
  * POST /api/lab-orders
@@ -64,6 +65,8 @@ export async function POST(req: NextRequest) {
     .select()
 
   if (itemsError) return apiResponse.serverError(itemsError.message)
+
+  enqueueSync(supabase, 'ServiceRequest', (order as any).id).catch(() => {})
 
   return apiResponse.created({ ...order, lab_order_items: labItems })
 }

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react"
 import { getSurgeryRequests, patchSurgeryRequest } from "@/lib/api/client"
+import { usePolling } from "@/hooks/use-polling"
+import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import type { SurgeryRequest, SurgeryStatus } from "@/lib/types/outpatient"
 
 interface UseSurgeryRequestsOptions {
   status?: string
   patientId?: string
-  pollIntervalMs?: number
+  fallbackPollMs?: number
 }
 
 export function useSurgeryRequests(opts: UseSurgeryRequestsOptions = {}) {
-  const { status, patientId, pollIntervalMs = 15_000 } = opts
+  const { status, patientId, fallbackPollMs = 60_000 } = opts
 
   const [data, setData] = useState<SurgeryRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,13 +30,11 @@ export function useSurgeryRequests(opts: UseSurgeryRequestsOptions = {}) {
     }
   }, [status, patientId])
 
-  useEffect(() => {
-    refresh()
-    if (pollIntervalMs > 0) {
-      const id = setInterval(refresh, pollIntervalMs)
-      return () => clearInterval(id)
-    }
-  }, [refresh, pollIntervalMs])
+  useEffect(() => { refresh() }, [refresh])
+
+  useRealtimeSync({ table: 'surgery_requests', onchange: refresh })
+
+  usePolling(refresh, fallbackPollMs)
 
   const updateSurgeryStatus = useCallback(
     async (id: string, newStatus: SurgeryStatus, additionalFields: Partial<SurgeryRequest> = {}) => {

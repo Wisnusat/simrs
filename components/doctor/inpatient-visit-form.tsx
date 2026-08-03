@@ -2,7 +2,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,23 +13,24 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Loader2, ArrowLeft, Activity, Heart, Thermometer,
-  BedDouble, Calendar, FlaskConical, Pill, FileText,
-  User, Clock,
+  BedDouble, Calendar, FlaskConical, FileText,
+  User, Clock, ChevronDown, ChevronRight,
+  Search, Plus, Trash2, Pill, CheckCircle,
 } from "lucide-react"
 import {
-  postClinicalNote, postDiagnosis, postPrescription,
-  getClinicalNotesByEpisode, getVitalSigns, getMedications,
-  patchInpatientAdmission, patchEpisodeOfCare, patchEncounter,
-  createEncounter, postInpatientDailyRecord, postSurgeryRequest,
-  postMedicalResume, getMedicalResume,
+  postClinicalNote,
+  getClinicalNotesByEpisode, getVitalSigns, getLabOrders,
+  patchInpatientAdmission,
+  postSurgeryRequest,
+  postMedicalResume, getMedicalResume, getEncounters,
+  postPrescription, getMedications, getPrescriptions,
 } from "@/lib/api/client"
 import { useLabOrders } from "@/hooks/outpatient/use-lab-orders"
 import { useDailyRecords } from "@/hooks/inpatient/use-daily-records"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { CpptForm } from "@/components/inpatient/cppt-form"
 import { LabOrderForm } from "@/components/doctor/lab-order-form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { InpatientAdmission, ClinicalNote, VitalSigns, Medication, MedicalResume } from "@/lib/types/outpatient"
+import type { InpatientAdmission, ClinicalNote, VitalSigns, LabOrder, MedicalResume, Medication, Prescription } from "@/lib/types/outpatient"
 
 interface InpatientVisitFormProps {
   admission: InpatientAdmission
@@ -40,6 +41,27 @@ interface InpatientVisitFormProps {
 export function InpatientVisitForm({ admission, onBack, onDischarge }: InpatientVisitFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [poliServiceId, setPoliServiceId] = useState<string | undefined>(undefined)
+  const [labOpen, setLabOpen] = useState(false)
+  const [episodeLabOrders, setEpisodeLabOrders] = useState<LabOrder[]>([])
+
+  useEffect(() => {
+    if (!admission.episode_of_care_id) return
+    getEncounters({ episode_of_care_id: admission.episode_of_care_id })
+      .then((encs: any[]) => {
+        const outpatient = encs.find((e: any) => e.encounter_class === 'outpatient')
+        const first = outpatient ?? encs[0]
+        if (first?.poli_service_id) setPoliServiceId(first.poli_service_id)
+      })
+      .catch(() => { })
+  }, [admission.episode_of_care_id])
+
+  useEffect(() => {
+    if (!admission.episode_of_care_id) return
+    getLabOrders({ episode_of_care_id: admission.episode_of_care_id })
+      .then(setEpisodeLabOrders)
+      .catch(() => { })
+  }, [admission.episode_of_care_id])
   const [previousNotes, setPreviousNotes] = useState<ClinicalNote[]>([])
   const [latestVitals, setLatestVitals] = useState<VitalSigns | null>(null)
   const [discharging, setDischarging] = useState(false)
@@ -63,17 +85,98 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   const [surgerySuccess, setSurgerySuccess] = useState(false)
   const [surgeryLoading, setSurgeryLoading] = useState(false)
 
+  // Prescription state
+  type RxItem = { medication: Medication; dosage: string; frequency: string; duration_days: number; quantity: number; instructions: string }
+  const [rxSearch, setRxSearch] = useState("")
+  const [rxResults, setRxResults] = useState<Medication[]>([])
+  const [rxSearching, setRxSearching] = useState(false)
+  const [rxItems, setRxItems] = useState<RxItem[]>([])
+  const [rxAdding, setRxAdding] = useState<Medication | null>(null)
+  const [rxAddForm, setRxAddForm] = useState({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+  const [rxCustomFreq, setRxCustomFreq] = useState(false)
+  const [rxSubmitting, setRxSubmitting] = useState(false)
+  const [rxSuccess, setRxSuccess] = useState(false)
+  const [rxError, setRxError] = useState("")
+  const [existingPrescriptions, setExistingPrescriptions] = useState<Prescription[]>([])
+  const rxSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Current encounter for today's visit
   const {
-    todayRecords, createDailyRecord, actionLoading: drAction, refresh: refreshDr,
+    todayRecords, createDailyRecord, actionLoading: drAction, refresh: refreshDr, loading: drLoading,
   } = useDailyRecords({
     admissionId: admission.id,
     episodeOfCareId: admission.episode_of_care_id,
     patientId: admission.patient_id,
-    poliServiceId: "9bba8621-c9b7-4d62-8301-3d0dfa048a6b",
+    poliServiceId,
   })
 
   const currentEncounterId = todayRecords[0]?.encounter_id ?? null
+
+  // Load existing prescriptions for this encounter
+  useEffect(() => {
+    if (!currentEncounterId) return
+    getPrescriptions({ encounter_id: currentEncounterId })
+      .then(setExistingPrescriptions)
+      .catch(() => { })
+  }, [currentEncounterId])
+
+  // Debounced medicine search
+  useEffect(() => {
+    if (!rxSearch.trim()) { setRxResults([]); return }
+    if (rxSearchTimer.current) clearTimeout(rxSearchTimer.current)
+    rxSearchTimer.current = setTimeout(async () => {
+      setRxSearching(true)
+      try { setRxResults(await getMedications(rxSearch)) }
+      catch { /* silent */ }
+      finally { setRxSearching(false) }
+    }, 300)
+    return () => { if (rxSearchTimer.current) clearTimeout(rxSearchTimer.current) }
+  }, [rxSearch])
+
+  const selectMedicine = (med: Medication) => {
+    setRxAdding(med)
+    setRxAddForm({ dosage: "", frequency: "3x1", duration_days: 5, quantity: 10, instructions: "" })
+    setRxCustomFreq(false)
+    setRxSearch("")
+    setRxResults([])
+  }
+
+  const confirmAddRx = () => {
+    if (!rxAdding || !rxAddForm.dosage) return
+    setRxItems((prev) => [...prev, { medication: rxAdding, ...rxAddForm }])
+    setRxAdding(null)
+  }
+
+  const removeRx = (idx: number) => setRxItems((prev) => prev.filter((_, i) => i !== idx))
+
+  const handleSubmitPrescription = async () => {
+    if (!currentEncounterId || rxItems.length === 0) return
+    setRxSubmitting(true)
+    setRxError("")
+    setRxSuccess(false)
+    try {
+      await postPrescription({
+        encounter_id: currentEncounterId,
+        patient_id: admission.patient_id,
+        items: rxItems.map((i) => ({
+          medication_id: i.medication.id,
+          dosage: i.dosage,
+          frequency: i.frequency,
+          duration_days: i.duration_days,
+          quantity: i.quantity,
+          instructions: i.instructions || undefined,
+        })),
+      })
+      setRxItems([])
+      setRxSuccess(true)
+      setTimeout(() => setRxSuccess(false), 5000)
+      getPrescriptions({ encounter_id: currentEncounterId }).then(setExistingPrescriptions).catch(() => { })
+    } catch (err: any) {
+      setRxError(err.message)
+    } finally {
+      setRxSubmitting(false)
+    }
+  }
 
   const handleSubmitSurgery = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -112,7 +215,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   // Lab orders for current encounter
   const { data: labOrders, create: createLab, actionLoading: labActing, error: labError } = useLabOrders({
     encounterId: currentEncounterId ?? undefined,
-    pollIntervalMs: 0,
+    fallbackPollMs: 0,
   })
 
   // Load CPPT history
@@ -127,7 +230,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     if (!currentEncounterId) return
     getVitalSigns(currentEncounterId)
       .then((vs) => setLatestVitals(vs[0] ?? null))
-      .catch(() => {})
+      .catch(() => { })
     getMedicalResume({ encounter_id: currentEncounterId })
       .then((data) => {
         const r = data[0]
@@ -142,7 +245,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
           setResumeSaved(true)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [currentEncounterId])
 
   const daysSince = Math.floor(
@@ -171,7 +274,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     }
   }
 
-  // Discharge flow
+  // Discharge approval flow — dokter menyetujui kepulangan, kasir yang menyelesaikan pembayaran
   const handleDischarge = async () => {
     if (!dischargeSummary.trim()) {
       setError("Ringkasan pulang wajib diisi")
@@ -181,12 +284,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
     setError("")
     try {
       await patchInpatientAdmission(admission.id, {
-        status: "discharged",
+        status: "discharge_approved",
         discharge_summary: dischargeSummary,
-      })
-      await patchEpisodeOfCare(admission.episode_of_care_id, {
-        status: "discharged",
-        end_date: new Date().toISOString().split("T")[0],
       })
       onDischarge()
     } catch (err: any) {
@@ -197,7 +296,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}>
@@ -207,7 +306,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
           <h2 className="text-lg font-bold">{admission.patients.full_name}</h2>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
             <span>MR: {admission.patients.medical_record_no}</span>
-            <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {admission.locations?.name} · Bed {admission.bed_number}</span>
+            <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" /> {admission.locations?.name} · Bed {admission?.bed_number}</span>
             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Hari ke-{daysSince + 1}</span>
           </div>
           {admission.episodes_of_care?.diagnosis_primary && (
@@ -251,7 +350,22 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
         </div>
       )}
 
-      {/* Create encounter for today if needed */}
+      {/* Loading skeleton while daily records resolve */}
+      {drLoading ? (
+        <div className="space-y-4 animate-pulse">
+          <div className="grid grid-cols-5 gap-1.5 bg-muted/50 p-1 rounded-lg h-10">
+            {[0, 1, 2, 3, 4].map((i) => <div key={i} className="rounded-md bg-muted/80" />)}
+          </div>
+          <div className="space-y-3 pt-2">
+            <div className="h-20 rounded-xl bg-muted/60" />
+            <div className="h-4 rounded bg-muted/50 w-3/4" />
+            <div className="h-4 rounded bg-muted/50 w-1/2" />
+            <div className="h-4 rounded bg-muted/50 w-2/3" />
+          </div>
+        </div>
+      ) : (
+      <>
+      {/* Mulai kunjungan hari ini */}
       {!currentEncounterId && (
         <div className="p-4 rounded-lg border border-dashed border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20">
           <p className="text-sm font-medium mb-2">Mulai Kunjungan Hari Ini</p>
@@ -262,6 +376,103 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
         </div>
       )}
 
+      <Separator />
+      {/* Pemeriksaan Lab (collapsible, by episode) */}
+      <div className="rounded-lg border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setLabOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-foreground/70">
+            <FlaskConical className="w-4 h-4 text-blue-500" />
+            <span>Pemeriksaan Lab</span>
+            {episodeLabOrders.length > 0 && (
+              <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+                {episodeLabOrders.length} permintaan
+              </span>
+            )}
+          </div>
+          {labOpen ? <ChevronDown className="w-4 h-4 text-foreground/40" /> : <ChevronRight className="w-4 h-4 text-foreground/40" />}
+        </button>
+        {labOpen && (
+          <div className="border-t px-4 py-3">
+            {episodeLabOrders.length === 0 ? (
+              <p className="text-xs text-foreground/40">Belum ada permintaan lab.</p>
+            ) : (
+              <div className="space-y-3">
+                {episodeLabOrders.map((lo) => (
+                  <div key={lo.id} className="border rounded-md p-3 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-xs text-foreground/60">
+                        <span>{new Date(lo.order_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        <span className="capitalize font-medium text-foreground/80">{lo.priority}</span>
+                      </div>
+                      <StatusBadge status={lo.status} />
+                    </div>
+                    <div className="space-y-1">
+                      {(lo.lab_order_items ?? []).map((item: any) => {
+                        let parsed: Array<{ label: string; value: string; unit?: string; reference_range?: string; result_status?: string }> | null = null
+                        if (item.result_value) {
+                          try {
+                            const p = JSON.parse(item.result_value)
+                            if (Array.isArray(p) && p.length > 0 && "label" in p[0]) parsed = p
+                          } catch { /* plain string */ }
+                        }
+                        return (
+                          <div key={item.id} className="text-xs py-1 border-t border-border/40">
+                            <span className="font-medium">{item.test_name}</span>
+                            {parsed ? (
+                              <table className="w-full mt-1">
+                                <thead>
+                                  <tr className="text-foreground/40">
+                                    <th className="text-left font-normal pb-0.5">Parameter</th>
+                                    <th className="text-left font-normal pb-0.5">Nilai</th>
+                                    <th className="text-left font-normal pb-0.5">Rujukan</th>
+                                    <th className="text-right font-normal pb-0.5">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {parsed.map((p, i) => (
+                                    <tr key={i} className="border-t border-border/20">
+                                      <td className="py-0.5">{p.label || "—"}</td>
+                                      <td className={`py-0.5 font-semibold ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                        {p.value || "—"} {p.unit}
+                                      </td>
+                                      <td className="py-0.5 text-foreground/40">{p.reference_range || "—"}</td>
+                                      <td className="py-0.5 text-right">
+                                        <span className={`font-medium ${p.result_status === 'critical' ? 'text-red-600' : p.result_status?.startsWith('abnormal') ? 'text-orange-600' : 'text-green-700'}`}>
+                                          {p.result_status === "normal" ? "N" : p.result_status === "abnormal_low" ? "↓" : p.result_status === "abnormal_high" ? "↑" : p.result_status === "critical" ? "!" : "—"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : item.result_value ? (
+                              <div className="flex items-center justify-between mt-0.5">
+                                <span className={`font-semibold ${item.result_status === 'critical' ? 'text-red-600' : item.result_status === 'abnormal_high' || item.result_status === 'abnormal_low' ? 'text-orange-600' : 'text-green-700'}`}>
+                                  {item.result_value} {item.result_unit}
+                                </span>
+                                {item.reference_range && <span className="text-foreground/40">Ref: {item.reference_range}</span>}
+                              </div>
+                            ) : (
+                              <span className="text-foreground/40 italic ml-1">Belum ada hasil</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <Separator />
+
+
       {error && (
         <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
       )}
@@ -269,8 +480,9 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
       {/* Main tabs */}
       {currentEncounterId && (
         <Tabs defaultValue="notes" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="notes"><FileText className="w-4 h-4 mr-1" /> Catatan Visite</TabsTrigger>
+            <TabsTrigger value="prescription"><Pill className="w-4 h-4 mr-1" /> Resep Obat</TabsTrigger>
             <TabsTrigger value="lab"><FlaskConical className="w-4 h-4 mr-1" /> Lab</TabsTrigger>
             <TabsTrigger value="surgery"><Activity className="w-4 h-4 mr-1" /> Operasi (OK)</TabsTrigger>
             <TabsTrigger value="discharge"><BedDouble className="w-4 h-4 mr-1" /> Pulang</TabsTrigger>
@@ -284,8 +496,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                   <Label className="text-xs font-medium uppercase tracking-wide text-foreground/60">
                     {field === "subjective" ? "S — Subjective"
                       : field === "objective" ? "O — Objective"
-                      : field === "assessment" ? "A — Assessment"
-                      : "P — Plan"}
+                        : field === "assessment" ? "A — Assessment"
+                          : "P — Plan"}
                   </Label>
                   <Textarea
                     rows={2}
@@ -309,16 +521,16 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                   {previousNotes.map((note) => {
                     const roleLabel =
                       note.writer_role === "doctor" ? "Dokter" :
-                      note.writer_role === "nurse" ? "Perawat" :
-                      note.writer_role === "nutritionist" ? "Ahli Gizi" :
-                      note.writer_role === "pharmacist" ? "Apoteker" :
-                      note.writer_role ?? "—"
+                        note.writer_role === "nurse" ? "Perawat" :
+                          note.writer_role === "nutritionist" ? "Ahli Gizi" :
+                            note.writer_role === "pharmacist" ? "Apoteker" :
+                              note.writer_role ?? "—"
 
                     const roleColor =
                       note.writer_role === "doctor" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
-                      note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
-                      note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-                      "bg-muted text-foreground/60"
+                        note.writer_role === "nurse" ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300" :
+                          note.writer_role === "nutritionist" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                            "bg-muted text-foreground/60"
 
                     return (
                       <div key={note.id} className="p-3 rounded-lg border bg-muted/20 text-sm space-y-1.5">
@@ -349,13 +561,179 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             )}
           </TabsContent>
 
+          {/* Prescription Tab */}
+          <TabsContent value="prescription" className="space-y-4 mt-4">
+            {rxSuccess && (
+              <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <AlertDescription className="text-green-700 dark:text-green-400">
+                  Resep berhasil dikirim ke apotek.
+                </AlertDescription>
+              </Alert>
+            )}
+            {rxError && (
+              <Alert variant="destructive"><AlertDescription>{rxError}</AlertDescription></Alert>
+            )}
+
+            {/* Search */}
+            <div className="relative">
+              <div className="flex items-center gap-2 border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
+                <Search className="w-4 h-4 text-foreground/40 shrink-0" />
+                <input
+                  className="flex-1 bg-transparent outline-none text-sm placeholder:text-foreground/40"
+                  placeholder="Cari nama obat..."
+                  value={rxSearch}
+                  onChange={(e) => setRxSearch(e.target.value)}
+                />
+                {rxSearching && <Loader2 className="w-4 h-4 animate-spin text-foreground/40 shrink-0" />}
+              </div>
+              {rxResults.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                  {rxResults.map((med) => (
+                    <button
+                      key={med.id}
+                      type="button"
+                      className="w-full text-left px-4 py-2.5 hover:bg-muted transition-colors"
+                      onClick={() => selectMedicine(med)}
+                    >
+                      <p className="font-medium text-sm">{med.name}</p>
+                      <p className="text-xs text-foreground/50">{med.form} · Stok: {med.stock_available}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add medicine mini-form */}
+            {rxAdding && (
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <p className="font-semibold text-sm">
+                    {rxAdding.name}
+                    <span className="text-foreground/50 font-normal"> · {rxAdding.form} {rxAdding.strength}</span>
+                  </p>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setRxAdding(null)}>✕</Button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dosis *</Label>
+                    <Input placeholder="mis. 500mg" value={rxAddForm.dosage}
+                      onChange={(e) => setRxAddForm((p) => ({ ...p, dosage: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    {rxCustomFreq ? (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <Label className="text-xs">Frekuensi *</Label>
+                          <button type="button" onClick={() => { setRxCustomFreq(false); setRxAddForm((p) => ({ ...p, frequency: "3x1" })) }}
+                            className="text-[10px] text-blue-600 hover:underline">Pilih Preset</button>
+                        </div>
+                        <Input placeholder="mis. 3x1 atau Sesuai kebutuhan" value={rxAddForm.frequency}
+                          onChange={(e) => setRxAddForm((p) => ({ ...p, frequency: e.target.value }))} />
+                      </>
+                    ) : (
+                      <>
+                        <Label className="text-xs">Frekuensi</Label>
+                        <Select value={rxAddForm.frequency} onValueChange={(v) => {
+                          if (v === "Lain - lain") { setRxCustomFreq(true); setRxAddForm((p) => ({ ...p, frequency: "" })) }
+                          else setRxAddForm((p) => ({ ...p, frequency: v }))
+                        }}>
+                          <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["1x1", "2x1", "3x1", "4x1", "3x1/2", "Lain - lain"].map((f) => (
+                              <SelectItem key={f} value={f}>{f}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Durasi (hari)</Label>
+                    <Input type="number" min={1} value={rxAddForm.duration_days}
+                      onChange={(e) => setRxAddForm((p) => ({ ...p, duration_days: +e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Jumlah</Label>
+                    <Input type="number" min={1} value={rxAddForm.quantity}
+                      onChange={(e) => setRxAddForm((p) => ({ ...p, quantity: +e.target.value }))} />
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs">Instruksi (opsional)</Label>
+                    <Input placeholder="mis. Sesudah makan" value={rxAddForm.instructions}
+                      onChange={(e) => setRxAddForm((p) => ({ ...p, instructions: e.target.value }))} />
+                  </div>
+                </div>
+                <Button type="button" size="sm" onClick={confirmAddRx} disabled={!rxAddForm.dosage}
+                  className="w-full bg-green-600 hover:bg-green-700">
+                  <Plus className="w-4 h-4 mr-1" /> Tambahkan ke Resep
+                </Button>
+              </div>
+            )}
+
+            {/* Pending items */}
+            {rxItems.length === 0 && !rxAdding ? (
+              <p className="text-sm text-foreground/50 text-center py-6 border rounded-lg border-dashed">
+                Belum ada obat. Cari obat di atas.
+              </p>
+            ) : rxItems.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground/60">{rxItems.length} obat dalam resep</p>
+                {rxItems.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-muted/30">
+                    <div className="text-sm">
+                      <p className="font-semibold">{item.medication.name}</p>
+                      <p className="text-foreground/50">{item.dosage} · {item.frequency} · {item.duration_days} hari · Qty: {item.quantity}</p>
+                      {item.instructions && <p className="text-foreground/40 italic">{item.instructions}</p>}
+                    </div>
+                    <Button type="button" size="icon" variant="ghost" className="text-red-500 hover:text-red-600"
+                      onClick={() => removeRx(idx)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  onClick={handleSubmitPrescription}
+                  disabled={rxSubmitting || rxItems.length === 0}
+                  className="w-full"
+                >
+                  {rxSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Mengirim...</> : <><Pill className="w-4 h-4 mr-2" />Kirim Resep ke Apotek</>}
+                </Button>
+              </div>
+            )}
+
+            {/* Existing prescriptions for this encounter */}
+            {existingPrescriptions.length > 0 && (
+              <div className="space-y-2 pt-2 border-t">
+                <p className="text-sm font-medium text-foreground/60">Resep Sebelumnya (Kunjungan Ini)</p>
+                {existingPrescriptions.map((rx) => (
+                  <div key={rx.id} className="p-3 rounded-lg border bg-muted/20 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-foreground/50">
+                        {new Date(rx.prescription_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <StatusBadge status={rx.status} />
+                    </div>
+                    {rx.prescription_items.map((item) => (
+                      <p key={item.id} className="text-sm">
+                        <span className="font-medium">{(item as any).medications?.name ?? item.medication_id}</span>
+                        <span className="text-foreground/50 ml-2">{item.dosage} · {item.frequency} · Qty: {item.quantity}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
           {/* Lab Tab */}
           <TabsContent value="lab" className="mt-4">
             <LabOrderForm
               encounterId={currentEncounterId}
               patientId={admission.patient_id}
               onSubmit={async (input) => { const ok = await createLab(input); return ok }}
-              onCancel={() => {}}
+              onCancel={() => { }}
               loading={labActing}
               error={labError}
             />
@@ -387,11 +765,11 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
               </div>
 
               {[
-                { key: "chief_complaint",    label: "Keluhan Utama Masuk",         rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
-                { key: "history_of_illness", label: "Riwayat Penyakit",            rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
-                { key: "physical_examination", label: "Pemeriksaan Fisik",         rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
-                { key: "summary",            label: "Ringkasan Perawatan",         rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
-                { key: "follow_up_plan",     label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
+                { key: "chief_complaint", label: "Keluhan Utama Masuk", rows: 2, placeholder: "Keluhan utama saat pasien masuk rumah sakit..." },
+                { key: "history_of_illness", label: "Riwayat Penyakit", rows: 3, placeholder: "Anamnesis singkat, riwayat penyakit dahulu, riwayat keluarga..." },
+                { key: "physical_examination", label: "Pemeriksaan Fisik", rows: 3, placeholder: "Keadaan umum, tanda vital, pemeriksaan head-to-toe..." },
+                { key: "summary", label: "Ringkasan Perawatan", rows: 4, placeholder: "Diagnosis masuk, diagnosis akhir, tindakan yang dilakukan, hasil lab/radiologi, terapi yang diberikan selama perawatan..." },
+                { key: "follow_up_plan", label: "Instruksi Pulang & Kontrol", rows: 3, placeholder: "Obat yang dibawa pulang, jadwal kontrol, aktivitas yang diperbolehkan/dilarang, tanda bahaya yang perlu diwaspadai..." },
               ].map(({ key, label, rows, placeholder }) => (
                 <div key={key} className="space-y-1.5">
                   <Label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">{label}</Label>
@@ -451,7 +829,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 disabled={loading || !dischargeSummary.trim()}
                 className="w-full bg-orange-600 hover:bg-orange-700"
               >
-                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Pulangkan Pasien"}
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Memproses...</> : "Setujui Kepulangan"}
               </Button>
             </div>
           </TabsContent>
@@ -463,7 +841,7 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
                 <Activity className="w-4 h-4" /> Form Permintaan Tindakan Operasi (OK)
               </div>
               <p className="text-xs text-foreground/60">
-                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK. 
+                Kirim permintaan operasi untuk diproses dan dijadwalkan oleh perawat di Dashboard OK.
                 Secara default, pasien ini akan kembali dirawat di bangsal rawat inap pasca-operasi.
               </p>
 
@@ -520,6 +898,8 @@ export function InpatientVisitForm({ admission, onBack, onDischarge }: Inpatient
             </form>
           </TabsContent>
         </Tabs>
+      )}
+      </>
       )}
     </div>
   )
