@@ -11,6 +11,7 @@ import { compositionHandler } from './composition'
 import { procedureHandler } from './procedure'
 import { serviceRequestHandler, diagnosticReportHandler } from './lab'
 import { nutritionOrderHandler } from './nutrition-order'
+import { referralHandler } from './referral'
 
 export const handlers: Record<string, SyncHandler> = {
   Patient: patientHandler,
@@ -27,4 +28,5 @@ export const handlers: Record<string, SyncHandler> = {
   ServiceRequest: serviceRequestHandler,
   DiagnosticReport: diagnosticReportHandler,
   NutritionOrder: nutritionOrderHandler,
+  Referral: referralHandler,
 }

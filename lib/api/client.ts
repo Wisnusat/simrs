@@ -827,3 +827,17 @@ export async function postRunningBill(input: RunningBillInput): Promise<RunningB
 export async function deleteRunningBill(id: string): Promise<void> {
   return fetchJson(`/api/running-bills/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+// ---------------------------------------------------------------------------
+// SATUSEHAT — Organization search  /api/satusehat/organizations
+// ---------------------------------------------------------------------------
+export interface SsOrganization {
+  id: string
+  name: string
+  type: string | null
+  city: string | null
+}
+
+export async function searchSsOrganizations(name: string): Promise<SsOrganization[]> {
+  return fetchJson(`/api/satusehat/organizations?name=${encodeURIComponent(name)}`)
+}

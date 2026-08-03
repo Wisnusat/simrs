@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { EmergencyEncounter, ReferralUrgency } from "@/lib/types/outpatient"
 import { useEmergency } from "@/hooks/emergency/use-emergency"
 import { postReferral } from "@/lib/api/client"
+import { OrganizationSearch, type OrganizationSelection } from "@/components/shared/organization-search"
 import { toast } from "sonner"
 
 interface EmergencyDispositionFormProps {
@@ -23,8 +24,8 @@ interface EmergencyDispositionFormProps {
 export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDispositionFormProps) {
   const [outcome, setOutcome] = useState<string>("discharged")
 
-  // Referral fields — same as doctor examination form
-  const [referralDestination, setReferralDestination] = useState("")
+  // Referral fields
+  const [referralOrg, setReferralOrg] = useState<OrganizationSelection>({ name: "", ssOrgId: null })
   const [referralSpecialty, setReferralSpecialty] = useState("")
   const [referralReason, setReferralReason] = useState("")
   const [referralUrgency, setReferralUrgency] = useState<ReferralUrgency>("routine")
@@ -37,7 +38,7 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
     e.preventDefault()
 
     if (outcome === "referred") {
-      if (!referralDestination.trim()) { toast.error("Faskes tujuan wajib diisi"); return }
+      if (!referralOrg.name.trim()) { toast.error("Faskes tujuan wajib diisi"); return }
       if (!referralReason.trim()) { toast.error("Alasan rujukan wajib diisi"); return }
     }
 
@@ -46,7 +47,7 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
       const result = await resolveOutcome(encounter.id, {
         outcome: outcome as 'discharged' | 'referred' | 'admitted_inpatient',
         ...(outcome === "referred" && {
-          referred_to: referralDestination,
+          referred_to: referralOrg.name,
         }),
       })
 
@@ -57,8 +58,9 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
         await postReferral({
           encounter_id: encounter.encounter_id,
           patient_id: encounter.patient_id,
-          destination_facility_name: referralDestination,
+          destination_facility_name: referralOrg.name,
           destination_specialty: referralSpecialty || undefined,
+          ss_destination_org_id: referralOrg.ssOrgId ?? undefined,
           referral_reason: referralReason,
           urgency: referralUrgency,
         }).catch(() => {
@@ -105,12 +107,11 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
               <Activity className="w-4 h-4 text-purple-500" /> Pengaturan Rujukan Keluar
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Faskes Tujuan *</Label>
-                <Input
-                  value={referralDestination}
-                  onChange={(e) => setReferralDestination(e.target.value)}
-                  placeholder="Ex: RSUD Kota Bandung"
+              <div className="md:col-span-2">
+                <OrganizationSearch
+                  value={referralOrg}
+                  onChange={setReferralOrg}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -140,7 +141,6 @@ export function EmergencyDispositionForm({ encounter, onSuccess }: EmergencyDisp
                   </SelectContent>
                 </Select>
               </div>
-
             </div>
           </div>
         )}

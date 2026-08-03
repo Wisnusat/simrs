@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
 import { requirePractitioner, isGuardError } from '@/lib/api/guards'
+import { enqueueSync } from '@/lib/satusehat/queue'
 import * as Sentry from '@sentry/nextjs'
 
 export async function POST(req: NextRequest) {
@@ -11,13 +12,14 @@ export async function POST(req: NextRequest) {
     if (isGuardError(auth)) return auth
 
     const body = await req.json()
-    const { 
-      encounter_id, 
-      patient_id, 
-      destination_facility_name, 
-      destination_specialty, 
-      referral_reason, 
-      urgency 
+    const {
+      encounter_id,
+      patient_id,
+      destination_facility_name,
+      destination_specialty,
+      referral_reason,
+      urgency,
+      ss_destination_org_id,
     } = body
 
     if (!encounter_id || !patient_id || !destination_facility_name || !referral_reason) {
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest) {
         destination_specialty: destination_specialty || null,
         referral_reason,
         urgency: urgency || 'routine',
-        ss_sync_status: 'not_required'
+        ss_destination_org_id: ss_destination_org_id || null,
       })
       .select()
       .single()
@@ -44,6 +46,8 @@ export async function POST(req: NextRequest) {
       Sentry.captureException(error)
       return apiResponse.serverError(error.message)
     }
+
+    enqueueSync(supabase, 'Referral', (data as any).id).catch(() => {})
 
     return apiResponse.created(data)
 

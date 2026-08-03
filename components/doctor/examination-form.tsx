@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2, Search, Activity, Heart, Thermometer, Loader2, FlaskConical, BedDouble, FileIcon, AlertTriangle } from "lucide-react"
 import PatientHistoryPanel from "@/components/doctor/patient-history-panel"
+import { OrganizationSearch, type OrganizationSelection } from "@/components/shared/organization-search"
 import type { Medication, VitalSigns } from "@/lib/types/outpatient"
 import { createClient } from "@/lib/supabase/client"
 
@@ -100,7 +101,7 @@ export default function ExaminationForm({
   }, [icdSearch])
 
   // ── Rujukan ──
-  const [referralDestination, setReferralDestination] = useState("")
+  const [referralOrg, setReferralOrg] = useState<OrganizationSelection>({ name: "", ssOrgId: null })
   const [referralSpecialty, setReferralSpecialty] = useState("")
   const [referralUrgency, setReferralUrgency] = useState<"routine" | "urgent" | "emergency">("routine")
   const [referralReason, setReferralReason] = useState("")
@@ -187,7 +188,7 @@ export default function ExaminationForm({
 
       // Validate referral fields
       if (careStatus === "rujukan") {
-        if (!referralDestination.trim()) throw new Error("Faskes tujuan rujukan wajib diisi")
+        if (!referralOrg.name.trim()) throw new Error("Faskes tujuan rujukan wajib diisi")
         if (!referralReason.trim()) throw new Error("Alasan klinis rujukan wajib diisi")
       }
 
@@ -255,10 +256,11 @@ export default function ExaminationForm({
         await postReferral({
           encounter_id: encounterId,
           patient_id: patient.id,
-          destination_facility_name: referralDestination,
+          destination_facility_name: referralOrg.name,
           destination_specialty: referralSpecialty,
           referral_reason: referralReason,
-          urgency: referralUrgency
+          urgency: referralUrgency,
+          ss_destination_org_id: referralOrg.ssOrgId ?? undefined,
         })
 
         // 5. Encounter → finished
@@ -696,12 +698,11 @@ export default function ExaminationForm({
                     <Activity className="w-4 h-4 text-purple-500" /> Pengaturan Rujukan Keluar
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Faskes Tujuan *</Label>
-                      <Input
-                        value={referralDestination}
-                        onChange={(e) => setReferralDestination(e.target.value)}
-                        placeholder="Ex: RSUD Kota Bandung"
+                    <div className="md:col-span-2">
+                      <OrganizationSearch
+                        value={referralOrg}
+                        onChange={setReferralOrg}
+                        required
                       />
                     </div>
                     <div className="space-y-2">
