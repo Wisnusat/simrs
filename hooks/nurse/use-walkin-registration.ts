@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { postWalkinRegistration } from "@/lib/api/client"
-import { useToast } from "@/hooks/use-toast"
+import { postWalkinRegistration, verifyPatientNik } from "@/lib/api/client"
+import { toast } from "sonner"
 
 export interface PoliService {
   id: string
@@ -59,13 +59,13 @@ export function useWalkinRegistration(onSuccess?: () => void) {
   const [services, setServices] = useState<PoliService[]>([])
   const [isLoadingServices, setIsLoadingServices] = useState(false)
   
+  const [existingPatientId, setExistingPatientId] = useState<string | null>(null)
   const [isCheckingNik, setIsCheckingNik] = useState(false)
   const [verifyingBpjs, setVerifyingBpjs] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
   const supabase = createClient()
-  const { toast } = useToast()
 
   // Fetch Poli Services
   const fetchServices = useCallback(async () => {
@@ -81,15 +81,11 @@ export function useWalkinRegistration(onSuccess?: () => void) {
       setServices(data || [])
     } catch (err: any) {
       console.error("Failed to fetch services:", err)
-      toast({
-        title: "Error",
-        description: "Gagal memuat daftar poli",
-        variant: "destructive",
-      })
+      toast.error("Gagal memuat daftar poli")
     } finally {
       setIsLoadingServices(false)
     }
-  }, [supabase, toast])
+  }, [supabase])
 
   useEffect(() => {
     fetchServices()
@@ -110,20 +106,16 @@ export function useWalkinRegistration(onSuccess?: () => void) {
     setError("")
 
     try {
-      // Call verify RPC directly via supabase client
-      const { data, error } = await supabase.rpc("verify_patient_by_nik", {
-        p_nik: nikToCheck,
-      })
+      const result = await verifyPatientNik(nikToCheck)
 
-      if (error) throw error
-
-      if (data && data.patient) {
-        const p = data.patient
+      if (result.status !== 'not_found' && result.patient) {
+        const p = result.patient
+        setExistingPatientId(p.id)
         setFormData(prev => ({
           ...prev,
           nik: nikToCheck,
           name: p.full_name || "",
-          email: p.email || "",
+          email: (p as any).email || "",
           phone: p.phone || "",
           address: p.address || "",
           gender: p.gender || "",
@@ -133,11 +125,14 @@ export function useWalkinRegistration(onSuccess?: () => void) {
         }))
         setIsNewPatient(false)
         setStep(3) // Skip to service selection
-        toast({
-          title: "Pasien Ditemukan",
-          description: `Pasien atas nama ${p.full_name} terdaftar.`,
-        })
+        toast.success(
+          result.status === 'found_ihs' ? "Pasien Ditemukan di SATUSEHAT" : "Pasien Ditemukan",
+          { description: result.status === 'found_ihs'
+            ? `${p.full_name} diverifikasi dari SATUSEHAT dan telah didaftarkan.`
+            : `Pasien atas nama ${p.full_name} terdaftar.` }
+        )
       } else {
+        setExistingPatientId(null)
         setFormData(prev => ({
           ...prev,
           nik: nikToCheck,
@@ -152,9 +147,8 @@ export function useWalkinRegistration(onSuccess?: () => void) {
         }))
         setIsNewPatient(true)
         setStep(2) // Go to profile completion
-        toast({
-          title: "Pasien Baru",
-          description: "NIK belum terdaftar. Silakan lengkapi profil pasien.",
+        toast("Pasien Baru", {
+          description: "NIK belum terdaftar di sistem maupun SATUSEHAT. Silakan lengkapi profil pasien.",
         })
       }
     } catch (err: any) {
@@ -194,11 +188,7 @@ export function useWalkinRegistration(onSuccess?: () => void) {
   // Verify BPJS
   const verifyBpjs = async (bpjsNoToCheck: string) => {
     if (!bpjsNoToCheck || bpjsNoToCheck.length < 10) {
-      toast({
-        title: "Error",
-        description: "Nomor BPJS tidak valid",
-        variant: "destructive",
-      })
+      toast.error("Nomor BPJS tidak valid")
       return
     }
     setVerifyingBpjs(true)
@@ -206,21 +196,14 @@ export function useWalkinRegistration(onSuccess?: () => void) {
     setTimeout(() => {
       setVerifyingBpjs(false)
       setFormData(prev => ({ ...prev, bpjsNo: bpjsNoToCheck, bpjsVerified: true }))
-      toast({
-        title: "BPJS Terverifikasi",
-        description: "Nomor BPJS aktif dan dapat digunakan (Mock)",
-      })
+      toast.success("BPJS Terverifikasi", { description: "Nomor BPJS aktif dan dapat digunakan (Mock)" })
     }, 1000)
   }
 
   // Step 4: Submit Payment
   const submitPayment = (paymentMethod: string, bpjsNo: string) => {
     if (paymentMethod === "bpjs" && !formData.bpjsVerified) {
-      toast({
-        title: "Perhatian",
-        description: "Mohon verifikasi nomor BPJS Kesehatan terlebih dahulu",
-        variant: "destructive",
-      })
+      toast.warning("Mohon verifikasi nomor BPJS Kesehatan terlebih dahulu")
       return
     }
     setFormData(prev => ({ ...prev, paymentMethod, bpjsNo }))
@@ -257,17 +240,8 @@ export function useWalkinRegistration(onSuccess?: () => void) {
         }
         patientId = result.data.id
       } else {
-        // Query database to get patient ID
-        const { data: patient, error: pError } = await supabase
-          .from("patients")
-          .select("id")
-          .eq("nik", formData.nik)
-          .single()
-
-        if (pError || !patient) {
-          throw new Error("Data pasien tidak ditemukan di database")
-        }
-        patientId = patient.id
+        if (!existingPatientId) throw new Error("Data pasien tidak ditemukan")
+        patientId = existingPatientId
       }
 
       // Call walkin registration API
@@ -309,6 +283,7 @@ export function useWalkinRegistration(onSuccess?: () => void) {
   const reset = () => {
     setStep(1)
     setIsNewPatient(false)
+    setExistingPatientId(null)
     setFormData({
       ...initialFormData,
       date: getTodayDateString(),
