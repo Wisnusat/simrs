@@ -7,10 +7,20 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -28,7 +38,8 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { LogOut, Home, Loader2, Activity } from 'lucide-react'
+import { LogOut, Home, Loader2, Activity, UserCog, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { toast } from 'sonner'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,6 +131,11 @@ export default function DashboardLayout({
   const router = useRouter()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
+  const [pwSaving, setPwSaving] = useState(false)
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNext, setShowNext] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -140,6 +156,41 @@ export default function DashboardLayout({
     try { await fetch('/api/auth/logout', { method: 'POST' }) } finally {
       router.push('/')
       router.refresh()
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
+      toast.error('Semua field password wajib diisi')
+      return
+    }
+    if (pwForm.next.length < 8) {
+      toast.error('Password baru minimal 8 karakter')
+      return
+    }
+    if (pwForm.next !== pwForm.confirm) {
+      toast.error('Konfirmasi password tidak cocok')
+      return
+    }
+    setPwSaving(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('Password berhasil diubah')
+        setPwForm({ current: '', next: '', confirm: '' })
+        setShowProfile(false)
+      } else {
+        toast.error(data.error ?? 'Gagal mengubah password')
+      }
+    } catch {
+      toast.error('Terjadi kesalahan')
+    } finally {
+      setPwSaving(false)
     }
   }
 
@@ -287,6 +338,14 @@ export default function DashboardLayout({
                   )}
                 </div>
                 <DropdownMenuItem
+                  onClick={() => { setShowProfile(true); setPwForm({ current: '', next: '', confirm: '' }) }}
+                  className="cursor-pointer gap-2"
+                >
+                  <UserCog className="w-4 h-4" />
+                  Profil &amp; Password
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={handleLogout}
                   disabled={isLoggingOut}
                   className="text-destructive focus:text-destructive cursor-pointer"
@@ -307,6 +366,110 @@ export default function DashboardLayout({
           {children}
         </div>
       </SidebarInset>
+      {/* ── Profile & Change Password Dialog ─────────────────────────── */}
+      <Dialog open={showProfile} onOpenChange={setShowProfile}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-primary" />
+              Profil Saya
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Profile info */}
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40">
+              <Avatar className="h-12 w-12">
+                <AvatarFallback className={`${color} text-white font-bold`}>
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="font-semibold text-foreground truncate">{profile?.full_name ?? '-'}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <Badge variant="secondary" className="text-xs">{label}</Badge>
+                  {profile?.specialization && (
+                    <span className="text-xs text-foreground/50 truncate">{profile.specialization}</span>
+                  )}
+                </div>
+                <p className="text-xs text-foreground/50 mt-0.5 truncate">{profile?.email ?? '-'}</p>
+              </div>
+            </div>
+            {profile?.organization && (
+              <p className="text-xs text-foreground/50 px-1">
+                {profile.organization.name}
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Change password */}
+          <div className="space-y-4">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-primary" />
+              Ubah Password
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Password Saat Ini</Label>
+                <div className="relative">
+                  <Input
+                    type={showCurrent ? 'text' : 'password'}
+                    value={pwForm.current}
+                    onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))}
+                    placeholder="Password lama"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrent(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/70"
+                  >
+                    {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Password Baru</Label>
+                <div className="relative">
+                  <Input
+                    type={showNext ? 'text' : 'password'}
+                    value={pwForm.next}
+                    onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))}
+                    placeholder="Minimal 8 karakter"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNext(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/70"
+                  >
+                    {showNext ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Konfirmasi Password Baru</Label>
+                <Input
+                  type="password"
+                  value={pwForm.confirm}
+                  onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
+                  placeholder="Ulangi password baru"
+                />
+              </div>
+            </div>
+            <Button
+              onClick={handleChangePassword}
+              disabled={pwSaving}
+              className="w-full gap-2"
+            >
+              {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {pwSaving ? 'Menyimpan...' : 'Ubah Password'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
