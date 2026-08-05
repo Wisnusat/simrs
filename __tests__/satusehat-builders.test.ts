@@ -6,7 +6,7 @@ import { buildVitalObservations } from '@/lib/satusehat/builders/observation'
 import { buildCondition } from '@/lib/satusehat/builders/condition'
 import { buildAllergy } from '@/lib/satusehat/builders/allergy'
 import { buildClinicalImpression } from '@/lib/satusehat/builders/clinical-note'
-import { buildMedication, buildMedicationRequest, buildMedicationDispense } from '@/lib/satusehat/builders/medication'
+import { buildMedicationRequest, buildMedicationDispense } from '@/lib/satusehat/builders/medication'
 import { buildComposition } from '@/lib/satusehat/builders/composition'
 import { buildProcedure } from '@/lib/satusehat/builders/procedure'
 import { buildServiceRequest, buildDiagnosticReport } from '@/lib/satusehat/builders/lab'
@@ -181,40 +181,47 @@ describe('buildClinicalImpression', () => {
 })
 
 describe('pharmacy builders', () => {
-  it('buildMedication uses KFA coding', () => {
-    const m: any = buildMedication({ localId: 'med-1', orgId: '100012345', kfaCode: '93001019', name: 'Paracetamol 500mg' })
-    expect(m.resourceType).toBe('Medication')
-    expect(m.code.coding[0]).toEqual({ system: 'http://sys-ids.kemkes.go.id/kfa', code: '93001019', display: 'Paracetamol 500mg' })
-    expect(m.identifier[0].system).toBe('http://sys-ids.kemkes.go.id/medication/100012345')
-  })
-  it('buildMedication falls back to code.text without KFA', () => {
-    const m: any = buildMedication({ localId: 'med-2', orgId: '100012345', kfaCode: null, name: 'Racikan X' })
-    expect(m.code.coding).toBeUndefined()
-    expect(m.code.text).toBe('Racikan X')
-  })
-  it('buildMedicationRequest references Medication + dosage text', () => {
+  it('buildMedicationRequest embeds Medication in contained + uses #med-contained reference', () => {
     const r: any = buildMedicationRequest({
       prescriptionId: 'rx-1', itemId: 'rxi-1', orgId: '100012345',
-      ssMedicationId: 'ss-med-1', medicationName: 'Paracetamol 500mg',
+      medication: { localId: 'med-1', kfaCode: '93001019', name: 'Paracetamol 500mg' },
       dosage: '500 mg', frequency: '3x1', instructions: 'Sesudah makan',
       authoredOn: '2026-07-01T09:10:00+07:00',
       patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
     })
     expect(r.resourceType).toBe('MedicationRequest')
     expect(r.intent).toBe('order')
-    expect(r.medicationReference.reference).toBe('Medication/ss-med-1')
+    expect(r.contained).toHaveLength(1)
+    expect(r.contained[0].resourceType).toBe('Medication')
+    expect(r.contained[0].code.coding[0].code).toBe('93001019')
+    expect(r.medicationReference.reference).toBe('#med-contained')
     expect(r.dosageInstruction[0].text).toBe('500 mg 3x1')
     expect(r.dosageInstruction[0].patientInstruction).toBe('Sesudah makan')
     expect(r.requester.reference).toBe('Practitioner/N1')
   })
-  it('buildMedicationDispense references the authorizing request', () => {
+  it('buildMedicationRequest falls back to code.text without KFA', () => {
+    const r: any = buildMedicationRequest({
+      prescriptionId: 'rx-2', itemId: 'rxi-2', orgId: '100012345',
+      medication: { localId: 'med-2', kfaCode: null, name: 'Racikan X' },
+      dosage: null, frequency: null, instructions: null,
+      authoredOn: '2026-07-01T09:10:00+07:00',
+      patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'N1', ssEncounterId: 'enc-ss-1',
+    })
+    expect(r.contained[0].code.coding).toBeUndefined()
+    expect(r.contained[0].code.text).toBe('Racikan X')
+  })
+  it('buildMedicationDispense embeds Medication in contained + references authorizing request', () => {
     const d: any = buildMedicationDispense({
       localId: 'disp-1', orgId: '100012345',
-      ssMedicationId: 'ss-med-1', medicationName: 'Paracetamol 500mg', ssMedicationRequestId: 'ss-mr-1',
+      medication: { localId: 'med-1', kfaCode: '93001019', name: 'Paracetamol 500mg' },
+      ssMedicationRequestId: 'ss-mr-1',
       quantity: 10, whenHandedOver: '2026-07-01T10:00:00+07:00',
       patientIhs: 'P0001', patientName: 'Budi', practitionerIhs: 'F1', ssEncounterId: 'enc-ss-1',
     })
     expect(d.resourceType).toBe('MedicationDispense')
+    expect(d.contained).toHaveLength(1)
+    expect(d.contained[0].resourceType).toBe('Medication')
+    expect(d.medicationReference.reference).toBe('#med-contained')
     expect(d.authorizingPrescription[0].reference).toBe('MedicationRequest/ss-mr-1')
     expect(d.quantity.value).toBe(10)
     expect(d.whenHandedOver).toBe('2026-07-01T10:00:00+07:00')

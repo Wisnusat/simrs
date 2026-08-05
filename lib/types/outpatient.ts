@@ -623,6 +623,7 @@ export interface ReferralInput {
   destination_specialty?: string
   referral_reason: string
   urgency?: ReferralUrgency
+  ss_destination_org_id?: string
 }
 
 // ---------------------------------------------------------------------------

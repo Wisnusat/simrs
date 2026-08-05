@@ -23,7 +23,23 @@ function backoffMs(attempts: number): number {
   return Math.min(2 ** attempts, 60) * 60_000 // 2,4,8,…60 minutes
 }
 
+const STALE_PROCESSING_MS = 10 * 60 * 1000 // 10 min — safe above Vercel 300s timeout
+
+async function recoverStaleJobs(supabase: SupabaseClient) {
+  const threshold = new Date(Date.now() - STALE_PROCESSING_MS).toISOString()
+  await supabase.from('ss_sync_queue')
+    .update({
+      status: 'pending',
+      last_error: 'Recovered: worker timeout (stuck in processing)',
+      next_attempt_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('status', 'processing')
+    .lt('updated_at', threshold)
+}
+
 export async function drainQueue(supabase: SupabaseClient, fhir: FhirClient, limit = 20) {
+  await recoverStaleJobs(supabase)
   const { data: jobs, error } = await supabase.rpc('claim_ss_sync_jobs', { p_limit: limit })
   if (error) throw new Error(`claim_ss_sync_jobs failed: ${error.message}`)
 

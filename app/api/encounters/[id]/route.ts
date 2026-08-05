@@ -136,7 +136,7 @@ export async function PATCH(
   // Sync the invoice any time the encounter is updated (e.g. going to finished, or back to in_progress from lab)
   await syncInvoiceForEncounter(supabase, id)
 
-  if (body.status === 'finished') {
+  if (body.status === 'in_progress' || body.status === 'finished') {
     enqueueSync(supabase, 'Encounter', id, 'PUT').catch(() => {})
   }
 

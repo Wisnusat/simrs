@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
+import { enqueueSync } from '@/lib/satusehat/queue'
 import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -160,6 +161,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         if (encounterUpdateError) {
             console.warn('Encounter close error (outcome):', encounterUpdateError)
         }
+
+        enqueueSync(supabase, 'Encounter', existing.encounter_id, 'PUT').catch(() => {})
 
         // Generate invoice for non-inpatient outcomes (discharged/referred)
         if (outcome !== 'admitted_inpatient') {

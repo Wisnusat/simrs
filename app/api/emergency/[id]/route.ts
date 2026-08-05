@@ -4,6 +4,7 @@ import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAuth, isGuardError } from '@/lib/api/guards'
 import { syncInvoiceForEncounter } from '@/lib/api/invoice-builder'
+import { enqueueSync } from '@/lib/satusehat/queue'
 import * as Sentry from '@sentry/nextjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -200,8 +201,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                     console.warn('Encounter status sync error:', encounterUpdateError)
                 }
 
+                enqueueSync(supabase, 'Encounter', existing.encounter_id, 'PUT').catch(() => {})
+
                 if (encounterStatus === 'finished') {
-                    // Sync invoice lazily. Import is done at the top.
                     syncInvoiceForEncounter(supabase, existing.encounter_id).catch(err => {
                         console.error('Invoice sync error on emergency finish:', err)
                         Sentry.captureException(err)

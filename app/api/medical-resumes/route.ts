@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       .select('*, practitioners:authored_by ( full_name, role )')
       .single()
     if (error) return apiResponse.serverError(error.message)
+    enqueueSync(supabase, 'Composition', existing.id, 'PUT').catch(() => {})
     return apiResponse.ok(data)
   }
 

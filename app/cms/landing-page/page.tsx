@@ -307,6 +307,7 @@ const SERVICE_ICON_OPTIONS: { key: string; label: string; Icon: any }[] = [
 
 function ServicesEditor({ content, saving, onSave }: { content: any; saving: boolean; onSave: (c: any) => void }) {
     const [items, setItems] = useState<any[]>(content.items ?? [])
+    const [syncing, setSyncing] = useState(false)
 
     const addItem = () => {
         setItems([...items, { name: '', description: '', hours: '', icon: 'Stethoscope' }])
@@ -322,18 +323,69 @@ function ServicesEditor({ content, saving, onSave }: { content: any; saving: boo
         setItems(updated)
     }
 
+    const syncFromPoli = async () => {
+        setSyncing(true)
+        try {
+            const res = await fetch('/api/cms/poli')
+            if (!res.ok) throw new Error('Gagal mengambil data poli')
+            const data = await res.json()
+            const poliList: any[] = data.data ?? []
+            if (poliList.length === 0) {
+                toast.warning('Tidak ada poli aktif yang ditemukan')
+                return
+            }
+            // Merge: keep existing description/hours/icon if name matches, else blank
+            const existingByName: Record<string, any> = {}
+            for (const it of items) existingByName[it.name?.toLowerCase()] = it
+            const merged = poliList.map((p: any) => {
+                const existing = existingByName[p.name?.toLowerCase()]
+                return {
+                    name: p.name,
+                    description: existing?.description ?? '',
+                    hours: existing?.hours ?? '',
+                    icon: existing?.icon ?? 'Stethoscope',
+                }
+            })
+            setItems(merged)
+            toast.success(`${merged.length} poli disinkron. Lengkapi deskripsi & jam, lalu klik Simpan.`)
+        } catch (e: any) {
+            toast.error(e.message ?? 'Gagal sinkron dari poli')
+        } finally {
+            setSyncing(false)
+        }
+    }
+
     return (
         <Card className="border border-border/40">
             <CardHeader>
-                <CardTitle>Services Section</CardTitle>
-                <CardDescription>Daftar layanan yang ditampilkan di landing page</CardDescription>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <CardTitle>Services Section</CardTitle>
+                        <CardDescription className="mt-1">
+                            Daftar layanan di landing page klinik. Perubahan di menu <strong>Layanan / Poli</strong> tidak otomatis tampil — klik &quot;Sync dari Poli&quot; untuk mengambil nama poli aktif.
+                        </CardDescription>
+                    </div>
+                    <SaveButton saving={saving} onClick={() => onSave({ items })} />
+                </div>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                     <Label>Layanan ({items.length})</Label>
-                    <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
-                        <Plus className="w-3 h-3" /> Tambah
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={syncFromPoli}
+                            disabled={syncing}
+                            className="gap-1 text-xs"
+                        >
+                            {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            Sync dari Poli
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
+                            <Plus className="w-3 h-3" /> Tambah
+                        </Button>
+                    </div>
                 </div>
                 {items.map((item: any, i: number) => (
                     <div key={i} className="p-4 border border-border/40 rounded-lg space-y-3">
@@ -400,7 +452,7 @@ function ServicesEditor({ content, saving, onSave }: { content: any; saving: boo
                         </div>
                     </div>
                 ))}
-                <div className="flex justify-end">
+                <div className="flex justify-end pt-2 border-t border-border/20">
                     <SaveButton saving={saving} onClick={() => onSave({ items })} />
                 </div>
             </CardContent>
