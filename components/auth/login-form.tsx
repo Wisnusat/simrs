@@ -18,16 +18,16 @@ const ROLE_ROUTES: Record<string, string> = {
 }
 
 // Demo credentials shown at bottom of form
-const DEMO_CREDENTIALS = [
-  { role: 'Admin', email: 'admin@carewell.id', password: 'admin123' },
-  { role: 'Dokter', email: 'dokter@carewell.id', password: 'dokter123' },
-  { role: 'Perawat', email: 'perawat@carewell.id', password: 'perawat123' },
-  { role: 'Apoteker', email: 'apoteker@carewell.id', password: 'apoteker123' },
-  { role: 'Kasir', email: 'kasir@carewell.id', password: 'kasir123' },
-  { role: 'Owner', email: 'owner@carewell.id', password: 'owner123' },
-  { role: 'Gizi', email: 'gizi@carewell.id', password: 'gizi123' },
-  { role: 'Lab', email: 'perawat.lab@carewell.id', password: 'labperawat123' }
-]
+// const DEMO_CREDENTIALS = [
+//   { role: 'Admin', email: 'admin@carewell.id', password: 'admin123' },
+//   { role: 'Dokter', email: 'dokter@carewell.id', password: 'dokter123' },
+//   { role: 'Perawat', email: 'perawat@carewell.id', password: 'perawat123' },
+//   { role: 'Apoteker', email: 'apoteker@carewell.id', password: 'apoteker123' },
+//   { role: 'Kasir', email: 'kasir@carewell.id', password: 'kasir123' },
+//   { role: 'Owner', email: 'owner@carewell.id', password: 'owner123' },
+//   { role: 'Gizi', email: 'gizi@carewell.id', password: 'gizi123' },
+//   { role: 'Lab', email: 'perawat.lab@carewell.id', password: 'labperawat123' }
+// ]
 
 export default function LoginForm() {
   const [formData, setFormData] = useState({ email: '', password: '' })
@@ -177,7 +177,7 @@ export default function LoginForm() {
       </Button>
 
       {/* Demo Credentials */}
-      <div className="pt-4 border-t border-border/20">
+      {/* <div className="pt-4 border-t border-border/20">
         <p className="text-xs text-foreground/50 mb-2">Quick fill demo credentials:</p>
         <div className="flex flex-wrap gap-2">
           {DEMO_CREDENTIALS.map((c) => (
@@ -192,7 +192,7 @@ export default function LoginForm() {
             </button>
           ))}
         </div>
-      </div>
+      </div> */}
 
     </form>
   )
