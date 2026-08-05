@@ -347,7 +347,7 @@ export default function MedicationsPage() {
                         </SheetTitle>
                     </SheetHeader>
 
-                    <div className="py-6 space-y-6">
+                    <div className="py-6 space-y-6 px-4">
                         {/* ── KFA Search ── */}
                         <div className="space-y-3 p-4 rounded-lg border border-border/40 bg-primary/5">
                             <p className="text-sm font-semibold flex items-center gap-2">
