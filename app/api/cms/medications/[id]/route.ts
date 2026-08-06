@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
@@ -28,7 +29,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
         if (Object.keys(updates).length === 0) return apiResponse.badRequest('Tidak ada perubahan')
 
-        const { data, error } = await supabase
+        const admin = createAdminClient()
+        const { data, error } = await admin
             .from('medications')
             .update(updates)
             .eq('id', id)
@@ -54,15 +56,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         const auth = await requireAdmin(supabase)
         if (isGuardError(auth)) return auth
 
+        const admin = createAdminClient()
+
         // Soft delete — check if referenced in prescriptions
-        const { count } = await supabase
+        const { count } = await admin
             .from('prescription_items')
             .select('id', { count: 'exact', head: true })
             .eq('medication_id', id)
+            .eq('organization_id', auth.practitioner.organization_id)
 
         if ((count ?? 0) > 0) {
-            // Soft delete only
-            const { error } = await supabase
+            const { error } = await admin
                 .from('medications')
                 .update({ is_active: false })
                 .eq('id', id)
@@ -72,7 +76,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
             return apiResponse.ok({ deleted: false, deactivated: true, message: 'Obat memiliki riwayat resep — dinonaktifkan, tidak dihapus' })
         }
 
-        const { error } = await supabase
+        const { error } = await admin
             .from('medications')
             .delete()
             .eq('id', id)

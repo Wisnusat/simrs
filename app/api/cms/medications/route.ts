@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiResponse } from '@/lib/api/response'
 import { rateLimit, RATE_LIMITS } from '@/lib/api/rate-limit'
 import { requireAdmin, isGuardError } from '@/lib/api/guards'
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
         if (isGuardError(auth)) return auth
 
         const sp = new URL(request.url).searchParams
-        const search = sp.get('search') ?? ''
+        const search = (sp.get('search') ?? '').slice(0, 200)
         const activeOnly = sp.get('active') !== 'false'
         const page = Math.max(1, parseInt(sp.get('page') ?? '1'))
         const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'))
@@ -84,7 +85,10 @@ export async function POST(request: NextRequest) {
         if (!name?.trim()) return apiResponse.badRequest('Nama obat wajib diisi')
         if (!unit?.trim()) return apiResponse.badRequest('Satuan wajib diisi')
 
-        const { data: med, error: medErr } = await supabase
+        // Use admin client so RLS doesn't block CMS mutations — authorization already enforced above
+        const admin = createAdminClient()
+
+        const { data: med, error: medErr } = await admin
             .from('medications')
             .insert({
                 organization_id: auth.practitioner.organization_id,
@@ -113,14 +117,14 @@ export async function POST(request: NextRequest) {
 
         // Optional initial stock batch
         if (stock && (stock.quantity ?? 0) > 0) {
-            const { error: stockErr } = await supabase
+            const { error: stockErr } = await admin
                 .from('medication_stock')
                 .insert({
                     medication_id: med.id,
                     organization_id: auth.practitioner.organization_id,
                     batch_number: stock.batch_number?.trim() || `INIT-${Date.now()}`,
                     expiry_date: stock.expiry_date || null,
-                    quantity: Math.max(0, parseInt(stock.quantity) || 0),
+                    quantity: Math.max(0, parseFloat(stock.quantity) || 0),
                     unit_price: parseFloat(stock.unit_price) || 0,
                     minimum_stock: parseInt(stock.minimum_stock) || 10,
                 })

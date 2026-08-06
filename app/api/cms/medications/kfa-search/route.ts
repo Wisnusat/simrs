@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { apiResponse } from '@/lib/api/response'
@@ -8,7 +9,7 @@ import * as Sentry from '@sentry/nextjs'
 
 const SS_BASE_URL = process.env.SATUSEHAT_BASE_URL ?? 'https://api-satusehat-stg.dto.kemkes.go.id'
 
-// GET /api/cms/medications/kfa-search?q={keyword}&size=10
+// GET /api/cms/medications/kfa-search?q={keyword}&size=20&page=1
 export async function GET(request: NextRequest) {
     const rl = await rateLimit(request, 'cms:kfa-search', RATE_LIMITS.read)
     if (!rl.allowed) return apiResponse.tooManyRequests(rl.retryAfter)
@@ -19,13 +20,14 @@ export async function GET(request: NextRequest) {
         if (isGuardError(auth)) return auth
 
         const sp = new URL(request.url).searchParams
-        const q = sp.get('q')?.trim()
-        const size = Math.min(20, parseInt(sp.get('size') ?? '10'))
-
-        if (!q || q.length < 3) return apiResponse.badRequest('Keyword minimal 3 karakter')
+        const q = sp.get('q')?.trim() ?? ''
+        const size = Math.min(50, parseInt(sp.get('size') ?? '20'))
+        const page = Math.max(1, parseInt(sp.get('page') ?? '1'))
 
         const token = await getAccessToken()
-        const url = `${SS_BASE_URL}/kfa/v2/product/all?keyword=${encodeURIComponent(q)}&size=${size}&page=1`
+        const params = new URLSearchParams({ page: String(page), size: String(size), product_type: 'farmasi' })
+        if (q.length >= 3) params.set('keyword', q)
+        const url = `${SS_BASE_URL}/kfa-v2/products/all?${params}`
 
         const res = await fetch(url, {
             headers: {
@@ -42,21 +44,29 @@ export async function GET(request: NextRequest) {
 
         const json = await res.json()
 
-        // Normalize response — SATUSEHAT KFA returns data.data[] or data[]
-        const raw: any[] = json?.data?.data ?? json?.data ?? []
+        // KFA v2 response: { total, page, size, items: { data: [...] } }
+        const raw: any[] = json?.items?.data ?? json?.data?.data ?? json?.data ?? []
 
         const items = raw.map((p: any) => ({
-            kfa_code: p.kfa_code ?? p.code ?? '',
-            name: p.name ?? p.product_name ?? '',
-            generic_name: p.generic_name ?? p.generic ?? '',
-            brand_name: p.brand_name ?? p.name ?? '',
-            form: p.dosage_form ?? p.form ?? '',
-            strength: p.strength ?? '',
-            unit: p.unit ?? 'tablet',
-            ss_medication_id: p.id ?? p.kfa_code ?? '',
+            kfa_code: p.kfa_code ?? '',
+            name: p.name ?? '',
+            generic_name: p.active_ingredients?.[0]?.zat_aktif ?? '',
+            brand_name: p.nama_dagang ?? '',
+            form: p.dosage_form?.name ?? '',
+            strength: p.active_ingredients?.[0]?.kekuatan_zat_aktif ?? '',
+            unit: p.uom?.name ?? 'Tablet',
+            ss_medication_id: p.kfa_code ?? '',
+            manufacturer: p.manufacturer ?? '',
+            active: p.active ?? true,
         }))
 
-        return apiResponse.ok(items)
+        const response = apiResponse.ok(items, {
+            total: json.total ?? items.length,
+            page: json.page ?? page,
+            size: json.size ?? size,
+        })
+        response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=60')
+        return response
     } catch (e) {
         Sentry.captureException(e)
         console.error('KFA search error:', e)
