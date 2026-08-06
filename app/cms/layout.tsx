@@ -103,6 +103,13 @@ export default function CmsLayout({ children }: { children: React.ReactNode }) {
             onClick: () => navigateTo('/cms/room-rates'),
             active: pathname === '/cms/room-rates',
         },
+        {
+            icon: Pill,
+            label: 'Manajemen Obat',
+            href: '/cms/medications',
+            onClick: () => navigateTo('/cms/medications'),
+            active: pathname === '/cms/medications',
+        },
         // Owner-only items
         ...(isOwner ? [
             {
